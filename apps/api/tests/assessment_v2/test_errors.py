@@ -58,3 +58,21 @@ def test_error_response_generates_correlation_id_without_echoing_exception_text(
     assert response.headers["x-request-id"] == correlation_id
     assert b"secret child name" not in response.body
     assert b"exact date of birth" not in response.body
+
+
+def test_error_response_only_allows_known_non_sensitive_detail_values() -> None:
+    response = assessment_error_response(
+        request_with_id("req-02"),
+        "workflow_stage_unavailable",
+        409,
+        "This workflow stage is not yet available.",
+        {
+            "allowed_states": ["ready_for_capture", "secret child name"],
+            "allowed_purposes": ["initial", "exact date of birth"],
+        },
+    )
+
+    assert b"ready_for_capture" in response.body
+    assert b'"allowed_states":["ready_for_capture"]' in response.body
+    assert b"secret child name" not in response.body
+    assert b"exact date of birth" not in response.body

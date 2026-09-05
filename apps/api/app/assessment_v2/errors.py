@@ -8,11 +8,16 @@ from uuid import uuid4
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from app.assessment_v2.domain.models import AssessmentPurpose, AssessmentState
 from app.assessment_v2.schemas import ErrorEnvelope
 
 
 # Only non-sensitive, finite vocabulary is allowed to cross the error boundary.
 _SAFE_DETAIL_KEYS = frozenset({"allowed_states", "allowed_purposes"})
+_SAFE_DETAIL_VALUES = {
+    "allowed_states": frozenset(state.value for state in AssessmentState),
+    "allowed_purposes": frozenset(purpose.value for purpose in AssessmentPurpose),
+}
 
 
 def _safe_details(details: Mapping[str, object] | None) -> dict[str, object]:
@@ -22,7 +27,7 @@ def _safe_details(details: Mapping[str, object] | None) -> dict[str, object]:
     for key in _SAFE_DETAIL_KEYS:
         value = details.get(key)
         if isinstance(value, list) and all(isinstance(item, str) for item in value):
-            safe[key] = list(value)
+            safe[key] = [item for item in value if item in _SAFE_DETAIL_VALUES[key]]
     return safe
 
 
