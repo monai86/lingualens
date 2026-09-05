@@ -166,6 +166,8 @@ class AssessmentService:
     ) -> AssessmentSnapshot:
         self._require_clinical_role()
         current = self.get_assessment(assessment_id)
+        if command.expected_version != current.version:
+            raise self._policy_error("stale_assessment_version")
         if (
             current.state is not AssessmentState.DRAFT
             or command.target_state is not AssessmentState.CANCELLED

@@ -104,7 +104,10 @@ class FakeRepository:
 
     def transition_assessment(self, scope: AccessScope, command: TransitionAssessment, correlation_id: str):
         self.transition_command = command
-        return replace(self.assessment_value, state=command.target_state, version=2)
+        self.assessment_value = replace(
+            self.assessment_value, state=command.target_state, version=command.expected_version + 1
+        )
+        return self.assessment_value
 
 
 def service_for(repository: FakeRepository, user: CurrentUser | None = None) -> AssessmentService:
@@ -211,6 +214,14 @@ def test_capture_stage_is_fail_closed_but_draft_can_be_cancelled() -> None:
         "req-06",
     )
     assert cancelled.state is AssessmentState.CANCELLED
+
+    with pytest.raises(ClinicalPolicyError) as stale_error:
+        service.transition_assessment(
+            "assessment_01",
+            TransitionAssessment("assessment_01", AssessmentState.READY_FOR_CAPTURE, 1),
+            "req-07",
+        )
+    assert stale_error.value.code == "stale_assessment_version"
 
 
 def test_policy_error_details_are_fresh_and_safe() -> None:
