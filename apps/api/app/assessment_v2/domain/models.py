@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 
 
@@ -22,6 +23,16 @@ class AssessmentState(StrEnum):
     CANCELLED = "cancelled"
 
 
+class ConsentPurpose(StrEnum):
+    CLINICAL_ASSESSMENT = "clinical_assessment"
+    RESEARCH_REUSE = "research_reuse"
+
+
+class ConsentStatus(StrEnum):
+    ACTIVE = "active"
+    WITHDRAWN = "withdrawn"
+
+
 @dataclass(frozen=True, slots=True)
 class AssessmentSnapshot:
     id: str
@@ -31,3 +42,66 @@ class AssessmentSnapshot:
     state: AssessmentState
     assigned_clinician_id: str
     version: int
+
+
+@dataclass(frozen=True, slots=True)
+class AccessScope:
+    user_id: str
+    organization_id: str
+    role: str
+
+
+@dataclass(frozen=True, slots=True)
+class CreateChild:
+    display_code: str
+    birth_year: int
+    birth_month: int
+    language_context: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class ChildSnapshot:
+    id: str
+    organization_id: str
+    display_code: str
+    birth_year: int
+    birth_month: int
+    language_context: dict[str, object]
+    version: int
+
+
+@dataclass(frozen=True, slots=True)
+class RecordConsent:
+    purpose: ConsentPurpose
+    scope_version: str
+    status: ConsentStatus
+
+
+@dataclass(frozen=True, slots=True)
+class ConsentSnapshot:
+    id: str
+    organization_id: str
+    child_id: str
+    purpose: ConsentPurpose
+    scope_version: str
+    status: ConsentStatus
+    granted_at: datetime
+    withdrawn_at: datetime | None
+    recorded_by_user_id: str
+    version: int
+
+
+@dataclass(frozen=True, slots=True)
+class CreateAssessment:
+    child_id: str
+    purpose: AssessmentPurpose
+    age_months: int
+    language_context: dict[str, object]
+    assigned_clinician_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class TransitionAssessment:
+    assessment_id: str
+    target_state: AssessmentState
+    expected_version: int
