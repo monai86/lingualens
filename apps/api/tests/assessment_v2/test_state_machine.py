@@ -36,10 +36,22 @@ def test_allows_forward_workflow(source: AssessmentState, target: AssessmentStat
     assert updated.version == 5
 
 
-def test_allows_cancellation_before_finalization() -> None:
-    updated = transition_assessment(assessment(AssessmentState.PROCESSING), AssessmentState.CANCELLED, 1)
+@pytest.mark.parametrize(
+    "source",
+    [
+        AssessmentState.DRAFT,
+        AssessmentState.READY_FOR_CAPTURE,
+        AssessmentState.CAPTURING,
+        AssessmentState.PROCESSING,
+        AssessmentState.REVIEW_REQUIRED,
+        AssessmentState.READY_FOR_CLINICIAN,
+    ],
+)
+def test_allows_cancellation_before_finalization(source: AssessmentState) -> None:
+    updated = transition_assessment(assessment(source, version=4), AssessmentState.CANCELLED, expected_version=4)
 
     assert updated.state is AssessmentState.CANCELLED
+    assert updated.version == 5
 
 
 @pytest.mark.parametrize("terminal", [AssessmentState.FINALIZED, AssessmentState.CANCELLED])
