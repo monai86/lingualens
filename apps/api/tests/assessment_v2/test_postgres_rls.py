@@ -19,6 +19,16 @@ from app.core.security import CurrentUser
 pytestmark = pytest.mark.assessment_postgres
 _ROLE = "lingualens_assessment_rls_test"
 _ROLE_PASSWORD = "assessment-rls-test-only"
+_V2_TABLES = (
+    "organizations",
+    "user_profiles",
+    "organization_memberships",
+    "children",
+    "care_team_assignments",
+    "consent_records",
+    "assessments",
+    "audit_events",
+)
 
 
 def _test_url() -> str:
@@ -67,11 +77,10 @@ def rls_database() -> Iterator[tuple[str, str, str, str]]:
             )
         )
         connection.execute(text(f"GRANT USAGE ON SCHEMA public TO {_ROLE}"))
-        connection.execute(
-            text(
-                f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {_ROLE}"
+        for table_name in _V2_TABLES:
+            connection.execute(
+                text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {table_name} TO {_ROLE}")
             )
-        )
         connection.execute(
             text(f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {_ROLE}")
         )
