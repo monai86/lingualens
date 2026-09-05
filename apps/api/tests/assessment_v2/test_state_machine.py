@@ -54,10 +54,18 @@ def test_allows_cancellation_before_finalization(source: AssessmentState) -> Non
     assert updated.version == 5
 
 
-@pytest.mark.parametrize("terminal", [AssessmentState.FINALIZED, AssessmentState.CANCELLED])
-def test_rejects_transition_from_terminal_state(terminal: AssessmentState) -> None:
+@pytest.mark.parametrize(
+    ("terminal", "target"),
+    [
+        (AssessmentState.FINALIZED, AssessmentState.REVIEW_REQUIRED),
+        (AssessmentState.FINALIZED, AssessmentState.CANCELLED),
+        (AssessmentState.CANCELLED, AssessmentState.REVIEW_REQUIRED),
+        (AssessmentState.CANCELLED, AssessmentState.CANCELLED),
+    ],
+)
+def test_rejects_transition_from_terminal_state(terminal: AssessmentState, target: AssessmentState) -> None:
     with pytest.raises(InvalidAssessmentTransition) as error:
-        transition_assessment(assessment(terminal), AssessmentState.REVIEW_REQUIRED, 1)
+        transition_assessment(assessment(terminal), target, 1)
 
     assert error.value.code == "invalid_assessment_transition"
 
