@@ -85,6 +85,14 @@ U = usability evidence or revision
 D = developer handoff
 ```
 
+### Execution constraint
+
+The authenticated Figma Starter plan currently permits three pages. If that
+limit is still active during implementation, preserve all nine names and their
+order as top-level logical sections across three actual pages, record the
+account limitation in `figma-delivery-manifest.md`, and do not claim the
+prototype accepted until the remaining wiring/export/freeze gates are complete.
+
 ## Repository artifact map
 
 Create only documentation artifacts in this slice:

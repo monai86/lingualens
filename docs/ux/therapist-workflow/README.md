@@ -1,7 +1,7 @@
 # LinguaLens Therapist Workflow UX Workspace
 
 **Prototype:** LinguaLens — Therapist Assessment Workflow v0.1  
-**Status:** evidence and task-model pack; Figma implementation pending  
+**Status:** evidence/task-model pack and compact Figma skeleton; full prototype not yet accepted
 **Audience:** therapist/clinician, clinical supervisor, and authorized researcher
 
 ## Fixed design question
@@ -66,6 +66,32 @@ validation of this product. In particular, it motivates follow-up after
 screening, abstention/indeterminate states, protocol and language compatibility,
 prosody as one evidence channel, human accountability, and resource-aware
 referral.
+
+## Figma workspace status
+
+The working file is [`LinguaLens — Therapist Assessment Workflow v0.1`](https://www.figma.com/design/YOh8m47gDzPuX2EBZsPCcy).
+The authenticated Figma Starter plan allows three pages, so the nine logical
+workstreams are represented as ordered top-level sections across three pages:
+
+```text
+00_Cover_and_Changelog
+01_Research_and_Requirements
+
+02_Information_Architecture_and_Flows
+03_Low_Fidelity_Wireframes
+
+04_Design_System_and_Components
+05_High_Fidelity_Screens
+06_Clickable_Prototype
+07_Usability_and_Iterations
+08_Developer_Handoff
+```
+
+This is an external account limitation, not an intentional reduction of the
+design scope. The compact skeleton has been created, including the high-fidelity
+screen inventory, component inventory, and prototype entry cards. Additional
+prototype wiring, export, and accepted-version freeze remain pending until the
+Figma MCP allowance is available again or the file plan is upgraded.
 
 ## Acceptance notes
 
