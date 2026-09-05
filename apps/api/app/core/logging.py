@@ -59,6 +59,11 @@ SAFE_PATH_SEGMENTS = {
     "export",
     "withdraw-consent",
     "private",
+    "v2",
+    "children",
+    "consents",
+    "assessments",
+    "transitions",
 }
 ROUTE_PARAMETER_RE = re.compile(r"^\{[A-Za-z_][A-Za-z0-9_]*\}$")
 
@@ -94,14 +99,17 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         request_id = request.headers.get("x-request-id") or str(uuid4())
+        request.state.request_id = request_id
         start = time.perf_counter()
         response = await call_next(request)
         duration_ms = round((time.perf_counter() - start) * 1000, 2)
         route = request.scope.get("route")
         route_path = getattr(route, "path", request.url.path)
-        api_prefix = get_settings().api_prefix
-        if request.url.path.startswith(api_prefix) and not route_path.startswith(api_prefix):
-            route_path = f"{api_prefix}{route_path}"
+        settings = get_settings()
+        for api_prefix in (settings.api_prefix, settings.assessment_api_prefix):
+            if request.url.path.startswith(api_prefix) and not route_path.startswith(api_prefix):
+                route_path = f"{api_prefix}{route_path}"
+                break
         self.logger.info(
             "request_complete",
             extra={

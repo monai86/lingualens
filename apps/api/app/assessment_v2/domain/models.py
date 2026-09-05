@@ -42,6 +42,8 @@ class AssessmentSnapshot:
     state: AssessmentState
     assigned_clinician_id: str
     version: int
+    age_months: int
+    language_context: dict[str, object]
 
 
 @dataclass(frozen=True, slots=True)

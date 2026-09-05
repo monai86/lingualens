@@ -321,6 +321,11 @@ class AssessmentRepository:
             is not None
         )
 
+    def has_active_membership(self, scope: AccessScope) -> bool:
+        """Return the persisted membership state for an authenticated scope."""
+
+        return self._has_active_membership(scope)
+
     def _require_active_membership(self, scope: AccessScope) -> None:
         if not self._has_active_membership(scope):
             raise RepositoryError("inactive_membership")
@@ -433,4 +438,6 @@ class AssessmentRepository:
             state=AssessmentState(assessment.state),
             assigned_clinician_id=assessment.assigned_clinician_id,
             version=assessment.version,
+            age_months=assessment.age_months,
+            language_context=_context_from_storage(assessment.language_context),
         )

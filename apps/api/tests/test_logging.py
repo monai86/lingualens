@@ -32,6 +32,12 @@ def test_sanitize_log_path_redacts_unknown_sensitive_segments():
     assert sanitized == "/api/v1/audio/private/[redacted]/[redacted]/[redacted]/[redacted]"
 
 
+def test_sanitize_log_path_keeps_v2_route_words_and_redacts_child_id():
+    sanitized = sanitize_log_path("/api/v2/children/child-secret/assessments")
+
+    assert sanitized == "/api/v2/children/[redacted]/assessments"
+
+
 def test_request_log_record_keeps_sensitive_path_values_out_of_structured_fields(caplog):
     caplog.set_level(logging.INFO, logger="therapist_app_v2.request")
 

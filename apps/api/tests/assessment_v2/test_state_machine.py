@@ -15,6 +15,8 @@ def assessment(state: AssessmentState = AssessmentState.DRAFT, version: int = 1)
         state=state,
         assigned_clinician_id="therapist_01",
         version=version,
+        age_months=63,
+        language_context={"primary": "th", "additional": []},
     )
 
 

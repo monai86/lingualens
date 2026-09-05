@@ -52,6 +52,8 @@ def assessment(state: AssessmentState = AssessmentState.DRAFT) -> AssessmentSnap
         state=state,
         assigned_clinician_id="therapist_01",
         version=1,
+        age_months=63,
+        language_context={"primary": "th", "additional": []},
     )
 
 
