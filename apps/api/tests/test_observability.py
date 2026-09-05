@@ -56,6 +56,7 @@ def test_production_requires_observability_provider_and_critical_alert_route():
         "cors_allowed_origins": "https://clinic.example",
         "repository_mode": "sql",
         "database_url": "postgresql+psycopg://prod_user:prod_secret@db.example/therapist_app_v2",
+        "assessment_database_url": "postgresql+psycopg://prod_user:prod_secret@db.example/lingualens_assessment_v2",
         "storage_mode": "private",
         "job_queue_mode": "redis",
         "redis_url": "rediss://redis.example:6379/0",

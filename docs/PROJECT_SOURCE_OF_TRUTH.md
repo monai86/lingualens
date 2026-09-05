@@ -26,7 +26,21 @@
 | Research ML/audio | `packages/`, `src/`, `scripts/` | Active research tooling |
 | Analysis-only transcript boundary | `packages/analysis_contract/`, `packages/cha/` | Active research contract; not a product API |
 
-`apps/api` เป็น backend ที่ frontend หลักเรียกใช้ผ่าน `/api/v1`.
+`apps/api` เป็น backend ที่ frontend หลักเรียกใช้ผ่าน `/api/v1`; `/api/v2`
+เป็น assessment-centric foundation ที่เปิดแบบ additive และยังไม่แทนที่ v1.
+
+### Assessment v2 foundation boundary
+
+- `/api/v1` และ client เดิมยังเป็น therapist product ที่ใช้งานอยู่
+- `/api/v2` ตอนนี้มีเฉพาะ child, consent และ assessment lifecycle foundation
+- `LINGUALENS_DATABASE_URL`/v1 Alembic และ
+  `LINGUALENS_ASSESSMENT_DATABASE_URL`/v2 Alembic เป็นคนละฐานและคนละ history
+- ฐาน v2 เริ่มว่าง ไม่มีการ import หรือ rewrite records/audio/storage จาก v1
+- Supabase Auth ยืนยันตัวตน, FastAPI บังคับ policy, PostgreSQL RLS เป็น
+  defense in depth
+- foundation นี้เป็น research decision support ไม่ใช่ระบบวินิจฉัย และไม่แสดง
+  ASD probability
+- rollback ทำโดยหยุด mount `/api/v2` และปิด v2 startup migration โดยไม่แตะ v1
 
 Session Workspace ใช้ canonical route เดียวคือ `/sessions/{sessionId}` พร้อม
 validated `?view=intake|transcript|findings|report`; ค่า query ที่หายหรือไม่ถูกต้อง

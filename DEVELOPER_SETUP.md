@@ -39,6 +39,34 @@ API Documentation will be available at: [http://localhost:8000/docs](http://loca
 `src/therapist_backend` is a legacy research compatibility API. Do not use it
 as the Therapist App v2 backend or add new product routes there.
 
+### Assessment v2 foundation
+
+The existing therapist product remains on `/api/v1`. The additive `/api/v2`
+foundation uses a fresh database and a separate Alembic history. It starts with
+no imported v1 records and currently covers only children, consent records, and
+assessment lifecycle state.
+
+For the local Compose database:
+
+```bash
+docker compose up -d postgres
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_postgres.py
+```
+
+The v1 and v2 URLs are separate:
+
+```text
+LINGUALENS_DATABASE_URL=postgresql+psycopg://.../therapist_app_v2
+LINGUALENS_ASSESSMENT_DATABASE_URL=postgresql+psycopg://.../lingualens_assessment_v2
+```
+
+Supabase Auth supplies the verified identity; FastAPI owns clinical policy and
+PostgreSQL RLS is defense in depth. The v2 slice is research decision support,
+not diagnosis, and does not expose an ASD probability. To roll it back, stop
+mounting `/api/v2` and keep `LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP=false`;
+do not touch the v1 database or migration history.
+
 ### 4. Running Python Unit Tests
 We use **pytest** to validate backend services.
 - **Run all core tests** (excluding heavy audio/transcription workloads):

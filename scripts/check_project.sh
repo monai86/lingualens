@@ -88,6 +88,10 @@ fi
 echo -e "${BLUE}[5/7] Running API migration smoke check...${NC}"
 PYTHONPATH=apps/api:src "$PYTHON_BIN" scripts/check_api_migrations.py
 
+echo -e "${BLUE}[5b/7] Running assessment v2 migration and focused contract checks...${NC}"
+PYTHONPATH=apps/api:src "$PYTHON_BIN" scripts/check_assessment_v2_migrations.py
+PYTHONPATH=apps/api:src "$PYTHON_BIN" -m pytest apps/api/tests/assessment_v2 -m "not assessment_postgres" -q
+
 # 3. Maintained Frontend App Checks
 apps=(
     "apps/lingualens-app"

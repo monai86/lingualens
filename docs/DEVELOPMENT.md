@@ -62,6 +62,22 @@ Use the maintained full-project check:
 bash scripts/check_project.sh
 ```
 
+Assessment v2 checks are additive to the current `/api/v1` product:
+
+```bash
+PYTHONPATH=apps/api:src pytest apps/api/tests/assessment_v2 -m "not assessment_postgres" -q
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
+docker compose up -d postgres
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_postgres.py
+```
+
+The v2 database and Alembic history are separate from `LINGUALENS_DATABASE_URL`
+and the v1 history. A fresh v2 database is intentionally empty; no existing
+v1 records or storage objects are imported. Supabase Auth establishes identity,
+FastAPI owns policy, and PostgreSQL RLS is defense in depth. Clients continue
+to use `/api/v1` until a later migration plan. Rollback means unmounting `/api/v2`
+and leaving v2 startup migrations disabled; v1 data is not changed.
+
 Targeted checks:
 
 ```bash

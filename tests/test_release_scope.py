@@ -47,7 +47,7 @@ def test_forbidden_cases_are_independent_of_git_tracking(tmp_path):
         "apps/untracked.zip": "forbidden file type",
         "data/raw/corpus.zip": "raw corpus archive",
         "apps/.DS_Store": "forbidden local/secret file",
-        "docs/superpowers/plans/current.md": "forbidden directory",
+        "docs/superpowers/drafts/current.md": "forbidden directory",
     }
     for relative in cases:
         write(tmp_path, relative)

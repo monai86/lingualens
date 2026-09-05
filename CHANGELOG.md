@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- Added an additive assessment v2 foundation under `apps/api` with a fresh,
+  separately migrated database boundary, consent-gated assessment lifecycle,
+  tenant/care-team policy, safe error envelopes, and PostgreSQL RLS checks.
+  Existing `/api/v1` clients and data remain unchanged; Capture and feature
+  analysis are deferred to later slices.
 - Added Visual Fundamental Pitch Contour Overlay (`self._show_pitch_overlay`) in Desktop GUI with real-time F0 curve rendering, voiced autocorrelation sampling, 250 Hz child pitch threshold guideline, and dynamic toolbar toggle (**📈 F0 Curve: ON/OFF**).
 - Added Batch Audio Ingestion Queue & Modal Runner in Desktop GUI (**📦 Batch Ingest Files...**), supporting multi-file automated ingestion into dedicated case sessions with real-time status tracking.
 - Added Longitudinal Assessment Trajectory Tracker (`subtab_longitudinal`, `tree_longitudinal`) providing cross-session developmental progress monitoring, MLU-w growth delta, vocabulary TTR trajectory, and historical session comparison.

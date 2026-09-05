@@ -248,6 +248,40 @@ The former `therapist-clinician-app/` Vite/Capacitor surface, removed demo
 frontends, and removed benchmark entrypoints are not repository source.
 Generated folders from previous local builds may be deleted.
 
+### Assessment v2 Foundation (additive)
+
+The current therapist product and existing clients continue to use `/api/v1`.
+The new assessment-centric foundation is exposed additively at `/api/v2` and
+currently supports only child, consent, and assessment lifecycle operations;
+Capture and feature-analysis slices are not mounted yet. The v2 database starts
+empty: no v1 records, audio, storage keys, or JSON data are imported or
+rewritten.
+
+The two boundaries are intentionally separate:
+
+```text
+LINGUALENS_DATABASE_URL             -> v1 Alembic history -> existing product
+LINGUALENS_ASSESSMENT_DATABASE_URL  -> v2 Alembic history -> fresh foundation
+```
+
+Supabase Auth establishes identity, FastAPI applies organization, role,
+care-team, consent, and workflow policy, and PostgreSQL RLS provides defense in
+depth. The v2 service is research decision support only: it does not diagnose
+ASD or any developmental condition and does not expose an ASD probability.
+
+For local setup, create the separate database beside the existing v1 database
+with `docker compose up -d postgres`, then run the migration checks:
+
+```bash
+PYTHONPATH=apps/api:src python scripts/check_api_migrations.py
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_postgres.py
+```
+
+Clients remain on `/api/v1` until a later migration plan. Rollback is additive:
+stop mounting `/api/v2` and disable `LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP`;
+do not alter the v1 URL or migration history.
+
 ---
 
 ## Python ML and Audio Research Layer (`packages/` + `src/`)

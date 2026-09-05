@@ -10,6 +10,7 @@ from app.core.security import OriginGuardMiddleware
 SUPABASE_AUTH_SETTINGS = {
     "supabase_jwt_secret": "test-supabase-jwt-secret",
     "supabase_jwt_issuer": "https://project-ref.supabase.co/auth/v1",
+    "assessment_database_url": "postgresql+psycopg://prod_user:prod_secret@db.example/lingualens_assessment_v2",
 }
 
 
