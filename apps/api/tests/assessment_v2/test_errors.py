@@ -76,3 +76,15 @@ def test_error_response_only_allows_known_non_sensitive_detail_values() -> None:
     assert b'"allowed_states":["ready_for_capture"]' in response.body
     assert b"secret child name" not in response.body
     assert b"exact date of birth" not in response.body
+
+
+def test_error_response_replaces_invalid_request_correlation_id() -> None:
+    response = assessment_error_response(
+        request_with_id("bad request-id\n"),
+        "child_not_found",
+        404,
+        "Child was not found.",
+    )
+
+    correlation_id = response.headers["x-request-id"]
+    assert re.fullmatch(r"[0-9a-f]{32}", correlation_id)
