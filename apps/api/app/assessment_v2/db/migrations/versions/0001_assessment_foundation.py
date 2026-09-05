@@ -177,7 +177,7 @@ def upgrade() -> None:
         sa.Column("outcome", sa.String(length=32), nullable=False),
         sa.Column("correlation_id", sa.String(length=128), nullable=False),
         sa.Column("target_version", sa.Integer(), nullable=True),
-        sa.Column("metadata_json", sa.JSON(), nullable=False),
+        sa.Column("metadata_json", sa.JSON(), server_default=sa.text("'{}'"), nullable=False),
         sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(["organization_id"], ["organizations.organization_id"], name="fk_audit_events_organization"),
         sa.PrimaryKeyConstraint("audit_event_id", name="pk_audit_events"),

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.assessment_v2.db.base import AssessmentBase
@@ -192,5 +192,7 @@ class AuditEventRecord(AssessmentBase):
     outcome: Mapped[str] = mapped_column(String(32), nullable=False)
     correlation_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     target_version: Mapped[int | None] = mapped_column(Integer)
-    metadata_json: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, server_default=text("'{}'"), nullable=False
+    )
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
