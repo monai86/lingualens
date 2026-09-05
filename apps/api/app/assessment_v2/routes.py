@@ -11,7 +11,6 @@ from app.assessment_v2.domain.models import (
     StartAssessment,
     TransitionAssessment,
 )
-from app.assessment_v2.errors import assessment_error_response
 from app.assessment_v2.schemas import (
     AssessmentCreateRequest,
     AssessmentResponse,

@@ -3,11 +3,10 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-import sys
-import traceback
 
 from app.api.v1.routes import ai_review, audit, cases, dashboard, evaluation, features, jobs, ml_review, organization_admin, privacy, reports, sessions, settings, therapy_goals, transcripts
 from app.assessment_v2 import routes as assessment_v2_routes
+from app.assessment_v2.db.migrations_runner import upgrade_assessment_database
 from app.assessment_v2.errors import assessment_error_response
 from app.assessment_v2.services import ClinicalPolicyError
 from app.core.config import get_settings
@@ -89,8 +88,13 @@ def apply_startup_migrations() -> None:
         try:
             run_alembic_upgrade_head()
         except Exception:
-            logger.exception("Startup Alembic migration failed.")
-            traceback.print_exc(file=sys.stderr)
+            logger.error("Startup v1 migration failed.")
+            raise
+    if settings_obj.run_assessment_migrations_on_startup:
+        try:
+            upgrade_assessment_database()
+        except Exception:
+            logger.error("Startup assessment v2 migration failed.")
             raise
 
 

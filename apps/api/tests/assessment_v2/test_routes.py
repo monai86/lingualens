@@ -233,3 +233,29 @@ def test_v1_validation_keeps_existing_fastapi_error_shape(
     assert response.status_code == 422
     assert "detail" in response.json()
     assert "error" not in response.json()
+
+
+def test_startup_migration_flags_are_independent(monkeypatch) -> None:
+    import app.main as main_module
+    from app.core.config import get_settings
+
+    calls: list[str] = []
+    monkeypatch.setattr(main_module, "run_alembic_upgrade_head", lambda: calls.append("v1"))
+    monkeypatch.setattr(main_module, "upgrade_assessment_database", lambda: calls.append("v2"))
+
+    monkeypatch.setattr(
+        main_module,
+        "settings_obj",
+        get_settings().model_copy(update={"run_migrations_on_startup": True, "run_assessment_migrations_on_startup": False}),
+    )
+    main_module.apply_startup_migrations()
+    assert calls == ["v1"]
+
+    calls.clear()
+    monkeypatch.setattr(
+        main_module,
+        "settings_obj",
+        get_settings().model_copy(update={"run_migrations_on_startup": False, "run_assessment_migrations_on_startup": True}),
+    )
+    main_module.apply_startup_migrations()
+    assert calls == ["v2"]
