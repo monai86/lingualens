@@ -101,6 +101,12 @@ class CreateAssessment:
 
 
 @dataclass(frozen=True, slots=True)
+class StartAssessment:
+    purpose: AssessmentPurpose
+    assigned_clinician_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class TransitionAssessment:
     assessment_id: str
     target_state: AssessmentState
