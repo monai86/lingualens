@@ -7,6 +7,9 @@ from pydantic import BaseModel
 
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://therapist:therapist@localhost/therapist_app_v2"
+DEFAULT_ASSESSMENT_DATABASE_URL = (
+    "postgresql+psycopg://therapist:therapist@localhost/lingualens_assessment_v2"
+)
 DEFAULT_REDIS_URL = "redis://localhost:6379/0"
 PRODUCTION_STORAGE_MODES = {"private", "supabase_private"}
 # Keep this list aligned with implemented queue adapters. Celery is not
@@ -40,6 +43,7 @@ def getenv_compat(new_name: str, legacy_name: str, default: str = "") -> str:
 class Settings(BaseModel):
     app_name: str = "lingualens API"
     api_prefix: str = "/api/v1"
+    assessment_api_prefix: str = "/api/v2"
     mock_mode: bool = True
     auth_mode: str = "mock"
     supabase_jwt_verification_mode: str = "hs256_shared_secret"
@@ -56,8 +60,10 @@ class Settings(BaseModel):
     repository_mode: str = "json"
     json_repository_path: str = ".local/lingualens-app-repository.json"
     database_url: str = DEFAULT_DATABASE_URL
+    assessment_database_url: str = DEFAULT_ASSESSMENT_DATABASE_URL
     sql_create_schema: bool = True
     run_migrations_on_startup: bool = False
+    run_assessment_migrations_on_startup: bool = False
     job_queue_mode: str = "memory"
     redis_url: str = DEFAULT_REDIS_URL
     storage_mode: str = "local_private"
@@ -122,6 +128,12 @@ class Settings(BaseModel):
                 raise ValueError("Production repository mode must be sql.")
             if self.database_url == DEFAULT_DATABASE_URL or "localhost" in self.database_url:
                 raise ValueError("Production database URL must come from managed secrets and cannot use demo defaults.")
+            if self.assessment_database_url == DEFAULT_ASSESSMENT_DATABASE_URL or "localhost" in self.assessment_database_url:
+                raise ValueError(
+                    "Production assessment database URL must come from managed secrets and cannot use demo defaults."
+                )
+            if self.run_assessment_migrations_on_startup:
+                raise ValueError("Production assessment migrations must be run as a controlled release action, not startup automation.")
             if self.storage_mode not in PRODUCTION_STORAGE_MODES:
                 raise ValueError("Production storage mode must use private managed storage.")
             if self.job_queue_mode not in PRODUCTION_JOB_QUEUE_MODES:
@@ -199,6 +211,7 @@ class Settings(BaseModel):
                 ".local/lingualens-app-repository.json",
             ),
             database_url=getenv_compat("LINGUALENS_DATABASE_URL", "THERAPIST_APP_V2_DATABASE_URL", DEFAULT_DATABASE_URL),
+            assessment_database_url=os.getenv("LINGUALENS_ASSESSMENT_DATABASE_URL", DEFAULT_ASSESSMENT_DATABASE_URL),
             sql_create_schema=getenv_compat(
                 "LINGUALENS_SQL_CREATE_SCHEMA",
                 "THERAPIST_APP_V2_SQL_CREATE_SCHEMA",
@@ -209,6 +222,10 @@ class Settings(BaseModel):
                 "LINGUALENS_RUN_MIGRATIONS_ON_STARTUP",
                 "THERAPIST_APP_V2_RUN_MIGRATIONS_ON_STARTUP",
                 "false",
+            ).lower()
+            == "true",
+            run_assessment_migrations_on_startup=os.getenv(
+                "LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP", "false"
             ).lower()
             == "true",
             job_queue_mode=getenv_compat("LINGUALENS_JOB_QUEUE_MODE", "THERAPIST_APP_V2_JOB_QUEUE_MODE", "memory"),
