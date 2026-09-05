@@ -12,7 +12,7 @@
 
 ## Plan position and acceptance boundary
 
-This is implementation plan **1 of 7** for [the approved developmental-profile workflow redesign](../specs/2026-09-06-developmental-profile-workflow-redesign.md). The later plans are Capture, Evidence, Clinical Review, Longitudinal, Thin Clients, and Pilot Validation. Write each later plan only after the preceding slice has a stable, verified contract.
+This is implementation plan **1 of 7** for [the approved developmental-profile workflow redesign](../specs/2026-09-06-developmental-profile-workflow-redesign.md). A separate [Plan 0 therapist UX and Figma prototype](2026-09-06-therapist-ux-figma-prototype.md) may run in parallel but must be accepted before Capture or therapist-web implementation begins. The later implementation plans are Capture, Evidence, Clinical Review, Longitudinal, Thin Clients, and Pilot Validation. Write each later plan only after the preceding slice has a stable, verified contract.
 
 Foundation V2 is accepted only when all of the following are true:
 

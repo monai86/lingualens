@@ -342,6 +342,7 @@ Repository source files are not clinical database records. The redesign may reta
 
 The redesign is too broad for one implementation batch. It should be delivered as independently verifiable slices:
 
+0. **Therapist UX and Figma:** research traceability, task flows, low-fidelity wireframes, accessible design system, high-fidelity clickable prototype, safety/error branches, formative usability evidence, and developer handoff. This may run in parallel with Foundation but must be accepted before Capture or therapist-web implementation begins.
 1. **Foundation:** new database, Auth/RLS boundary, assessment aggregate, audit, and API error contract.
 2. **Capture:** therapist assessment shell, protocol activities, private audio upload, quality checks, and processing jobs.
 3. **Evidence:** transcript review, reusable feature adapters, feature provenance, and developmental domain profiles.
@@ -350,7 +351,7 @@ The redesign is too broad for one implementation batch. It should be delivered a
 6. **Thin clients:** move desktop GUI and TUI to the final FastAPI contract and remove silent fallback behavior.
 7. **Pilot validation:** Supabase integration, tenant isolation, operational runbooks, usability evidence, and research/clinical safety review.
 
-Each slice receives its own implementation plan and acceptance boundary. Full diagnostic or numeric-risk claims remain outside these slices.
+Each slice receives its own implementation plan and acceptance boundary. Plan 0 is the interaction specification and research evidence package; FastAPI remains authoritative for workflow policy. Full diagnostic or numeric-risk claims remain outside these slices.
 
 ## 17. Paper evidence and interpretation
 
