@@ -205,7 +205,7 @@ def upgrade() -> None:
             "organization_id",
             "assessment_id",
             "protocol_version_key",
-            name="uq_assessment_protocol_selections_organization_assessment_protocol",
+            name="uq_aps_org_assessment_protocol",
         ),
         sa.CheckConstraint("version >= 1", name="ck_assessment_protocol_selections_version"),
     )

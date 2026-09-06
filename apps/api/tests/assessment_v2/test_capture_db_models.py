@@ -135,6 +135,13 @@ def test_capture_metadata_defines_exact_tables_and_essential_columns() -> None:
     }
 
 
+def test_capture_constraint_names_fit_postgresql_identifier_limit() -> None:
+    for table in AssessmentBase.metadata.tables.values():
+        for constraint in table.constraints:
+            if constraint.name is not None:
+                assert len(constraint.name) <= 63, (table.name, constraint.name)
+
+
 def test_capture_metadata_has_uniqueness_tenant_foreign_keys_and_mutable_versions() -> None:
     assert {
         ("organization_id", "assessment_id"),
