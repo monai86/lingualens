@@ -5,7 +5,8 @@
 ### Added
 - Added an additive assessment v2 foundation under `apps/api` with a fresh,
   separately migrated database boundary, consent-gated assessment lifecycle,
-  tenant/care-team policy, safe error envelopes, and PostgreSQL RLS checks.
+  tenant/care-team policy, atomic consent gating, safe error envelopes, and
+  PostgreSQL RLS checks using a non-superuser Compose runtime role.
   Existing `/api/v1` clients and data remain unchanged; Capture and feature
   analysis are deferred to later slices.
 - Added Visual Fundamental Pitch Contour Overlay (`self._show_pitch_overlay`) in Desktop GUI with real-time F0 curve rendering, voiced autocorrelation sampling, 250 Hz child pitch threshold guideline, and dynamic toolbar toggle (**📈 F0 Curve: ON/OFF**).

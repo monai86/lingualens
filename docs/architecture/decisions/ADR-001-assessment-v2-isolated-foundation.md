@@ -29,8 +29,12 @@ Build the foundation as an additive bounded package under `apps/api/app/assessme
 - Let Supabase Auth establish identity, FastAPI enforce organization, role,
   care-team, consent, and workflow policy, and PostgreSQL RLS provide defense
   in depth.
-- Keep mutation audit events in the same transaction as their mutation and use
-  optimistic assessment versions for transitions.
+- Keep mutation audit events in the same transaction as their mutation, require
+  composite tenant foreign keys for child-linked records, and use optimistic
+  assessment versions for transitions.
+- Serialize consent changes and consent-gated assessment creation on the child
+  row. Local Compose uses a dedicated `NOSUPERUSER`/`NOBYPASSRLS` assessment
+  role and enables v2 migration startup so the declared runtime is usable.
 - Fail closed before Capture and feature-analysis slices are implemented.
 
 ## Consequences
@@ -57,7 +61,7 @@ Trade-offs:
 ## Verification boundary
 
 The foundation is verified with SQLite migration smoke tests, focused service
-and route tests, v1 regression tests, and a PostgreSQL integration test using a
-`NOSUPERUSER NOBYPASSRLS` role. These are software safety checks, not clinical
-validation and not evidence that the system can diagnose ASD or developmental
-delay.
+and route tests, v1 regression tests, a PostgreSQL integration test using a
+`NOSUPERUSER NOBYPASSRLS` role, and a disposable Compose/API runtime check.
+These are software safety checks, not clinical validation and not evidence that
+the system can diagnose ASD or developmental delay.

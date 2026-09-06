@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-import re
-from uuid import uuid4
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from app.assessment_v2.domain.models import AssessmentPurpose, AssessmentState
+from app.assessment_v2.correlation import sanitize_correlation_id
 from app.assessment_v2.schemas import ErrorEnvelope
 
 
 # Only non-sensitive, finite vocabulary is allowed to cross the error boundary.
 _SAFE_DETAIL_KEYS = frozenset({"allowed_states", "allowed_purposes"})
-_SAFE_CORRELATION_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _SAFE_DETAIL_VALUES = {
     "allowed_states": frozenset(state.value for state in AssessmentState),
     "allowed_purposes": frozenset(purpose.value for purpose in AssessmentPurpose),
@@ -40,9 +38,8 @@ def assessment_error_response(
     message: str,
     details: Mapping[str, object] | None = None,
 ) -> JSONResponse:
-    correlation_id = getattr(request.state, "request_id", None) or uuid4().hex
-    if not isinstance(correlation_id, str) or not _SAFE_CORRELATION_ID.fullmatch(correlation_id):
-        correlation_id = uuid4().hex
+    correlation_id = sanitize_correlation_id(getattr(request.state, "request_id", None))
+    request.state.request_id = correlation_id
     payload = ErrorEnvelope(
         error={
             "code": code,

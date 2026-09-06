@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, DateTime, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKeyConstraint, UniqueConstraint
 
 from app.assessment_v2.db.base import AssessmentBase
 from app.assessment_v2.db import models as _models  # noqa: F401  # register mapped tables
@@ -43,6 +43,35 @@ def test_foundation_unique_constraints_protect_tenant_scoped_identity() -> None:
         for constraint in children.constraints
         if isinstance(constraint, UniqueConstraint)
     }
+
+
+def test_child_linked_records_use_composite_tenant_foreign_keys() -> None:
+    children = AssessmentBase.metadata.tables["children"]
+    care_team = AssessmentBase.metadata.tables["care_team_assignments"]
+    consents = AssessmentBase.metadata.tables["consent_records"]
+    assessments = AssessmentBase.metadata.tables["assessments"]
+
+    assert ("organization_id", "child_id") in {
+        tuple(constraint.columns.keys())
+        for constraint in children.constraints
+        if isinstance(constraint, UniqueConstraint)
+    }
+    for table in (care_team, consents, assessments):
+        foreign_keys = [
+            constraint
+            for constraint in table.constraints
+            if isinstance(constraint, ForeignKeyConstraint)
+        ]
+        assert any(
+            tuple(constraint.column_keys) == ("organization_id", "child_id")
+            for constraint in foreign_keys
+        )
+
+    assert any(
+        tuple(constraint.column_keys) == ("organization_id", "assigned_clinician_id")
+        for constraint in assessments.constraints
+        if isinstance(constraint, ForeignKeyConstraint)
+    )
 
 
 def test_mutable_records_use_utc_timestamps_and_version_checks() -> None:

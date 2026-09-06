@@ -75,3 +75,12 @@ def test_production_accepts_managed_assessment_database_with_migrations_disabled
 
     assert settings.assessment_api_prefix == "/api/v2"
     assert settings.run_assessment_migrations_on_startup is False
+
+
+def test_production_rejects_reusing_the_v1_database_for_assessment_v2() -> None:
+    shared_url = "postgresql+psycopg://prod_user:prod_password@db.example/shared"
+
+    with pytest.raises(ValueError, match="different"):
+        values = _production_values()
+        values.update(database_url=shared_url, assessment_database_url=shared_url)
+        Settings(**values).validate_runtime_security()

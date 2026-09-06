@@ -123,6 +123,58 @@ def test_tenant_and_care_team_isolation_and_admin_access(session: Session) -> No
     assert repo.get_child(admin, beta_child.id) is None
 
 
+def test_assignee_must_be_an_active_member_of_the_child_care_team(session: Session) -> None:
+    repo = AssessmentRepository(session)
+    alpha_therapist = scope("therapist_alpha")
+    beta_therapist = scope("therapist_beta", organization_id="org_beta")
+    synchronize(repo, alpha_therapist)
+    synchronize(repo, beta_therapist)
+    alpha_child = create_child(repo, alpha_therapist, "LL-ASSIGN")
+
+    assert repo.can_assign_clinician(alpha_therapist, alpha_child.id, alpha_therapist.user_id) is True
+    assert repo.can_assign_clinician(alpha_therapist, alpha_child.id, beta_therapist.user_id) is False
+
+
+def test_assessment_creation_rechecks_consent_inside_the_insert_transaction(session: Session) -> None:
+    repo = AssessmentRepository(session)
+    therapist = scope("therapist_atomic")
+    synchronize(repo, therapist)
+    child = create_child(repo, therapist, "LL-ATOMIC")
+    repo.add_consent(
+        therapist,
+        child.id,
+        RecordConsent(
+            purpose=ConsentPurpose.CLINICAL_ASSESSMENT,
+            scope_version="clinical-v1",
+            status=ConsentStatus.ACTIVE,
+        ),
+        correlation_id="consent-atomic",
+    )
+    repo.add_consent(
+        therapist,
+        child.id,
+        RecordConsent(
+            purpose=ConsentPurpose.CLINICAL_ASSESSMENT,
+            scope_version="clinical-v1",
+            status=ConsentStatus.WITHDRAWN,
+        ),
+        correlation_id="consent-atomic-withdrawn",
+    )
+
+    with pytest.raises(RepositoryError, match="active_consent_required"):
+        repo.create_assessment_if_consented(
+            therapist,
+            CreateAssessment(
+                child_id=child.id,
+                purpose=AssessmentPurpose.INITIAL,
+                age_months=36,
+                language_context={"primary": "th", "additional": []},
+                assigned_clinician_id=therapist.user_id,
+            ),
+            correlation_id="assessment-atomic",
+        )
+
+
 def test_consent_is_append_only_and_withdrawal_removes_active_access(session: Session) -> None:
     repo = AssessmentRepository(session)
     therapist = scope("therapist_01")

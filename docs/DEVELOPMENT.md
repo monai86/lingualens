@@ -69,6 +69,7 @@ PYTHONPATH=apps/api:src pytest apps/api/tests/assessment_v2 -m "not assessment_p
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
 docker compose up -d postgres
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_postgres.py
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_compose.py
 ```
 
 The v2 database and Alembic history are separate from `LINGUALENS_DATABASE_URL`

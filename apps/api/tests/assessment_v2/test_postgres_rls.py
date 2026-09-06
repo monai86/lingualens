@@ -207,6 +207,42 @@ def test_rls_filters_tenant_rows_and_rejects_cross_tenant_writes(
         engine.dispose()
 
 
+def test_rls_and_composite_foreign_keys_reject_cross_tenant_child_links(
+    rls_database: tuple[str, str, str, str],
+) -> None:
+    _, limited_url, _, beta_child = rls_database
+    engine = _limited_engine(limited_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text("SELECT set_config('app.current_organization_id', 'org_alpha', true)")
+            )
+            assignee = connection.scalar(
+                text(
+                    "SELECT user_id FROM organization_memberships "
+                    "WHERE organization_id = 'org_alpha' LIMIT 1"
+                )
+            )
+            with pytest.raises(Exception):
+                connection.execute(
+                    text(
+                        "INSERT INTO assessments "
+                        "(assessment_id, organization_id, child_id, purpose, state, age_months, "
+                        "language_context, assigned_clinician_id, version, created_at, updated_at) "
+                        "VALUES (:assessment_id, 'org_alpha', :child_id, 'initial', 'draft', 36, "
+                        "'{\"additional\":[],\"primary\":\"th\"}', :assignee, 1, :now, :now)"
+                    ),
+                    {
+                        "assessment_id": f"blocked_{uuid4().hex}",
+                        "child_id": beta_child,
+                        "assignee": assignee,
+                        "now": datetime.now(timezone.utc),
+                    },
+                )
+    finally:
+        engine.dispose()
+
+
 def test_rls_without_context_is_fail_closed(rls_database: tuple[str, str, str, str]) -> None:
     _, limited_url, _, _ = rls_database
     engine = _limited_engine(limited_url)

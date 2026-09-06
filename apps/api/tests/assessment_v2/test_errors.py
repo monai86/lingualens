@@ -26,8 +26,9 @@ def request_with_id(request_id: str | None) -> Request:
 
 
 def test_error_envelope_is_exact_and_uses_request_correlation_id() -> None:
+    request_id = "0123456789abcdef0123456789abcdef"
     response = assessment_error_response(
-        request_with_id("req-01"),
+        request_with_id(request_id),
         "active_consent_required",
         409,
         "Active clinical-assessment consent is required.",
@@ -35,11 +36,11 @@ def test_error_envelope_is_exact_and_uses_request_correlation_id() -> None:
     )
 
     assert response.status_code == 409
-    assert response.headers["x-request-id"] == "req-01"
+    assert response.headers["x-request-id"] == request_id
     assert response.body == (
         b'{"error":{"code":"active_consent_required",'
         b'"message":"Active clinical-assessment consent is required.",'
-        b'"details":{},"correlation_id":"req-01"}}'
+        b'"details":{},"correlation_id":"0123456789abcdef0123456789abcdef"}}'
     )
     assert ErrorEnvelope.model_validate_json(response.body).error.details == {}
 
@@ -62,7 +63,7 @@ def test_error_response_generates_correlation_id_without_echoing_exception_text(
 
 def test_error_response_only_allows_known_non_sensitive_detail_values() -> None:
     response = assessment_error_response(
-        request_with_id("req-02"),
+        request_with_id("0123456789abcdef0123456789abcde0"),
         "workflow_stage_unavailable",
         409,
         "This workflow stage is not yet available.",
@@ -88,3 +89,15 @@ def test_error_response_replaces_invalid_request_correlation_id() -> None:
 
     correlation_id = response.headers["x-request-id"]
     assert re.fullmatch(r"[0-9a-f]{32}", correlation_id)
+
+
+def test_error_response_replaces_semantically_untrusted_request_correlation_id() -> None:
+    response = assessment_error_response(
+        request_with_id("child-Somchai-identifier"),
+        "child_not_found",
+        404,
+        "Child was not found.",
+    )
+
+    assert re.fullmatch(r"[0-9a-f]{32}", response.headers["x-request-id"])
+    assert b"Somchai" not in response.body

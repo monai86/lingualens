@@ -132,6 +132,8 @@ class Settings(BaseModel):
                 raise ValueError(
                     "Production assessment database URL must come from managed secrets and cannot use demo defaults."
                 )
+            if self.database_url == self.assessment_database_url:
+                raise ValueError("Production v1 and assessment v2 database URLs must be different.")
             if self.run_assessment_migrations_on_startup:
                 raise ValueError("Production assessment migrations must be run as a controlled release action, not startup automation.")
             if self.storage_mode not in PRODUCTION_STORAGE_MODES:

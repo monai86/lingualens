@@ -10,7 +10,11 @@ services:
     environment:
       - PYTHONPATH=/workspace/apps/api
       - THERAPIST_APP_V2_DEBUG_FEATURE_OVERRIDE=false
-      - LINGUALENS_ASSESSMENT_DATABASE_URL=postgresql+psycopg://therapist:therapist@postgres:5432/lingualens_assessment_v2
+      - LINGUALENS_ASSESSMENT_DATABASE_URL=postgresql+psycopg://lingualens_assessment_app:local-assessment-only@postgres:5432/lingualens_assessment_v2
+      - LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP=true
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   worker:
     image: python:3.11-slim

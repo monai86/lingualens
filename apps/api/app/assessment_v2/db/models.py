@@ -4,7 +4,18 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.assessment_v2.db.base import AssessmentBase
@@ -66,6 +77,7 @@ class OrganizationMembershipRecord(AssessmentBase):
 class ChildRecord(AssessmentBase):
     __tablename__ = "children"
     __table_args__ = (
+        UniqueConstraint("organization_id", "child_id", name="uq_children_organization_child"),
         UniqueConstraint("organization_id", "display_code", name="uq_child_organization_display_code"),
         CheckConstraint("birth_month BETWEEN 1 AND 12", name="ck_children_birth_month"),
         CheckConstraint("birth_year BETWEEN 1900 AND 2100", name="ck_children_birth_year"),
@@ -91,6 +103,16 @@ class CareTeamAssignmentRecord(AssessmentBase):
     __tablename__ = "care_team_assignments"
     __table_args__ = (
         UniqueConstraint("organization_id", "child_id", "user_id", name="uq_care_team_organization_child_user"),
+        ForeignKeyConstraint(
+            ["organization_id", "child_id"],
+            ["children.organization_id", "children.child_id"],
+            name="fk_care_team_child_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "user_id"],
+            ["organization_memberships.organization_id", "organization_memberships.user_id"],
+            name="fk_care_team_membership_tenant",
+        ),
         CheckConstraint(
             "role IN ('assigned_clinician', 'supervisor', 'observer')",
             name="ck_care_team_role",
@@ -118,6 +140,18 @@ class CareTeamAssignmentRecord(AssessmentBase):
 class ConsentRecord(AssessmentBase):
     __tablename__ = "consent_records"
     __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "child_id",
+            "purpose",
+            "version",
+            name="uq_consent_organization_child_purpose_version",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "child_id"],
+            ["children.organization_id", "children.child_id"],
+            name="fk_consent_child_tenant",
+        ),
         CheckConstraint(
             "purpose IN ('clinical_assessment', 'research_reuse')",
             name="ck_consent_records_purpose",
@@ -149,6 +183,16 @@ class ConsentRecord(AssessmentBase):
 class AssessmentRecord(AssessmentBase):
     __tablename__ = "assessments"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "child_id"],
+            ["children.organization_id", "children.child_id"],
+            name="fk_assessments_child_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "assigned_clinician_id"],
+            ["organization_memberships.organization_id", "organization_memberships.user_id"],
+            name="fk_assessments_clinician_membership_tenant",
+        ),
         CheckConstraint(f"purpose IN ({_PURPOSE_VALUES})", name="ck_assessments_purpose"),
         CheckConstraint(f"state IN ({_STATE_VALUES})", name="ck_assessments_state"),
         CheckConstraint("age_months BETWEEN 0 AND 216", name="ck_assessments_age_months"),

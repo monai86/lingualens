@@ -235,6 +235,32 @@ def test_v1_validation_keeps_existing_fastapi_error_shape(
     assert "error" not in response.json()
 
 
+def test_v2_http_and_auth_failures_use_the_error_envelope(
+    routed_client: tuple[TestClient, FakeAssessmentService],
+) -> None:
+    client, _ = routed_client
+
+    not_found = client.get("/api/v2/does-not-exist")
+    assert not_found.status_code == 404
+    assert not_found.json()["error"]["code"] == "not_found"
+    assert "detail" not in not_found.json()
+
+    method_not_allowed = client.put("/api/v2/children")
+    assert method_not_allowed.status_code == 405
+    assert method_not_allowed.json()["error"]["code"] == "method_not_allowed"
+
+    routed_service = app.dependency_overrides.pop(get_assessment_service)
+    try:
+        invalid_role = client.get(
+            "/api/v2/children",
+            headers={"x-mock-role": "not-a-role"},
+        )
+    finally:
+        app.dependency_overrides[get_assessment_service] = routed_service
+    assert invalid_role.status_code == 403
+    assert invalid_role.json()["error"]["code"] == "forbidden"
+
+
 def test_startup_migration_flags_are_independent(monkeypatch) -> None:
     import app.main as main_module
     from app.core.config import get_settings

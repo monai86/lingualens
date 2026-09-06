@@ -276,7 +276,12 @@ with `docker compose up -d postgres`, then run the migration checks:
 PYTHONPATH=apps/api:src python scripts/check_api_migrations.py
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_postgres.py
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_compose.py
 ```
+
+The Compose runtime check creates a disposable PostgreSQL stack, verifies that
+the v2 history runs at API startup, confirms the API can create a child through
+`/api/v2`, and verifies the runtime role is `NOSUPERUSER`/`NOBYPASSRLS`.
 
 Clients remain on `/api/v1` until a later migration plan. Rollback is additive:
 stop mounting `/api/v2` and disable `LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP`;

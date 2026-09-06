@@ -1,8 +1,10 @@
 from fastapi import FastAPI, Request
-from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+from sqlalchemy.exc import SQLAlchemyError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.routes import ai_review, audit, cases, dashboard, evaluation, features, jobs, ml_review, organization_admin, privacy, reports, sessions, settings, therapy_goals, transcripts
 from app.assessment_v2 import routes as assessment_v2_routes
@@ -80,6 +82,37 @@ async def handle_request_validation_error(request: Request, exception: RequestVa
             "Request validation failed.",
         )
     return await request_validation_exception_handler(request, exception)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def handle_http_exception(request: Request, exception: StarletteHTTPException):
+    if request.url.path.startswith(settings_obj.assessment_api_prefix):
+        messages = {
+            400: ("bad_request", "Request could not be processed."),
+            401: ("authentication_required", "Authentication is required."),
+            403: ("forbidden", "Access to this resource is not permitted."),
+            404: ("not_found", "The requested resource was not found."),
+            405: ("method_not_allowed", "The requested method is not allowed."),
+            429: ("rate_limit_exceeded", "Too many requests."),
+        }
+        code, message = messages.get(
+            exception.status_code,
+            ("request_failed", "The request could not be completed."),
+        )
+        return assessment_error_response(request, code, exception.status_code, message)
+    return await http_exception_handler(request, exception)
+
+
+@app.exception_handler(SQLAlchemyError)
+async def handle_database_error(request: Request, exception: SQLAlchemyError):
+    if request.url.path.startswith(settings_obj.assessment_api_prefix):
+        return assessment_error_response(
+            request,
+            "persistence_error",
+            500,
+            "The clinical operation could not be completed.",
+        )
+    raise exception
 
 
 @app.on_event("startup")

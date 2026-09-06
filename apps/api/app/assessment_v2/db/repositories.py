@@ -166,7 +166,7 @@ class AssessmentRepository:
     def add_consent(
         self, scope: AccessScope, child_id: str, command: RecordConsent, correlation_id: str
     ) -> ConsentSnapshot:
-        self._require_child_access(scope, child_id)
+        self._locked_child(scope, child_id)
         now = _utc_now()
         with self.session.begin_nested():
             latest_version = self.session.scalar(
@@ -243,6 +243,54 @@ class AssessmentRepository:
             ])
             self.session.flush()
             return self._assessment_snapshot(assessment)
+
+    def create_assessment_if_consented(
+        self, scope: AccessScope, command: CreateAssessment, correlation_id: str
+    ) -> AssessmentSnapshot:
+        """Lock the child while checking consent and inserting the assessment."""
+
+        self._locked_child(scope, command.child_id)
+        with self.session.begin_nested():
+            latest = self.session.scalar(
+                select(ConsentRecord)
+                .where(
+                    ConsentRecord.organization_id == scope.organization_id,
+                    ConsentRecord.child_id == command.child_id,
+                    ConsentRecord.purpose == ConsentPurpose.CLINICAL_ASSESSMENT.value,
+                )
+                .order_by(desc(ConsentRecord.version))
+                .with_for_update()
+                .limit(1)
+            )
+            if latest is None or latest.status != "active":
+                raise RepositoryError("active_consent_required")
+            return self._insert_assessment(scope, command, correlation_id)
+
+    def can_assign_clinician(self, scope: AccessScope, child_id: str, clinician_id: str) -> bool:
+        if not self._can_access_child(scope, child_id):
+            return False
+        return (
+            self.session.scalar(
+                select(CareTeamAssignmentRecord.assignment_id)
+                .join(
+                    OrganizationMembershipRecord,
+                    and_(
+                        OrganizationMembershipRecord.organization_id
+                        == CareTeamAssignmentRecord.organization_id,
+                        OrganizationMembershipRecord.user_id == CareTeamAssignmentRecord.user_id,
+                    ),
+                )
+                .where(
+                    CareTeamAssignmentRecord.organization_id == scope.organization_id,
+                    CareTeamAssignmentRecord.child_id == child_id,
+                    CareTeamAssignmentRecord.user_id == clinician_id,
+                    CareTeamAssignmentRecord.active.is_(True),
+                    OrganizationMembershipRecord.active.is_(True),
+                    OrganizationMembershipRecord.role.in_(("therapist", "clinical_supervisor")),
+                )
+            )
+            is not None
+        )
 
     def get_assessment(self, scope: AccessScope, assessment_id: str) -> AssessmentSnapshot | None:
         record = self._assessment_record(scope, assessment_id)
@@ -358,6 +406,48 @@ class AssessmentRepository:
     def _require_child_access(self, scope: AccessScope, child_id: str) -> None:
         if not self._can_access_child(scope, child_id):
             raise RepositoryError("child_not_found")
+
+    def _locked_child(self, scope: AccessScope, child_id: str) -> ChildRecord:
+        child = self.session.scalar(
+            select(ChildRecord)
+            .where(
+                ChildRecord.child_id == child_id,
+                ChildRecord.organization_id == scope.organization_id,
+            )
+            .with_for_update()
+        )
+        if child is None or not self._can_access_child(scope, child_id):
+            raise RepositoryError("child_not_found")
+        return child
+
+    def _insert_assessment(
+        self, scope: AccessScope, command: CreateAssessment, correlation_id: str
+    ) -> AssessmentSnapshot:
+        now = _utc_now()
+        assessment = AssessmentRecord(
+            assessment_id=uuid4().hex,
+            organization_id=scope.organization_id,
+            child_id=command.child_id,
+            purpose=command.purpose.value,
+            state="draft",
+            age_months=command.age_months,
+            language_context=_context_to_storage(command.language_context),
+            assigned_clinician_id=command.assigned_clinician_id,
+            version=1,
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(assessment)
+        self._append_audit(
+            scope,
+            "assessment.created",
+            "assessment",
+            assessment.assessment_id,
+            correlation_id,
+            ["child_id", "purpose", "age_months", "language_context", "assigned_clinician_id"],
+        )
+        self.session.flush()
+        return self._assessment_snapshot(assessment)
 
     def _assessment_record(self, scope: AccessScope, assessment_id: str) -> AssessmentRecord | None:
         record = self.session.scalar(

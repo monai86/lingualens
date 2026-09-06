@@ -35,6 +35,12 @@ class AssessmentRepository(Protocol):
 
     def has_active_consent(self, scope: AccessScope, child_id: str, purpose: ConsentPurpose) -> bool: ...
 
+    def can_assign_clinician(self, scope: AccessScope, child_id: str, clinician_id: str) -> bool: ...
+
+    def create_assessment_if_consented(
+        self, scope: AccessScope, command: CreateAssessment, correlation_id: str
+    ) -> AssessmentSnapshot: ...
+
     def create_assessment(
         self, scope: AccessScope, command: CreateAssessment, correlation_id: str
     ) -> AssessmentSnapshot: ...
@@ -120,20 +126,15 @@ class AssessmentService:
         child = self.get_child(child_id)
 
         assigned_clinician_id = command.assigned_clinician_id or self.user.user_id
-        if (
-            assigned_clinician_id != self.user.user_id
-            and self.user.role not in _OVERSIGHT_ROLES
-        ):
+        if self.user.role not in _OVERSIGHT_ROLES and assigned_clinician_id != self.user.user_id:
             raise self._policy_error("clinician_assignment_not_permitted")
 
-        # Keep this check immediately adjacent to insertion so a previously loaded
-        # child cannot turn a withdrawn consent into an assessment.
         if not self._repository_call(
-            lambda: self.repository.has_active_consent(
-                self.scope, child_id, ConsentPurpose.CLINICAL_ASSESSMENT
+            lambda: self.repository.can_assign_clinician(
+                self.scope, child_id, assigned_clinician_id
             )
         ):
-            raise self._policy_error("active_consent_required")
+            raise self._policy_error("clinician_assignment_not_permitted")
 
         age_months = self._age_in_months(child)
         create_command = CreateAssessment(
@@ -144,7 +145,9 @@ class AssessmentService:
             assigned_clinician_id=assigned_clinician_id,
         )
         return self._repository_call(
-            lambda: self.repository.create_assessment(self.scope, create_command, correlation_id)
+            lambda: self.repository.create_assessment_if_consented(
+                self.scope, create_command, correlation_id
+            )
         )
 
     def get_assessment(self, assessment_id: str) -> AssessmentSnapshot:

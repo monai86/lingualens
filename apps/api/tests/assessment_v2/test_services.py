@@ -71,6 +71,7 @@ class FakeRepository:
         self.assessment_value = assessment()
         self.create_assessment_command = None
         self.transition_command = None
+        self.atomic_assessment_creation_called = False
 
     def synchronize_principal(self, principal: CurrentUser, correlation_id: str) -> None:
         return None
@@ -94,9 +95,18 @@ class FakeRepository:
     def has_active_consent(self, scope: AccessScope, child_id: str, purpose: ConsentPurpose) -> bool:
         return self.active_consent
 
+    def can_assign_clinician(self, scope: AccessScope, child_id: str, clinician_id: str) -> bool:
+        return clinician_id == "therapist_01"
+
     def create_assessment(self, scope: AccessScope, command, correlation_id: str):
         self.create_assessment_command = command
         return self.assessment_value
+
+    def create_assessment_if_consented(self, scope: AccessScope, command, correlation_id: str):
+        self.atomic_assessment_creation_called = True
+        if not self.has_active_consent(scope, command.child_id, ConsentPurpose.CLINICAL_ASSESSMENT):
+            raise RepositoryError("active_consent_required")
+        return self.create_assessment(scope, command, correlation_id)
 
     def get_assessment(self, scope: AccessScope, assessment_id: str):
         return self.assessment_value
@@ -176,6 +186,19 @@ def test_assigned_clinician_cannot_be_changed_by_ordinary_therapist() -> None:
     assert error.value.code == "clinician_assignment_not_permitted"
 
 
+def test_oversight_user_cannot_assign_a_clinician_outside_the_active_care_team() -> None:
+    repository = FakeRepository(child_value=child(), active_consent=True)
+
+    with pytest.raises(ClinicalPolicyError) as error:
+        service_for(repository, therapist(role="clinical_supervisor")).create_assessment(
+            "child_01",
+            StartAssessment(AssessmentPurpose.INITIAL, assigned_clinician_id="therapist_beta"),
+            "req-03b",
+        )
+
+    assert error.value.code == "clinician_assignment_not_permitted"
+
+
 def test_legal_assessment_creation_is_draft_version_one_with_child_context() -> None:
     repository = FakeRepository(child_value=child(), active_consent=True)
     created = service_for(repository).create_assessment(
@@ -188,6 +211,7 @@ def test_legal_assessment_creation_is_draft_version_one_with_child_context() -> 
     assert created.version == 1
     assert repository.create_assessment_command.age_months == 63
     assert repository.create_assessment_command.language_context == {"primary": "th", "additional": []}
+    assert repository.atomic_assessment_creation_called is True
 
 
 def test_child_outside_tenant_or_care_team_is_not_disclosed() -> None:

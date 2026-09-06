@@ -24,7 +24,7 @@ EXPECTED_TABLES = {
     "assessments",
     "audit_events",
 }
-HEAD_REVISION = "0001_assessment_foundation"
+HEAD_REVISION = "0002_assessment_tenant_integrity"
 
 
 def _clear_settings_cache() -> None:

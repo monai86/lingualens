@@ -1,0 +1,6 @@
+services:
+  api:
+    ports: !override []
+  postgres:
+    ports: !override
+      - "5434:5432"

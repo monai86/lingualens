@@ -52,6 +52,7 @@ For the local Compose database:
 docker compose up -d postgres
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_postgres.py
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_compose.py
 ```
 
 The v1 and v2 URLs are separate:

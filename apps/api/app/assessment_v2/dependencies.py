@@ -49,6 +49,12 @@ def get_assessment_service(
     """Synchronize identity, then authorize against persisted membership state."""
 
     correlation_id = _request_correlation_id(request)
+    if user.role not in {"therapist", "clinical_supervisor", "org_admin"}:
+        raise ClinicalPolicyError(
+            "role_not_permitted",
+            403,
+            "This role is not permitted for the clinical workflow.",
+        )
     repository.synchronize_principal(user, correlation_id)
     scope = AccessScope(
         user_id=user.user_id,

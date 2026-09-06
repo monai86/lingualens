@@ -11,6 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from app.core.config import get_settings
+from app.assessment_v2.correlation import sanitize_correlation_id
 
 
 class JsonFormatter(logging.Formatter):
@@ -98,14 +99,16 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         self.logger = logging.getLogger("therapist_app_v2.request")
 
     async def dispatch(self, request: Request, call_next):
+        settings = get_settings()
         request_id = request.headers.get("x-request-id") or str(uuid4())
+        if request.url.path.startswith(settings.assessment_api_prefix):
+            request_id = sanitize_correlation_id(request_id)
         request.state.request_id = request_id
         start = time.perf_counter()
         response = await call_next(request)
         duration_ms = round((time.perf_counter() - start) * 1000, 2)
         route = request.scope.get("route")
         route_path = getattr(route, "path", request.url.path)
-        settings = get_settings()
         for api_prefix in (settings.api_prefix, settings.assessment_api_prefix):
             if request.url.path.startswith(api_prefix) and not route_path.startswith(api_prefix):
                 route_path = f"{api_prefix}{route_path}"
