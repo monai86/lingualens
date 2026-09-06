@@ -463,9 +463,10 @@ class AssessmentService:
         return recording, grant
 
     def delete_recording(self, recording_id: str, correlation_id: str) -> bool:
-        """Delete a private object then safely tombstone its metadata.
+        """Tombstone metadata before deleting the private object.
 
-        A missing or already-deleted record is a successful idempotent deletion.
+        A missing record is a successful idempotent deletion. A failed storage
+        cleanup leaves the durable tombstone for a later retry.
         The repository intentionally does not distinguish inaccessible records here.
         """
 
@@ -473,10 +474,9 @@ class AssessmentService:
         recording = self._repository_call(
             lambda: self.repository.get_recording_if_consented(self.scope, recording_id)
         )
-        if recording is None or recording.upload_state is RecordingUploadState.FAILED:
+        if recording is None:
             return True
-        self._storage_call(lambda: self._storage_or_error().delete_object(recording.object_key))
-        self._repository_call(
+        tombstone = self._repository_call(
             lambda: self.repository.mark_recording_deleted_if_consented(
                 self.scope,
                 recording.id,
@@ -484,6 +484,9 @@ class AssessmentService:
                 correlation_id,
             )
         )
+        if tombstone is None:
+            return True
+        self._storage_call(lambda: self._storage_or_error().delete_object(tombstone.object_key))
         return True
 
     def complete_capture(self, assessment_id: str, correlation_id: str) -> AssessmentSnapshot:

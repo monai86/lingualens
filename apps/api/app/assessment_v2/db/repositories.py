@@ -698,6 +698,18 @@ class AssessmentRepository:
         expected_version: int,
         correlation_id: str,
     ) -> RecordingSnapshot | None:
+        return self._tombstone_recording_if_consented(
+            scope, recording_id, correlation_id, expected_version=expected_version
+        )
+
+    def _tombstone_recording_if_consented(
+        self,
+        scope: AccessScope,
+        recording_id: str,
+        correlation_id: str,
+        *,
+        expected_version: int | None = None,
+    ) -> RecordingSnapshot | None:
         with self.session.begin_nested():
             context = self._recording_with_assessment(scope, recording_id, lock=True)
             if context is None:
@@ -711,7 +723,11 @@ class AssessmentRepository:
                 .where(
                     RecordingRecord.organization_id == scope.organization_id,
                     RecordingRecord.recording_id == recording_id,
-                    RecordingRecord.version == expected_version,
+                    *(
+                        [RecordingRecord.version == expected_version]
+                        if expected_version is not None
+                        else []
+                    ),
                 )
                 .values(
                     upload_state=RecordingUploadState.FAILED.value,

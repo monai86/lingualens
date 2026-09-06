@@ -31,6 +31,8 @@ from app.assessment_v2.domain.models import (
     RecordConsent,
 )
 from app.core.security import CurrentUser
+from app.assessment_v2.services import AssessmentService, ClinicalPolicyError
+from app.assessment_v2.storage import StorageDeletionResult, StorageUnavailableError
 
 
 @pytest.fixture
@@ -410,3 +412,76 @@ def test_recording_quality_processing_and_delete_remain_tenant_scoped_and_idempo
         )
     )
     assert stored_run is not None and stored_run.state == "cancelled"
+
+
+def test_delete_persists_tombstone_before_storage_and_retries_cleanup_safely(
+    session: Session,
+) -> None:
+    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    created = repo.create_recording_if_capture_active(
+        scope,
+        domain.CreateRecording(
+            assessment_id=assessment.id,
+            activity_code="free_play",
+            content_type="audio/webm",
+            size_bytes=456,
+            checksum="sha256:0123456789abcdef0123456789abcdef",
+            idempotency_key="recording-delete-race-01",
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    observed_states: list[str] = []
+
+    class _Storage:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def delete_object(self, object_key: str) -> StorageDeletionResult:
+            self.calls += 1
+            stored = session.scalar(
+                select(RecordingRecord).where(
+                    RecordingRecord.organization_id == scope.organization_id,
+                    RecordingRecord.recording_id == created.recording.id,
+                )
+            )
+            assert stored is not None
+            observed_states.append(stored.upload_state)
+            if self.calls == 1:
+                raise StorageUnavailableError()
+            return StorageDeletionResult(deleted=True, status="deleted")
+
+    storage = _Storage()
+    service = AssessmentService(
+        repo,
+        CurrentUser(
+            user_id=scope.user_id,
+            organization_id=scope.organization_id,
+            role=scope.role,
+            display_name="Synthetic Therapist",
+        ),
+        storage=storage,
+    )
+
+    with pytest.raises(ClinicalPolicyError) as failed_cleanup:
+        service.delete_recording(created.recording.id, "0123456789abcdef0123456789abcdef")
+
+    tombstone = session.scalar(
+        select(RecordingRecord).where(
+            RecordingRecord.organization_id == scope.organization_id,
+            RecordingRecord.recording_id == created.recording.id,
+        )
+    )
+    assert failed_cleanup.value.code == "storage_unavailable"
+    assert observed_states == ["failed"]
+    assert tombstone is not None
+    assert tombstone.upload_state == "failed"
+    assert session.scalar(
+        select(ProcessingRunRecord.state).where(
+            ProcessingRunRecord.organization_id == scope.organization_id,
+            ProcessingRunRecord.recording_id == created.recording.id,
+        )
+    ) == "cancelled"
+
+    assert service.delete_recording(created.recording.id, "0123456789abcdef0123456789abcdef") is True
+    assert observed_states == ["failed", "failed"]

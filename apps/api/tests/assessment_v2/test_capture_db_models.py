@@ -12,6 +12,7 @@ from sqlalchemy import CheckConstraint, DateTime, ForeignKeyConstraint, UniqueCo
 from app.assessment_v2.db import models as _models  # noqa: F401  # register mapped tables
 from app.assessment_v2.db.base import AssessmentBase
 from app.assessment_v2.domain.models import RecordingQualityStatus
+from app.assessment_v2.protocols import PROTOCOL_CATALOG
 
 
 CAPTURE_TABLES = {
@@ -299,6 +300,57 @@ def test_capture_migration_seeds_catalog_and_reverses_to_0002(monkeypatch) -> No
                 "protocol_activities_immutable_update",
                 "protocol_activities_immutable_delete",
             }.intersection(trigger_names)
+        finally:
+            downgrade_assessment_database()
+            get_settings.cache_clear()
+
+
+def test_fresh_sqlite_migration_catalog_matches_python_protocol_catalog(monkeypatch) -> None:
+    from app.assessment_v2.db.migrations_runner import downgrade_assessment_database, upgrade_assessment_database
+    from app.core.config import get_settings
+
+    with TemporaryDirectory(prefix="lingualens-assessment-v2-catalog-parity-") as temp_dir:
+        database_path = Path(temp_dir) / "assessment-v2-catalog.db"
+        monkeypatch.setenv("LINGUALENS_ASSESSMENT_DATABASE_URL", f"sqlite:///{database_path}")
+        get_settings.cache_clear()
+        try:
+            upgrade_assessment_database()
+            with sqlite3.connect(database_path) as connection:
+                version_rows = connection.execute(
+                    "select protocol_version_key, primary_language, minimum_age_months, "
+                    "maximum_age_months, supported_purposes from protocol_versions"
+                ).fetchall()
+                activity_rows = connection.execute(
+                    "select protocol_version_key, activity_key, required, "
+                    "target_duration_seconds, minimum_duration_seconds, sort_order "
+                    "from protocol_activities order by protocol_version_key, sort_order"
+                ).fetchall()
+
+            expected_versions = [
+                (
+                    protocol.protocol_version_key,
+                    protocol.primary_language,
+                    protocol.minimum_age_months,
+                    protocol.maximum_age_months,
+                    ",".join(purpose.value for purpose in protocol.supported_purposes),
+                )
+                for protocol in sorted(PROTOCOL_CATALOG, key=lambda item: item.protocol_version_key)
+            ]
+            expected_activities = [
+                (
+                    protocol.protocol_version_key,
+                    activity.activity_key,
+                    int(activity.required),
+                    activity.target_duration_seconds,
+                    activity.minimum_duration_seconds,
+                    sort_order,
+                )
+                for protocol in sorted(PROTOCOL_CATALOG, key=lambda item: item.protocol_version_key)
+                for sort_order, activity in enumerate(protocol.activities, start=1)
+            ]
+
+            assert version_rows == expected_versions
+            assert activity_rows == expected_activities
         finally:
             downgrade_assessment_database()
             get_settings.cache_clear()
