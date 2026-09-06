@@ -13,13 +13,27 @@ EXPECTED_TABLES = {
     "consent_records",
     "assessments",
     "audit_events",
+    "protocol_versions",
+    "protocol_activities",
+    "assessment_protocol_selections",
+    "recordings",
+    "processing_runs",
+    "recording_quality_results",
+}
+
+GLOBAL_CATALOG_TABLES = {"organizations", "user_profiles", "protocol_versions", "protocol_activities"}
+CAPTURE_TENANT_TABLES = {
+    "assessment_protocol_selections",
+    "recordings",
+    "processing_runs",
+    "recording_quality_results",
 }
 
 
 def test_foundation_metadata_is_complete_and_tenant_scoped() -> None:
     assert set(AssessmentBase.metadata.tables) == EXPECTED_TABLES
 
-    for table_name in EXPECTED_TABLES - {"organizations", "user_profiles"}:
+    for table_name in EXPECTED_TABLES - GLOBAL_CATALOG_TABLES:
         assert "organization_id" in AssessmentBase.metadata.tables[table_name].columns
 
 
@@ -75,7 +89,15 @@ def test_child_linked_records_use_composite_tenant_foreign_keys() -> None:
 
 
 def test_mutable_records_use_utc_timestamps_and_version_checks() -> None:
-    for table_name in ("children", "consent_records", "assessments"):
+    for table_name in (
+        "children",
+        "consent_records",
+        "assessments",
+        "assessment_protocol_selections",
+        "recordings",
+        "processing_runs",
+        "recording_quality_results",
+    ):
         table = AssessmentBase.metadata.tables[table_name]
         assert isinstance(table.c.created_at.type, DateTime)
         assert table.c.created_at.type.timezone is True
@@ -104,3 +126,23 @@ def test_domain_value_checks_are_named_and_audit_metadata_is_payload_free() -> N
     assert "metadata_json" in audit.columns
     assert "payload" not in audit.columns
     assert audit.c.metadata_json.default is not None
+
+
+def test_capture_tenant_tables_have_version_checks_and_quality_status_contract() -> None:
+    for table_name in CAPTURE_TENANT_TABLES:
+        table = AssessmentBase.metadata.tables[table_name]
+        if table_name != "processing_runs":
+            assert any(
+                isinstance(constraint, CheckConstraint) and "version >= 1" in str(constraint.sqltext)
+                for constraint in table.constraints
+            )
+
+    quality = AssessmentBase.metadata.tables["recording_quality_results"]
+    assert quality.c.status.default.arg == "usable"
+    assert {
+        str(constraint.sqltext)
+        for constraint in quality.constraints
+        if isinstance(constraint, CheckConstraint)
+    } >= {
+        "status IN ('usable', 'needs_additional_sample', 'unavailable', 'failed')"
+    }

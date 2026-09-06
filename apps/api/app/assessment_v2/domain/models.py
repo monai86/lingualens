@@ -56,8 +56,8 @@ class ProcessingRunState(StrEnum):
 
 
 class RecordingQualityStatus(StrEnum):
-    PENDING = "pending"
-    AVAILABLE = "available"
+    USABLE = "usable"
+    NEEDS_ADDITIONAL_SAMPLE = "needs_additional_sample"
     UNAVAILABLE = "unavailable"
     FAILED = "failed"
 

@@ -4,10 +4,12 @@ from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
 
+import pytest
 from sqlalchemy import CheckConstraint, DateTime, ForeignKeyConstraint, UniqueConstraint
 
 from app.assessment_v2.db import models as _models  # noqa: F401  # register mapped tables
 from app.assessment_v2.db.base import AssessmentBase
+from app.assessment_v2.domain.models import RecordingQualityStatus
 
 
 CAPTURE_TABLES = {
@@ -168,6 +170,26 @@ def test_capture_metadata_has_uniqueness_tenant_foreign_keys_and_mutable_version
         )
 
 
+def test_recording_quality_status_contract_is_exact_and_defaults_to_usable() -> None:
+    quality = AssessmentBase.metadata.tables["recording_quality_results"]
+
+    assert tuple(status.value for status in RecordingQualityStatus) == (
+        "usable",
+        "needs_additional_sample",
+        "unavailable",
+        "failed",
+    )
+    assert quality.c.status.default.arg == "usable"
+    assert quality.c.status.server_default.arg.text == "'usable'"
+    assert {
+        str(constraint.sqltext)
+        for constraint in quality.constraints
+        if isinstance(constraint, CheckConstraint)
+    } >= {
+        "status IN ('usable', 'needs_additional_sample', 'unavailable', 'failed')"
+    }
+
+
 def test_capture_migration_seeds_catalog_and_reverses_to_0002(monkeypatch) -> None:
     from app.assessment_v2.db.migrations_runner import downgrade_assessment_database, upgrade_assessment_database
     from app.core.config import get_settings
@@ -203,10 +225,34 @@ def test_capture_migration_seeds_catalog_and_reverses_to_0002(monkeypatch) -> No
                     "select activity_key, required, target_duration_seconds, minimum_duration_seconds "
                     "from protocol_activities order by sort_order"
                 ).fetchall()
+                quality_columns = connection.execute(
+                    "pragma table_info(recording_quality_results)"
+                ).fetchall()
+                quality_ddl = connection.execute(
+                    "select sql from sqlite_master where type = 'table' and name = 'recording_quality_results'"
+                ).fetchone()[0]
                 revision = connection.execute("select version_num from alembic_version").fetchone()
 
             assert CAPTURE_TABLES.issubset(tables_at_head)
             assert revision == ("0003_capture_protocols_recordings",)
+
+            with sqlite3.connect(database_path) as connection:
+                for statement in (
+                    "update protocol_versions set primary_language = 'en' "
+                    "where protocol_version_key = 'thai_guided_language_sample:v0'",
+                    "delete from protocol_versions "
+                    "where protocol_version_key = 'thai_guided_language_sample:v0'",
+                    "update protocol_activities set required = 0 "
+                    "where protocol_version_key = 'thai_guided_language_sample:v0' "
+                    "and activity_key = 'free_play'",
+                    "delete from protocol_activities "
+                    "where protocol_version_key = 'thai_guided_language_sample:v0' "
+                    "and activity_key = 'free_play'",
+                ):
+                    with pytest.raises(sqlite3.IntegrityError):
+                        connection.execute(statement)
+                    connection.rollback()
+
             assert protocol_rows == [
                 (
                     "thai_guided_language_sample:v0",
@@ -221,6 +267,12 @@ def test_capture_migration_seeds_catalog_and_reverses_to_0002(monkeypatch) -> No
                 ("shared_book", 0, 120, 60),
                 ("turn_taking", 0, 120, 60),
             ]
+            quality_status_default = next(row[4] for row in quality_columns if row[1] == "status")
+            assert quality_status_default in {"'usable'", "usable"}
+            normalized_quality_ddl = " ".join(quality_ddl.split())
+            assert "status IN ('usable', 'needs_additional_sample', 'unavailable', 'failed')" in normalized_quality_ddl
+            assert "'pending'" not in normalized_quality_ddl
+            assert "'available'" not in normalized_quality_ddl
 
             # RLS policies are PostgreSQL-only and intentionally guarded by the migration dialect check.
             downgrade_assessment_database("0002_assessment_tenant_integrity")
@@ -231,8 +283,20 @@ def test_capture_migration_seeds_catalog_and_reverses_to_0002(monkeypatch) -> No
                         "select name from sqlite_master where type = 'table'"
                     )
                 }
+                trigger_names = {
+                    row[0]
+                    for row in connection.execute(
+                        "select name from sqlite_master where type = 'trigger'"
+                    )
+                }
             assert CAPTURE_TABLES.isdisjoint(tables_after_downgrade)
             assert "assessments" in tables_after_downgrade
+            assert not {
+                "protocol_versions_immutable_update",
+                "protocol_versions_immutable_delete",
+                "protocol_activities_immutable_update",
+                "protocol_activities_immutable_delete",
+            }.intersection(trigger_names)
         finally:
             downgrade_assessment_database()
             get_settings.cache_clear()

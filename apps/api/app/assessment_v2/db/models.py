@@ -527,7 +527,10 @@ class RecordingQualityResultRecord(AssessmentBase):
         index=True,
     )
     status: Mapped[str] = mapped_column(
-        String(32), default=RecordingQualityStatus.PENDING.value, nullable=False
+        String(32),
+        default=RecordingQualityStatus.USABLE.value,
+        server_default=text("'usable'"),
+        nullable=False,
     )
     measured_duration_seconds: Mapped[float | None] = mapped_column(Float)
     measured_loudness_db: Mapped[float | None] = mapped_column(Float)

@@ -28,6 +28,22 @@ _V2_TABLES = (
     "consent_records",
     "assessments",
     "audit_events",
+    "assessment_protocol_selections",
+    "recordings",
+    "processing_runs",
+    "recording_quality_results",
+)
+_TENANT_TABLES = (
+    "organization_memberships",
+    "children",
+    "care_team_assignments",
+    "consent_records",
+    "assessments",
+    "audit_events",
+    "assessment_protocol_selections",
+    "recordings",
+    "processing_runs",
+    "recording_quality_results",
 )
 
 
@@ -170,6 +186,53 @@ def rls_database() -> Iterator[tuple[str, str, str, str]]:
 
 def _limited_engine(limited_url: str):
     return create_engine(limited_url, pool_size=1, max_overflow=0)
+
+
+def test_all_tenant_tables_have_forced_rls(
+    rls_database: tuple[str, str, str, str],
+) -> None:
+    owner_url, _, _, _ = rls_database
+    engine = create_engine(owner_url)
+    table_literals = ", ".join(f"'{table_name}'" for table_name in _TENANT_TABLES)
+    try:
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    "SELECT relname, relrowsecurity, relforcerowsecurity "
+                    "FROM pg_class "
+                    "WHERE relkind = 'r' AND relname IN (" + table_literals + ")"
+                )
+            ).fetchall()
+        assert {
+            row[0]: (row[1], row[2])
+            for row in rows
+        } == {table_name: (True, True) for table_name in _TENANT_TABLES}
+    finally:
+        engine.dispose()
+
+
+def test_protocol_catalog_rejects_updates_and_deletes(
+    rls_database: tuple[str, str, str, str],
+) -> None:
+    owner_url, _, _, _ = rls_database
+    engine = create_engine(owner_url)
+    statements = (
+        "UPDATE protocol_versions SET primary_language = 'en' "
+        "WHERE protocol_version_key = 'thai_guided_language_sample:v0'",
+        "DELETE FROM protocol_versions "
+        "WHERE protocol_version_key = 'thai_guided_language_sample:v0'",
+        "UPDATE protocol_activities SET required = false "
+        "WHERE protocol_version_key = 'thai_guided_language_sample:v0' AND activity_key = 'free_play'",
+        "DELETE FROM protocol_activities "
+        "WHERE protocol_version_key = 'thai_guided_language_sample:v0' AND activity_key = 'free_play'",
+    )
+    try:
+        for statement in statements:
+            with engine.begin() as connection:
+                with pytest.raises(Exception):
+                    connection.execute(text(statement))
+    finally:
+        engine.dispose()
 
 
 def test_rls_filters_tenant_rows_and_rejects_cross_tenant_writes(

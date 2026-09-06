@@ -35,6 +35,69 @@ def _disable_tenant_rls(table_name: str, policy_name: str) -> None:
         op.execute(sa.text(f"DROP POLICY IF EXISTS {policy_name} ON {table_name}"))
 
 
+def _catalog_triggers() -> tuple[tuple[str, str, str], ...]:
+    return (
+        ("protocol_versions_immutable_update", "protocol_versions", "UPDATE"),
+        ("protocol_versions_immutable_delete", "protocol_versions", "DELETE"),
+        ("protocol_activities_immutable_update", "protocol_activities", "UPDATE"),
+        ("protocol_activities_immutable_delete", "protocol_activities", "DELETE"),
+    )
+
+
+def _install_catalog_immutability_guards() -> None:
+    dialect = op.get_bind().dialect.name
+    if dialect == "sqlite":
+        for trigger_name, table_name, event in _catalog_triggers():
+            op.execute(sa.text(f"DROP TRIGGER IF EXISTS {trigger_name}"))
+            op.execute(
+                sa.text(
+                    f"CREATE TRIGGER {trigger_name} BEFORE {event} ON {table_name} "
+                    "BEGIN SELECT RAISE(ABORT, 'assessment v2 protocol catalog is immutable'); END"
+                )
+            )
+        return
+
+    if dialect == "postgresql":
+        op.execute(
+            sa.text(
+                "CREATE OR REPLACE FUNCTION assessment_v2_reject_catalog_mutation() "
+                "RETURNS trigger LANGUAGE plpgsql AS $$ "
+                "BEGIN RAISE EXCEPTION 'assessment v2 protocol catalog is immutable'; "
+                "RETURN NULL; END; $$"
+            )
+        )
+        for trigger_name, table_name, event in (
+            ("protocol_versions_immutable_mutation", "protocol_versions", "UPDATE OR DELETE"),
+            ("protocol_activities_immutable_mutation", "protocol_activities", "UPDATE OR DELETE"),
+        ):
+            op.execute(sa.text(f"DROP TRIGGER IF EXISTS {trigger_name} ON {table_name}"))
+            op.execute(
+                sa.text(
+                    f"CREATE TRIGGER {trigger_name} BEFORE {event} ON {table_name} "
+                    "FOR EACH ROW EXECUTE FUNCTION assessment_v2_reject_catalog_mutation()"
+                )
+            )
+        return
+
+    raise RuntimeError(f"assessment v2 catalog immutability is unsupported for {dialect}")
+
+
+def _remove_catalog_immutability_guards() -> None:
+    dialect = op.get_bind().dialect.name
+    if dialect == "sqlite":
+        for trigger_name, _, _ in _catalog_triggers():
+            op.execute(sa.text(f"DROP TRIGGER IF EXISTS {trigger_name}"))
+        return
+
+    if dialect == "postgresql":
+        op.execute(sa.text("DROP TRIGGER IF EXISTS protocol_versions_immutable_mutation ON protocol_versions"))
+        op.execute(sa.text("DROP TRIGGER IF EXISTS protocol_activities_immutable_mutation ON protocol_activities"))
+        op.execute(sa.text("DROP FUNCTION IF EXISTS assessment_v2_reject_catalog_mutation()"))
+        return
+
+    raise RuntimeError(f"assessment v2 catalog immutability is unsupported for {dialect}")
+
+
 def upgrade() -> None:
     with op.batch_alter_table("assessments") as batch:
         batch.create_unique_constraint(
@@ -318,7 +381,7 @@ def upgrade() -> None:
         sa.Column("recording_quality_result_id", sa.String(length=64), nullable=False),
         sa.Column("organization_id", sa.String(length=64), nullable=False),
         sa.Column("recording_id", sa.String(length=64), nullable=False),
-        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column("status", sa.String(length=32), server_default=sa.text("'usable'"), nullable=False),
         sa.Column("measured_duration_seconds", sa.Float(), nullable=True),
         sa.Column("measured_loudness_db", sa.Float(), nullable=True),
         sa.Column("measured_silence_ratio", sa.Float(), nullable=True),
@@ -351,7 +414,7 @@ def upgrade() -> None:
             name="uq_recording_quality_results_organization_recording",
         ),
         sa.CheckConstraint(
-            "status IN ('pending', 'available', 'unavailable', 'failed')",
+            "status IN ('usable', 'needs_additional_sample', 'unavailable', 'failed')",
             name="ck_recording_quality_results_status",
         ),
         sa.CheckConstraint(
@@ -450,6 +513,7 @@ def upgrade() -> None:
             },
         ],
     )
+    _install_catalog_immutability_guards()
 
     for table_name, policy_name in (
         (
@@ -464,6 +528,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    _remove_catalog_immutability_guards()
+
     for table_name, policy_name in (
         ("recording_quality_results", "recording_quality_results_tenant_isolation"),
         ("processing_runs", "processing_runs_tenant_isolation"),

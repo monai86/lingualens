@@ -23,8 +23,16 @@ EXPECTED_TABLES = {
     "consent_records",
     "assessments",
     "audit_events",
+    "protocol_versions",
+    "protocol_activities",
+    "assessment_protocol_selections",
+    "recordings",
+    "processing_runs",
+    "recording_quality_results",
 }
-HEAD_REVISION = "0002_assessment_tenant_integrity"
+HEAD_REVISION = "0003_capture_protocols_recordings"
+PROTOCOL_VERSION_KEY = "thai_guided_language_sample:v0"
+EXPECTED_PURPOSES = "initial,developmental_follow_up,post_intervention_follow_up,additional_evidence"
 
 
 def _clear_settings_cache() -> None:
@@ -53,6 +61,11 @@ def _revision(database_path: Path) -> str:
     return str(row[0])
 
 
+def _query(database_path: Path, statement: str) -> list[tuple[object, ...]]:
+    with sqlite3.connect(database_path) as connection:
+        return connection.execute(statement).fetchall()
+
+
 def run_smoke(database_path: Path) -> None:
     from app.assessment_v2.db.migrations_runner import downgrade_assessment_database, upgrade_assessment_database
 
@@ -68,6 +81,32 @@ def run_smoke(database_path: Path) -> None:
             raise RuntimeError("assessment-v2 migration smoke reached an unexpected revision")
         if "organization_id" not in _columns(database_path, "assessments"):
             raise RuntimeError("assessment-v2 migration smoke missing tenant column")
+        protocol_rows = _query(
+            database_path,
+            "select protocol_version_key, primary_language, minimum_age_months, "
+            "maximum_age_months, supported_purposes from protocol_versions",
+        )
+        if protocol_rows != [
+            (
+                PROTOCOL_VERSION_KEY,
+                "th",
+                18,
+                72,
+                EXPECTED_PURPOSES,
+            )
+        ]:
+            raise RuntimeError("assessment-v2 migration smoke seeded an unexpected protocol catalog")
+        activity_rows = _query(
+            database_path,
+            "select activity_key, required, target_duration_seconds, minimum_duration_seconds "
+            "from protocol_activities order by sort_order",
+        )
+        if activity_rows != [
+            ("free_play", 1, 180, 120),
+            ("shared_book", 0, 120, 60),
+            ("turn_taking", 0, 120, 60),
+        ]:
+            raise RuntimeError("assessment-v2 migration smoke seeded unexpected protocol activities")
         downgrade_assessment_database()
         remaining = _tables(database_path) - {"alembic_version"}
         if remaining:
