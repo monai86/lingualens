@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from app.assessment_v2.db.base import AssessmentBase
 from app.assessment_v2.db.models import (
     AssessmentRecord,
+    OrganizationMembershipRecord,
     ProcessingRunRecord,
     ProtocolActivityRecord,
     ProtocolVersionRecord,
@@ -94,6 +95,16 @@ def _ready_capture_repository(session: Session):
         ),
         correlation_id="0123456789abcdef0123456789abcdef",
     )
+    session.add(
+        OrganizationMembershipRecord(
+            membership_id="membership_capture_01",
+            organization_id=scope.organization_id,
+            user_id=scope.user_id,
+            role=scope.role,
+            active=True,
+        )
+    )
+    session.flush()
     _seed_catalog(session)
     child = repo.create_child(
         scope,
@@ -208,6 +219,7 @@ def test_verified_required_recording_needs_a_persisted_usable_quality_result_bef
         for method in (
             "mark_recording_uploading_if_capture_active",
             "complete_recording_upload_if_capture_active",
+            "verify_recording_upload",
             "complete_capture_if_required_usable",
         )
     )
@@ -238,10 +250,9 @@ def test_verified_required_recording_needs_a_persisted_usable_quality_result_bef
         domain.CompleteRecordingUpload(
             recording_id=uploading.id,
             expected_version=uploading.version,
-            verified_content_type="audio/webm",
-            verified_size_bytes=456,
-            verified_checksum="sha256:0123456789abcdef0123456789abcdef",
-            verified_at=datetime.now(timezone.utc),
+            observed_content_type="audio/webm",
+            observed_size_bytes=456,
+            completed_at=datetime.now(timezone.utc),
         ),
         correlation_id="0123456789abcdef0123456789abcdef",
     )
@@ -256,8 +267,35 @@ def test_verified_required_recording_needs_a_persisted_usable_quality_result_bef
             correlation_id="0123456789abcdef0123456789abcdef",
         )
 
-    assert completed_upload.recording.upload_state.value == "verified"
-    assert no_quality.value.code == "required_activity_not_usable"
+    assert completed_upload.recording.upload_state.value == "uploaded"
+    assert completed_upload.recording.verified_checksum is None
+    assert completed_upload.processing_run.stage.value == "upload_verification"
+    assert completed_upload.processing_run.state.value == "queued"
+    verified = repo.verify_recording_upload(
+        scope,
+        domain.VerifyRecordingUpload(
+            recording_id=uploading.id,
+            expected_version=completed_upload.recording.version,
+            verified_content_type="audio/webm",
+            verified_size_bytes=456,
+            server_computed_checksum="sha256:fedcba9876543210fedcba9876543210",
+            verified_at=datetime.now(timezone.utc),
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    assert no_quality.value.code == "capture_incomplete"
+
+    with pytest.raises(RepositoryError) as no_quality_after_verification:
+        repo.complete_capture_if_required_usable(
+            scope,
+            domain.CompleteCapture(
+                assessment_id=assessment.id,
+                expected_version=assessment.version,
+            ),
+            correlation_id="0123456789abcdef0123456789abcdef",
+        )
+
+    assert no_quality_after_verification.value.code == "required_activity_not_usable"
     session.add(
         RecordingQualityResultRecord(
             recording_quality_result_id="quality_opaque_01",
@@ -281,6 +319,8 @@ def test_verified_required_recording_needs_a_persisted_usable_quality_result_bef
         correlation_id="0123456789abcdef0123456789abcdef",
     )
 
+    assert verified.recording.upload_state.value == "verified"
+    assert verified.recording.verified_checksum == "sha256:fedcba9876543210fedcba9876543210"
     assert completed_capture.state is AssessmentState.PROCESSING
     assert completed_capture.version == assessment.version + 1
 

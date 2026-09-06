@@ -54,6 +54,7 @@ from app.assessment_v2.domain.models import (
     SelectProtocol,
     StartCapture,
     TransitionAssessment,
+    VerifyRecordingUpload,
 )
 from app.assessment_v2.domain.transitions import InvalidAssessmentTransition, transition_assessment
 from app.core.security import CurrentUser
@@ -139,24 +140,6 @@ class AssessmentRepository:
             else:
                 profile.display_label = principal.display_name
 
-            membership = self.session.scalar(
-                select(OrganizationMembershipRecord).where(
-                    OrganizationMembershipRecord.organization_id == principal.organization_id,
-                    OrganizationMembershipRecord.user_id == principal.user_id,
-                )
-            )
-            if membership is None:
-                self.session.add(
-                    OrganizationMembershipRecord(
-                        membership_id=uuid4().hex,
-                        organization_id=principal.organization_id,
-                        user_id=principal.user_id,
-                        role=principal.role,
-                        active=True,
-                    )
-                )
-            elif membership.active:
-                membership.role = principal.role
             self.session.flush()
 
     def create_child(self, scope: AccessScope, command: CreateChild, correlation_id: str) -> ChildSnapshot:
@@ -863,7 +846,113 @@ class AssessmentRepository:
                     recording=self._recording_snapshot(recording),
                     processing_run=self._processing_run_snapshot(quality_run),
                 )
+            if recording.upload_state == RecordingUploadState.UPLOADED.value:
+                upload_run = self.session.scalar(
+                    select(ProcessingRunRecord)
+                    .where(
+                        ProcessingRunRecord.organization_id == scope.organization_id,
+                        ProcessingRunRecord.recording_id == recording.recording_id,
+                        ProcessingRunRecord.stage == ProcessingRunStage.UPLOAD_VERIFICATION.value,
+                    )
+                    .with_for_update()
+                )
+                if upload_run is None:
+                    raise RepositoryError("upload_verification_failed")
+                return RecordingIntentSnapshot(
+                    recording=self._recording_snapshot(recording),
+                    processing_run=self._processing_run_snapshot(upload_run),
+                )
             if recording.upload_state != RecordingUploadState.UPLOADING.value:
+                raise RepositoryError("upload_verification_failed")
+            if (
+                command.observed_content_type != recording.declared_content_type
+                or command.observed_size_bytes != recording.declared_size_bytes
+            ):
+                raise RepositoryError("upload_verification_failed")
+            result = self.session.execute(
+                update(RecordingRecord)
+                .where(
+                    RecordingRecord.organization_id == scope.organization_id,
+                    RecordingRecord.recording_id == command.recording_id,
+                    RecordingRecord.version == command.expected_version,
+                )
+                .values(
+                    upload_state=RecordingUploadState.UPLOADED.value,
+                    version=recording.version + 1,
+                    updated_at=_utc_now(),
+                )
+            )
+            if result.rowcount != 1:
+                raise RepositoryError("upload_verification_failed")
+            updated = self.session.scalar(
+                select(RecordingRecord).where(
+                    RecordingRecord.organization_id == scope.organization_id,
+                    RecordingRecord.recording_id == command.recording_id,
+                )
+            )
+            if updated is None:
+                raise RepositoryError("recording_not_found")
+            upload_run = self.session.scalar(
+                select(ProcessingRunRecord)
+                .where(
+                    ProcessingRunRecord.organization_id == scope.organization_id,
+                    ProcessingRunRecord.recording_id == updated.recording_id,
+                    ProcessingRunRecord.stage == ProcessingRunStage.UPLOAD_VERIFICATION.value,
+                )
+                .with_for_update()
+            )
+            if upload_run is None:
+                raise RepositoryError("upload_verification_failed")
+            if upload_run.state not in {
+                ProcessingRunState.QUEUED.value,
+                ProcessingRunState.RUNNING.value,
+            }:
+                raise RepositoryError("upload_verification_failed")
+            self._append_audit(
+                scope,
+                "recording.upload_completed",
+                "recording",
+                updated.recording_id,
+                correlation_id,
+                ["upload_state", "version"],
+                target_version=updated.version,
+            )
+            self.session.flush()
+            return RecordingIntentSnapshot(
+                recording=self._recording_snapshot(updated),
+                processing_run=self._processing_run_snapshot(upload_run),
+            )
+
+    def verify_recording_upload(
+        self,
+        scope: AccessScope,
+        command: VerifyRecordingUpload,
+        correlation_id: str,
+    ) -> RecordingIntentSnapshot:
+        """Persist verification only when a worker supplies an authoritative checksum."""
+
+        if not command.server_computed_checksum:
+            raise RepositoryError("upload_verification_failed")
+        with self.session.begin_nested():
+            context = self._recording_with_assessment(scope, command.recording_id, lock=True)
+            if context is None:
+                raise RepositoryError("recording_not_found")
+            recording, assessment = context
+            self._require_current_capture_consent(scope, assessment.child_id)
+            if recording.upload_state == RecordingUploadState.VERIFIED.value:
+                quality_run = self._quality_run_for_recording(scope, recording.recording_id)
+                if quality_run is None:
+                    quality_run = self._queue_quality_run(scope, recording)
+                return RecordingIntentSnapshot(
+                    recording=self._recording_snapshot(recording),
+                    processing_run=self._processing_run_snapshot(quality_run),
+                )
+            if recording.upload_state != RecordingUploadState.UPLOADED.value:
+                raise RepositoryError("upload_verification_failed")
+            if (
+                command.verified_content_type != recording.declared_content_type
+                or command.verified_size_bytes != recording.declared_size_bytes
+            ):
                 raise RepositoryError("upload_verification_failed")
             result = self.session.execute(
                 update(RecordingRecord)
@@ -876,7 +965,7 @@ class AssessmentRepository:
                     upload_state=RecordingUploadState.VERIFIED.value,
                     verified_content_type=command.verified_content_type,
                     verified_size_bytes=command.verified_size_bytes,
-                    verified_checksum=command.verified_checksum,
+                    verified_checksum=command.server_computed_checksum,
                     verified_at=command.verified_at,
                     version=recording.version + 1,
                     updated_at=_utc_now(),

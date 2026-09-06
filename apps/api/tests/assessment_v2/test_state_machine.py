@@ -91,14 +91,14 @@ def test_rejects_backward_state() -> None:
         (AssessmentState.READY_FOR_CLINICIAN, AssessmentState.FINALIZED),
     ],
 )
-def test_rejects_transitions_outside_the_capture_v2_slice(
+def test_preserves_legacy_review_workflow_transitions(
     source: AssessmentState,
     target: AssessmentState,
 ) -> None:
-    with pytest.raises(InvalidAssessmentTransition) as error:
-        transition_assessment(assessment(source), target, 1)
+    updated = transition_assessment(assessment(source), target, 1)
 
-    assert error.value.code == "invalid_assessment_transition"
+    assert updated.state is target
+    assert updated.version == 2
 
 
 def test_rejects_stale_version() -> None:

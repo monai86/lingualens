@@ -266,9 +266,20 @@ class MarkRecordingUploading:
 class CompleteRecordingUpload:
     recording_id: str
     expected_version: int
+    observed_content_type: str
+    observed_size_bytes: int
+    completed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class VerifyRecordingUpload:
+    """Worker-owned authoritative verification, including a computed checksum."""
+
+    recording_id: str
+    expected_version: int
     verified_content_type: str
     verified_size_bytes: int
-    verified_checksum: str
+    server_computed_checksum: str
     verified_at: datetime
 
 

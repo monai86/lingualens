@@ -30,6 +30,7 @@ from app.assessment_v2.domain.models import (
     StartCapture,
     StartAssessment,
     TransitionAssessment,
+    VerifyRecordingUpload,
 )
 from app.assessment_v2.protocols import ProtocolUnavailableError, select_protocol
 from app.assessment_v2.storage import (
@@ -103,6 +104,10 @@ class AssessmentRepository(Protocol):
 
     def complete_recording_upload_if_capture_active(
         self, scope: AccessScope, command: CompleteRecordingUpload, correlation_id: str
+    ) -> RecordingIntentSnapshot: ...
+
+    def verify_recording_upload(
+        self, scope: AccessScope, command: VerifyRecordingUpload, correlation_id: str
     ) -> RecordingIntentSnapshot: ...
 
     def get_capture(self, scope: AccessScope, assessment_id: str) -> CaptureSnapshot | None: ...
@@ -373,16 +378,27 @@ class AssessmentService:
                     CompleteRecordingUpload(
                         recording_id=recording.id,
                         expected_version=recording.version,
-                        verified_content_type=(
+                        observed_content_type=(
                             recording.verified_content_type or recording.declared_content_type
                         ),
-                        verified_size_bytes=(
+                        observed_size_bytes=(
                             recording.verified_size_bytes or recording.declared_size_bytes
                         ),
-                        verified_checksum=(
-                            recording.verified_checksum or recording.declared_checksum
-                        ),
-                        verified_at=recording.verified_at or self.now(),
+                        completed_at=recording.verified_at or self.now(),
+                    ),
+                    correlation_id,
+                )
+            )
+        if recording.upload_state is RecordingUploadState.UPLOADED:
+            return self._repository_call(
+                lambda: self.repository.complete_recording_upload_if_capture_active(
+                    self.scope,
+                    CompleteRecordingUpload(
+                        recording_id=recording.id,
+                        expected_version=recording.version,
+                        observed_content_type=recording.declared_content_type,
+                        observed_size_bytes=recording.declared_size_bytes,
+                        completed_at=self.now(),
                     ),
                     correlation_id,
                 )
@@ -397,7 +413,9 @@ class AssessmentService:
             )
         )
         if (
-            metadata.content_type != recording.declared_content_type
+            metadata.content_type is None
+            or metadata.size_bytes is None
+            or metadata.content_type != recording.declared_content_type
             or metadata.size_bytes != recording.declared_size_bytes
         ):
             raise self._policy_error("upload_verification_failed")
@@ -407,10 +425,9 @@ class AssessmentService:
                 CompleteRecordingUpload(
                     recording_id=recording.id,
                     expected_version=recording.version,
-                    verified_content_type=recording.declared_content_type,
-                    verified_size_bytes=recording.declared_size_bytes,
-                    verified_checksum=recording.declared_checksum,
-                    verified_at=self.now(),
+                    observed_content_type=metadata.content_type,
+                    observed_size_bytes=metadata.size_bytes,
+                    completed_at=self.now(),
                 ),
                 correlation_id,
             )

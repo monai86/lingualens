@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
+from starlette.requests import Request
 
 from app.assessment_v2.db.base import AssessmentBase
 from app.assessment_v2.db.models import (
@@ -18,6 +19,7 @@ from app.assessment_v2.db.models import (
     OrganizationMembershipRecord,
 )
 from app.assessment_v2.db.repositories import AssessmentRepository, RepositoryError
+from app.assessment_v2.dependencies import get_assessment_service
 from app.assessment_v2.domain.models import (
     AccessScope,
     AssessmentPurpose,
@@ -30,6 +32,7 @@ from app.assessment_v2.domain.models import (
     TransitionAssessment,
 )
 from app.core.security import CurrentUser
+from app.assessment_v2.services import ClinicalPolicyError
 
 
 @pytest.fixture
@@ -60,6 +63,23 @@ def user(scope_value: AccessScope) -> CurrentUser:
 
 def synchronize(repo: AssessmentRepository, scope_value: AccessScope) -> None:
     repo.synchronize_principal(user(scope_value), correlation_id=f"sync-{scope_value.user_id}")
+    membership = repo.session.scalar(
+        select(OrganizationMembershipRecord).where(
+            OrganizationMembershipRecord.organization_id == scope_value.organization_id,
+            OrganizationMembershipRecord.user_id == scope_value.user_id,
+        )
+    )
+    if membership is None:
+        repo.session.add(
+            OrganizationMembershipRecord(
+                membership_id=uuid4().hex,
+                organization_id=scope_value.organization_id,
+                user_id=scope_value.user_id,
+                role=scope_value.role,
+                active=True,
+            )
+        )
+        repo.session.flush()
 
 
 def create_child(repo: AssessmentRepository, scope_value: AccessScope, code: str = "LL-0001"):
@@ -151,6 +171,42 @@ def test_synchronize_principal_does_not_reactivate_inactive_membership(session: 
 
     assert membership.active is False
     assert repo.list_children(therapist) == []
+
+
+def test_synchronize_principal_does_not_provision_unknown_membership(session: Session) -> None:
+    repo = AssessmentRepository(session)
+    unknown = scope("unknown_principal")
+
+    repo.synchronize_principal(user(unknown), correlation_id="sync-unknown")
+
+    assert session.scalar(
+        select(OrganizationMembershipRecord).where(
+            OrganizationMembershipRecord.organization_id == unknown.organization_id,
+            OrganizationMembershipRecord.user_id == unknown.user_id,
+        )
+    ) is None
+    assert repo.has_active_membership(unknown) is False
+
+
+def test_assessment_service_dependency_rejects_unknown_membership(session: Session) -> None:
+    repo = AssessmentRepository(session)
+    unknown = scope("unknown_dependency_principal")
+    repo.synchronize_principal(user(unknown), correlation_id="sync-unknown-dependency")
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v2/children",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "http",
+        }
+    )
+
+    with pytest.raises(ClinicalPolicyError) as error:
+        get_assessment_service(request, user(unknown), repo, object())
+
+    assert error.value.code == "inactive_membership"
 
 
 def test_tenant_and_care_team_isolation_and_admin_access(session: Session) -> None:

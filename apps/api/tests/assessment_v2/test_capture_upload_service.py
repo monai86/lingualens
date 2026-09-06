@@ -60,6 +60,7 @@ class _CaptureRepository:
             version=1,
         )
         self.completed = False
+        self.completion_command = None
 
     def get_recording_if_consented(self, scope, recording_id: str):
         return self.recording if recording_id == self.recording.id else None
@@ -79,13 +80,14 @@ class _CaptureRepository:
         assert command.recording_id == self.recording.id
         assert command.expected_version == self.recording.version
         self.completed = True
+        self.completion_command = command
         self.recording = replace(
             self.recording,
-            upload_state=RecordingUploadState.VERIFIED,
-            verified_content_type=command.verified_content_type,
-            verified_size_bytes=command.verified_size_bytes,
-            verified_checksum=command.verified_checksum,
-            verified_at=command.verified_at,
+            upload_state=RecordingUploadState.UPLOADED,
+            verified_content_type=None,
+            verified_size_bytes=None,
+            verified_checksum=None,
+            verified_at=None,
             version=self.recording.version + 1,
         )
         domain = import_module("app.assessment_v2.domain.models")
@@ -95,7 +97,7 @@ class _CaptureRepository:
                 id="run_opaque_01",
                 organization_id="org_alpha",
                 recording_id=self.recording.id,
-                stage=ProcessingRunStage.QUALITY_ANALYSIS,
+                stage=ProcessingRunStage.UPLOAD_VERIFICATION,
                 state=ProcessingRunState.QUEUED,
                 attempt_count=0,
                 available_at=datetime(2026, 9, 6, tzinfo=UTC),
@@ -162,7 +164,7 @@ def _service(repository: _CaptureRepository, storage: _Storage) -> AssessmentSer
     return service
 
 
-def test_upload_intent_and_completion_use_declared_metadata_then_queue_quality_work() -> None:
+def test_upload_completion_checks_declared_metadata_without_claiming_checksum_verification() -> None:
     assert all(
         hasattr(AssessmentService, method)
         for method in ("create_upload_intent", "complete_upload")
@@ -178,8 +180,10 @@ def test_upload_intent_and_completion_use_declared_metadata_then_queue_quality_w
 
     assert uploading.upload_state is RecordingUploadState.UPLOADING
     assert grant.object_key == "capture/0123456789abcdef0123456789abcdef"
-    assert completed.recording.upload_state is RecordingUploadState.VERIFIED
-    assert completed.processing_run.stage is ProcessingRunStage.QUALITY_ANALYSIS
+    assert completed.recording.upload_state is RecordingUploadState.UPLOADED
+    assert completed.recording.verified_checksum is None
+    assert getattr(repository.completion_command, "verified_checksum", None) is None
+    assert completed.processing_run.stage is ProcessingRunStage.UPLOAD_VERIFICATION
     assert completed.processing_run.state is ProcessingRunState.QUEUED
     assert storage.metadata_requests == [
         ("capture/0123456789abcdef0123456789abcdef", "audio/webm", 456)
