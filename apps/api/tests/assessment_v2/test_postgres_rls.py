@@ -45,6 +45,12 @@ _TENANT_TABLES = (
     "processing_runs",
     "recording_quality_results",
 )
+_CAPTURE_TENANT_TABLES = (
+    "assessment_protocol_selections",
+    "recordings",
+    "processing_runs",
+    "recording_quality_results",
+)
 
 
 def _test_url() -> str:
@@ -207,6 +213,37 @@ def test_all_tenant_tables_have_forced_rls(
             row[0]: (row[1], row[2])
             for row in rows
         } == {table_name: (True, True) for table_name in _TENANT_TABLES}
+    finally:
+        engine.dispose()
+
+
+def test_capture_tenant_policies_are_organization_scoped(
+    rls_database: tuple[str, str, str, str],
+) -> None:
+    """Verify capture policies fail closed and scope both reads and writes."""
+
+    owner_url, _, _, _ = rls_database
+    engine = create_engine(owner_url)
+    table_literals = ", ".join(f"'{table_name}'" for table_name in _CAPTURE_TENANT_TABLES)
+    try:
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    "SELECT tablename, qual, with_check FROM pg_policies "
+                    "WHERE schemaname = 'public' AND tablename IN (" + table_literals + ")"
+                )
+            ).mappings().all()
+
+        for table_name in _CAPTURE_TENANT_TABLES:
+            table_policies = [row for row in rows if row["tablename"] == table_name]
+            assert table_policies
+            assert any(
+                "organization_id" in (row["qual"] or "")
+                and "current_setting" in (row["qual"] or "")
+                and "organization_id" in (row["with_check"] or "")
+                and "current_setting" in (row["with_check"] or "")
+                for row in table_policies
+            )
     finally:
         engine.dispose()
 

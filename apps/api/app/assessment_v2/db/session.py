@@ -6,17 +6,33 @@ from contextlib import contextmanager
 from functools import lru_cache
 from typing import Iterator
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 from app.core.security import CurrentUser
 
 
+def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+    finally:
+        cursor.close()
+
+
+def _create_assessment_engine(url: str) -> Engine:
+    engine = create_engine(url, future=True)
+    if engine.dialect.name == "sqlite":
+        event.listen(engine, "connect", _enable_sqlite_foreign_keys)
+    return engine
+
+
 @lru_cache(maxsize=4)
 def get_assessment_engine(database_url: str | None = None):
     url = database_url or get_settings().assessment_database_url
-    return create_engine(url, future=True)
+    return _create_assessment_engine(url)
 
 
 @lru_cache(maxsize=4)

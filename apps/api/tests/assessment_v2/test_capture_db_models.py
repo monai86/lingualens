@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+from importlib import import_module
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
@@ -300,3 +302,18 @@ def test_capture_migration_seeds_catalog_and_reverses_to_0002(monkeypatch) -> No
         finally:
             downgrade_assessment_database()
             get_settings.cache_clear()
+
+
+def test_postgres_catalog_downgrade_contract_removes_immutability_guards() -> None:
+    """Keep the PostgreSQL trigger/function cleanup in the migration contract."""
+
+    migration = import_module(
+        "app.assessment_v2.db.migrations.versions.0003_capture_protocols_recordings"
+    )
+    cleanup_source = inspect.getsource(migration._remove_catalog_immutability_guards)
+    downgrade_source = inspect.getsource(migration.downgrade)
+
+    assert "DROP TRIGGER IF EXISTS protocol_versions_immutable_mutation ON protocol_versions" in cleanup_source
+    assert "DROP TRIGGER IF EXISTS protocol_activities_immutable_mutation ON protocol_activities" in cleanup_source
+    assert "DROP FUNCTION IF EXISTS assessment_v2_reject_catalog_mutation()" in cleanup_source
+    assert "_remove_catalog_immutability_guards()" in downgrade_source
