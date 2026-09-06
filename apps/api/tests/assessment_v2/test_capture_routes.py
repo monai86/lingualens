@@ -143,13 +143,13 @@ class _CaptureRouteService:
         assert recording_id == self.recording.id
         self.recording = replace(
             self.recording,
-            upload_state=RecordingUploadState.VERIFIED,
-            verified_at=datetime(2026, 9, 6, tzinfo=UTC),
+            upload_state=RecordingUploadState.UPLOADED,
+            verified_at=None,
             version=3,
         )
         self.run = replace(
             self.run,
-            stage=ProcessingRunStage.QUALITY_ANALYSIS,
+            stage=ProcessingRunStage.UPLOAD_VERIFICATION,
             state=ProcessingRunState.QUEUED,
         )
         return RecordingIntentSnapshot(recording=self.recording, processing_run=self.run)
@@ -277,7 +277,8 @@ def test_capture_upload_quality_download_delete_complete_and_run_routes_are_safe
     assert upload.status_code == 200
     assert upload.json()["upload"]["object_key"] == "capture/0123456789abcdef0123456789abcdef"
     assert completed_upload.status_code == 200
-    assert completed_upload.json()["processing_run"]["stage"] == "quality_analysis"
+    assert completed_upload.json()["recording"]["upload_state"] == "uploaded"
+    assert completed_upload.json()["processing_run"]["stage"] == "upload_verification"
     assert recording.status_code == 200
     assert "object_key" not in recording.text
     assert quality.status_code == 200
@@ -295,7 +296,7 @@ def test_capture_upload_quality_download_delete_complete_and_run_routes_are_safe
     assert processing_run.status_code == 200
     assert processing_run.json() == {
         "id": run_id,
-        "stage": "quality_analysis",
+        "stage": "upload_verification",
         "state": "queued",
         "attempt_count": 0,
         "error_code": None,
