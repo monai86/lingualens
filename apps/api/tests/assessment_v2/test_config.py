@@ -24,6 +24,21 @@ def _production_values() -> dict[str, object]:
     }
 
 
+def _supabase_private_production_values() -> dict[str, object]:
+    values = _production_values()
+    values.update(
+        {
+            "storage_mode": "supabase_private",
+            "assessment_database_url": "postgresql+psycopg://v2_writer:synthetic@v2.example/assessment_v2",
+            "supabase_storage_url": "https://project-ref.supabase.co",
+            "supabase_storage_service_role_key": "synthetic-service-role-key",
+            "supabase_storage_bucket": "capture-private",
+            "supabase_storage_tus_endpoint": "https://project-ref.supabase.co/storage/v1/upload/resumable",
+        }
+    )
+    return values
+
+
 def test_assessment_database_uses_dedicated_environment_variable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LINGUALENS_ASSESSMENT_DATABASE_URL", "postgresql+psycopg://v2.example/test")
 
@@ -49,6 +64,61 @@ def test_assessment_migration_startup_flag_uses_dedicated_environment_variable(
     settings = Settings.from_env()
 
     assert settings.run_assessment_migrations_on_startup is True
+
+
+def test_capture_supabase_storage_configuration_uses_server_environment_variables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LINGUALENS_SUPABASE_STORAGE_URL", "https://project-ref.supabase.co")
+    monkeypatch.setenv("LINGUALENS_SUPABASE_STORAGE_SERVICE_ROLE_KEY", "synthetic-service-role-key")
+    monkeypatch.setenv("LINGUALENS_SUPABASE_STORAGE_BUCKET", "capture-private")
+    monkeypatch.setenv(
+        "LINGUALENS_SUPABASE_STORAGE_TUS_ENDPOINT",
+        "https://project-ref.supabase.co/storage/v1/upload/resumable",
+    )
+    monkeypatch.setenv("LINGUALENS_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS", "7200")
+    monkeypatch.setenv("LINGUALENS_SUPABASE_STORAGE_SIGNED_DOWNLOAD_TTL_SECONDS", "900")
+    monkeypatch.setenv("LINGUALENS_SUPABASE_STORAGE_TUS_CHUNK_SIZE_BYTES", str(6 * 1024 * 1024))
+    monkeypatch.setenv("LINGUALENS_SUPABASE_STORAGE_MAX_UPLOAD_SIZE_BYTES", str(250 * 1024 * 1024))
+
+    settings = Settings.from_env()
+
+    assert settings.supabase_storage_url == "https://project-ref.supabase.co"
+    assert settings.supabase_storage_service_role_key == "synthetic-service-role-key"
+    assert settings.supabase_storage_bucket == "capture-private"
+    assert settings.supabase_storage_tus_endpoint.endswith("/storage/v1/upload/resumable")
+    assert settings.supabase_storage_signed_upload_ttl_seconds == 7200
+    assert settings.supabase_storage_signed_download_ttl_seconds == 900
+    assert settings.supabase_storage_tus_chunk_size_bytes == 6 * 1024 * 1024
+    assert settings.capture_max_upload_size_bytes == 250 * 1024 * 1024
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    (
+        ("supabase_storage_url", "http://project-ref.supabase.co"),
+        ("supabase_storage_service_role_key", ""),
+        ("supabase_storage_bucket", "capture/private"),
+        ("supabase_storage_tus_endpoint", "https://project-ref.supabase.co/not-tus"),
+    ),
+)
+def test_production_supabase_private_storage_rejects_missing_or_invalid_configuration(
+    field: str,
+    invalid_value: object,
+) -> None:
+    values = _supabase_private_production_values()
+    values[field] = invalid_value
+
+    with pytest.raises(ValueError, match="Supabase private storage"):
+        Settings(**values).validate_runtime_security()
+
+
+def test_production_supabase_private_storage_accepts_explicit_private_tus_configuration() -> None:
+    settings = Settings(**_supabase_private_production_values()).validate_runtime_security()
+
+    assert settings.storage_mode == "supabase_private"
+    assert settings.supabase_storage_tus_chunk_size_bytes == 6 * 1024 * 1024
+    assert settings.capture_max_upload_size_bytes == 250 * 1024 * 1024
 
 
 def test_production_rejects_default_assessment_database_url() -> None:
