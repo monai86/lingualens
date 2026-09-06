@@ -100,6 +100,10 @@ def test_capture_supabase_storage_configuration_uses_server_environment_variable
         ("supabase_storage_service_role_key", ""),
         ("supabase_storage_bucket", "capture/private"),
         ("supabase_storage_tus_endpoint", "https://project-ref.supabase.co/not-tus"),
+        ("supabase_storage_tus_endpoint", "https://other-project.supabase.co/storage/v1/upload/resumable"),
+        ("capture_max_upload_size_bytes", 0),
+        ("capture_max_upload_size_bytes", -1),
+        ("capture_max_upload_size_bytes", 250 * 1024 * 1024 + 1),
     ),
 )
 def test_production_supabase_private_storage_rejects_missing_or_invalid_configuration(
@@ -119,6 +123,15 @@ def test_production_supabase_private_storage_accepts_explicit_private_tus_config
     assert settings.storage_mode == "supabase_private"
     assert settings.supabase_storage_tus_chunk_size_bytes == 6 * 1024 * 1024
     assert settings.capture_max_upload_size_bytes == 250 * 1024 * 1024
+
+
+def test_production_supabase_private_storage_accepts_the_documented_direct_storage_tus_hostname() -> None:
+    values = _supabase_private_production_values()
+    values["supabase_storage_tus_endpoint"] = "https://project-ref.storage.supabase.co/storage/v1/upload/resumable"
+
+    settings = Settings(**values).validate_runtime_security()
+
+    assert settings.supabase_storage_tus_endpoint.startswith("https://project-ref.storage.supabase.co/")
 
 
 def test_production_rejects_default_assessment_database_url() -> None:

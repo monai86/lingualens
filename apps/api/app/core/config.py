@@ -19,7 +19,8 @@ MEBIBYTE = 1024 * 1024
 DEFAULT_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS = 7200
 DEFAULT_SUPABASE_STORAGE_SIGNED_DOWNLOAD_TTL_SECONDS = 900
 SUPABASE_TUS_CHUNK_SIZE_BYTES = 6 * MEBIBYTE
-DEFAULT_CAPTURE_MAX_UPLOAD_SIZE_BYTES = 250 * MEBIBYTE
+MAX_CAPTURE_UPLOAD_SIZE_BYTES = 250 * MEBIBYTE
+DEFAULT_CAPTURE_MAX_UPLOAD_SIZE_BYTES = MAX_CAPTURE_UPLOAD_SIZE_BYTES
 PRODUCTION_STORAGE_MODES = {"private", "supabase_private"}
 # Keep this list aligned with implemented queue adapters. Celery is not
 # installed or implemented in this repository, so it must not pass production
@@ -37,6 +38,8 @@ PRODUCTION_SECRET_STORE_PROVIDERS = {
 _POSTGRESQL_DEFAULT_PORT = 5432
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
 _SUPABASE_BUCKET_NAME_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,62}")
+_SUPABASE_PROJECT_HOST_SUFFIX = ".supabase.co"
+_SUPABASE_DIRECT_STORAGE_HOST_SUFFIX = ".storage.supabase.co"
 
 
 def getenv_compat(new_name: str, legacy_name: str, default: str = "") -> str:
@@ -92,6 +95,29 @@ def _is_valid_supabase_tus_endpoint(value: str) -> bool:
     if not _is_valid_https_url(value):
         return False
     return urlparse(value).path.rstrip("/") == "/storage/v1/upload/resumable"
+
+
+def _allowed_supabase_storage_hosts(storage_url: str) -> frozenset[str]:
+    configured_host = urlparse(storage_url).hostname
+    if not configured_host:
+        return frozenset()
+    configured_host = configured_host.rstrip(".").casefold()
+    allowed_hosts = {configured_host}
+    if configured_host.endswith(_SUPABASE_DIRECT_STORAGE_HOST_SUFFIX):
+        project_ref = configured_host[: -len(_SUPABASE_DIRECT_STORAGE_HOST_SUFFIX)]
+        if project_ref:
+            allowed_hosts.add(f"{project_ref}{_SUPABASE_PROJECT_HOST_SUFFIX}")
+    elif configured_host.endswith(_SUPABASE_PROJECT_HOST_SUFFIX):
+        project_ref = configured_host[: -len(_SUPABASE_PROJECT_HOST_SUFFIX)]
+        if project_ref:
+            allowed_hosts.add(f"{project_ref}{_SUPABASE_DIRECT_STORAGE_HOST_SUFFIX}")
+    return frozenset(allowed_hosts)
+
+
+def _is_valid_supabase_tus_endpoint_for_project(value: str, storage_url: str) -> bool:
+    return _is_valid_supabase_tus_endpoint(value) and (
+        urlparse(value).hostname or ""
+    ).rstrip(".").casefold() in _allowed_supabase_storage_hosts(storage_url)
 
 
 def _is_valid_supabase_service_role_key(value: str) -> bool:
@@ -177,11 +203,14 @@ class Settings(BaseModel):
             and _is_valid_https_url(self.supabase_storage_url)
             and _is_valid_supabase_service_role_key(self.supabase_storage_service_role_key)
             and _is_valid_supabase_bucket_name(self.supabase_storage_bucket)
-            and _is_valid_supabase_tus_endpoint(self.supabase_storage_tus_endpoint)
+            and _is_valid_supabase_tus_endpoint_for_project(
+                self.supabase_storage_tus_endpoint,
+                self.supabase_storage_url,
+            )
             and _is_positive_int(self.supabase_storage_signed_upload_ttl_seconds)
             and _is_positive_int(self.supabase_storage_signed_download_ttl_seconds)
             and self.supabase_storage_tus_chunk_size_bytes == SUPABASE_TUS_CHUNK_SIZE_BYTES
-            and _is_positive_int(self.capture_max_upload_size_bytes)
+            and 0 < self.capture_max_upload_size_bytes <= MAX_CAPTURE_UPLOAD_SIZE_BYTES
         )
 
     def validate_runtime_security(self) -> "Settings":

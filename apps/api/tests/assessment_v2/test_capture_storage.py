@@ -18,6 +18,9 @@ from app.core.config import Settings
 SERVICE_ROLE_KEY = "synthetic-service-role-key"
 OPAQUE_OBJECT_KEY = "tenant-opaque/assessment-opaque/capture-opaque"
 TUS_ENDPOINT = "https://project-ref.supabase.co/storage/v1/upload/resumable"
+DIRECT_STORAGE_TUS_ENDPOINT = "https://project-ref.storage.supabase.co/storage/v1/upload/resumable"
+UNRELATED_TUS_ENDPOINT = "https://other-project.supabase.co/storage/v1/upload/resumable"
+CAPTURE_HARD_MAX_BYTES = 250 * 1024 * 1024
 
 
 @dataclass
@@ -151,7 +154,10 @@ def test_create_signed_upload_grant_uses_private_tus_contract_without_service_ke
     assert grant.chunk_size_bytes == 6 * 1024 * 1024
     assert grant.expires_in_seconds == 7200
     assert grant.expires_at == datetime(2026, 9, 6, 12, 30, tzinfo=UTC)
-    assert bucket.create_signed_upload_url_calls == [(OPAQUE_OBJECT_KEY, {"upsert": "false"})]
+    assert bucket.create_signed_upload_url_calls[0][0] == OPAQUE_OBJECT_KEY
+    upload_options = bucket.create_signed_upload_url_calls[0][1]
+    assert upload_options.upsert == "false"
+    assert not isinstance(upload_options, dict)
     assert SERVICE_ROLE_KEY not in repr(grant)
     assert not hasattr(grant, "filename")
 
@@ -164,7 +170,7 @@ def test_create_signed_upload_grant_uses_private_tus_contract_without_service_ke
         (OPAQUE_OBJECT_KEY, "", 1),
         (OPAQUE_OBJECT_KEY, "not-a-media-type", 1),
         (OPAQUE_OBJECT_KEY, "audio/webm", 0),
-        (OPAQUE_OBJECT_KEY, "audio/webm", 250 * 1024 * 1024 + 1),
+        (OPAQUE_OBJECT_KEY, "audio/webm", CAPTURE_HARD_MAX_BYTES + 1),
     ),
 )
 def test_invalid_upload_input_is_rejected_before_client_construction(
@@ -188,6 +194,115 @@ def test_invalid_upload_input_is_rejected_before_client_construction(
         )
 
     assert factory_calls == []
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    (
+        "audio/wav",
+        "audio/x-wav",
+        "audio/wave",
+        "audio/mpeg",
+        "audio/mp3",
+        "audio/mp4",
+        "audio/m4a",
+        "audio/x-m4a",
+        "video/mp4",
+        "video/quicktime",
+        "audio/webm",
+        "audio/webm;codecs=opus",
+        "audio/ogg",
+        "audio/ogg;codecs=opus",
+        "audio/opus",
+    ),
+)
+def test_create_signed_upload_grant_accepts_only_explicit_capture_mime_families(content_type: str) -> None:
+    bucket = FakeBucket()
+
+    grant = _adapter(bucket).create_signed_upload_grant(
+        object_key=OPAQUE_OBJECT_KEY,
+        content_type=content_type,
+        declared_size_bytes=456,
+    )
+
+    assert grant.content_type == content_type
+
+
+@pytest.mark.parametrize("content_type", ("application/octet-stream", "audio/flac", "text/plain", "video/webm"))
+def test_create_signed_upload_grant_rejects_unapproved_capture_mime_before_provider_call(
+    content_type: str,
+) -> None:
+    bucket = FakeBucket()
+
+    with pytest.raises(StorageInputError):
+        _adapter(bucket).create_signed_upload_grant(
+            object_key=OPAQUE_OBJECT_KEY,
+            content_type=content_type,
+            declared_size_bytes=456,
+        )
+
+    assert bucket.create_signed_upload_url_calls == []
+
+
+def test_create_signed_upload_grant_rejects_unrelated_tus_project_before_provider_call() -> None:
+    bucket = FakeBucket()
+
+    with pytest.raises(StorageUnavailableError) as raised:
+        _adapter(bucket, supabase_storage_tus_endpoint=UNRELATED_TUS_ENDPOINT).create_signed_upload_grant(
+            object_key=OPAQUE_OBJECT_KEY,
+            content_type="audio/webm",
+            declared_size_bytes=456,
+        )
+
+    assert raised.value.code == "storage_unavailable"
+    assert bucket.create_signed_upload_url_calls == []
+
+
+def test_create_signed_upload_grant_accepts_supabase_direct_storage_tus_hostname() -> None:
+    bucket = FakeBucket()
+
+    grant = _adapter(bucket, supabase_storage_tus_endpoint=DIRECT_STORAGE_TUS_ENDPOINT).create_signed_upload_grant(
+        object_key=OPAQUE_OBJECT_KEY,
+        content_type="audio/webm",
+        declared_size_bytes=456,
+    )
+
+    assert grant.tus_endpoint == DIRECT_STORAGE_TUS_ENDPOINT
+
+
+def test_create_signed_upload_grant_rejects_a_provider_attribute_error_as_storage_unavailable() -> None:
+    bucket = FakeBucket()
+    bucket.raise_on["create_signed_upload_url"] = AttributeError(
+        f"SDK failed for {OPAQUE_OBJECT_KEY} with {SERVICE_ROLE_KEY}"
+    )
+
+    with pytest.raises(StorageUnavailableError) as raised:
+        _adapter(bucket).create_signed_upload_grant(
+            object_key=OPAQUE_OBJECT_KEY,
+            content_type="audio/webm",
+            declared_size_bytes=456,
+        )
+
+    assert raised.value.code == "storage_unavailable"
+    assert OPAQUE_OBJECT_KEY not in str(raised.value)
+    assert SERVICE_ROLE_KEY not in str(raised.value)
+    assert raised.value.__cause__ is None
+
+
+@pytest.mark.parametrize("configured_maximum", (0, -1, CAPTURE_HARD_MAX_BYTES + 1))
+def test_create_signed_upload_grant_rejects_an_invalid_configured_capture_ceiling(
+    configured_maximum: int,
+) -> None:
+    bucket = FakeBucket()
+
+    with pytest.raises(StorageUnavailableError):
+        _adapter(bucket, capture_max_upload_size_bytes=configured_maximum).create_signed_upload_grant(
+            object_key=OPAQUE_OBJECT_KEY,
+            content_type="audio/webm",
+            declared_size_bytes=456,
+        )
+
+    assert bucket.create_signed_upload_url_calls == []
 
 
 def test_create_signed_download_grant_uses_private_signed_url_not_public_url() -> None:
@@ -228,6 +343,29 @@ def test_get_object_metadata_normalizes_sdk_data_without_echoing_the_object_key(
     assert metadata.checksum == "sha256:0123456789abcdef"
     assert bucket.info_calls == [OPAQUE_OBJECT_KEY]
     assert OPAQUE_OBJECT_KEY not in repr(metadata)
+
+
+@pytest.mark.parametrize(
+    "provider_metadata",
+    (
+        {"size": "456"},
+        {"mimetype": "audio/webm"},
+        {"mimetype": "application/octet-stream", "size": "456"},
+        {"mimetype": "audio/webm", "size": "not-a-size"},
+        {"mimetype": "audio/webm", "size": -1},
+    ),
+)
+def test_get_object_metadata_fails_closed_without_valid_authoritative_type_and_size(
+    provider_metadata: dict[str, object],
+) -> None:
+    bucket = FakeBucket()
+    bucket.info_response = FakeSdkResponse(data={"metadata": provider_metadata})
+
+    with pytest.raises(StorageUnavailableError) as raised:
+        _adapter(bucket).get_object_metadata(OPAQUE_OBJECT_KEY)
+
+    assert raised.value.code == "storage_unavailable"
+    assert OPAQUE_OBJECT_KEY not in str(raised.value)
 
 
 def test_provider_failure_and_error_payload_fail_closed_without_provider_details() -> None:

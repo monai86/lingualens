@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.core.config import Settings, get_settings
+from app.core.config import MAX_CAPTURE_UPLOAD_SIZE_BYTES, Settings, get_settings
 
 
 STORAGE_UNAVAILABLE = "storage_unavailable"
@@ -22,6 +22,25 @@ _MISSING = object()
 _OBJECT_KEY_SEGMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}")
 _MEDIA_TYPE_RE = re.compile(
     r"[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;\s*[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+-]+)*"
+)
+CAPTURE_ALLOWED_MIME_TYPES = frozenset(
+    {
+        "audio/wav",
+        "audio/x-wav",
+        "audio/wave",
+        "audio/mpeg",
+        "audio/mp3",
+        "audio/mp4",
+        "audio/m4a",
+        "audio/x-m4a",
+        "video/mp4",
+        "video/quicktime",
+        "audio/webm",
+        "audio/webm;codecs=opus",
+        "audio/ogg",
+        "audio/ogg;codecs=opus",
+        "audio/opus",
+    }
 )
 _INTEGRITY_VALUE_RE = re.compile(r"[A-Za-z0-9._:-]{1,256}")
 _T = TypeVar("_T")
@@ -88,8 +107,15 @@ class StorageDeletionResult:
     status: str
 
 
+@dataclass(frozen=True)
+class _FallbackCreateSignedUploadUrlOptions:
+    """Shape-compatible fallback for test environments without storage3."""
+
+    upsert: str
+
+
 class SupabaseBucket(Protocol):
-    def create_signed_upload_url(self, path: str, options: Mapping[str, str]) -> object: ...
+    def create_signed_upload_url(self, path: str, options: object) -> object: ...
 
     def create_signed_url(self, path: str, expires_in: int) -> object: ...
 
@@ -114,7 +140,7 @@ def _utc_now() -> datetime:
 
 
 def _provider_exception_types() -> tuple[type[BaseException], ...]:
-    exception_types: list[type[BaseException]] = [httpx.HTTPError, OSError]
+    exception_types: list[type[BaseException]] = [AttributeError, httpx.HTTPError, OSError]
     try:
         from storage3.exceptions import StorageApiError, StorageException
     except ImportError:
@@ -138,6 +164,16 @@ def _create_default_client(url: str, service_role_key: str) -> SupabaseClient:
     except (ImportError, AttributeError):
         raise StorageUnavailableError() from None
     return cast(SupabaseClient, _call_provider(lambda: create_client(url, service_role_key)))
+
+
+def _create_signed_upload_options() -> object:
+    """Create the pinned storage3 options object without an import-time dependency."""
+
+    try:
+        from storage3.types import CreateSignedUploadUrlOptions
+    except ImportError:
+        return _FallbackCreateSignedUploadUrlOptions(upsert="false")
+    return CreateSignedUploadUrlOptions(upsert="false")
 
 
 def _read_value(value: object, field_name: str) -> object:
@@ -185,7 +221,8 @@ def _validate_object_key(object_key: str) -> str:
 def _normalize_content_type(value: object) -> str | None:
     if not isinstance(value, str) or value != value.strip() or _MEDIA_TYPE_RE.fullmatch(value) is None:
         return None
-    return value.lower()
+    normalized = value.lower()
+    return normalized if normalized in CAPTURE_ALLOWED_MIME_TYPES else None
 
 
 def _validate_content_type(content_type: str) -> str:
@@ -228,9 +265,10 @@ def _normalize_size(value: object) -> int | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, int):
-        return value if value >= 0 else None
+        return value if value > 0 else None
     if isinstance(value, str) and value.isdecimal():
-        return int(value)
+        normalized = int(value)
+        return normalized if normalized > 0 else None
     return None
 
 
@@ -300,12 +338,13 @@ class SupabasePrivateStorageAdapter:
         object_key = _validate_object_key(object_key)
         content_type = _validate_content_type(content_type)
         settings = self._configured_settings()
-        _validate_declared_size(declared_size_bytes, settings.capture_max_upload_size_bytes)
+        maximum_size_bytes = min(settings.capture_max_upload_size_bytes, MAX_CAPTURE_UPLOAD_SIZE_BYTES)
+        _validate_declared_size(declared_size_bytes, maximum_size_bytes)
 
         response = _call_provider(
             lambda: self._bucket(settings).create_signed_upload_url(
                 object_key,
-                options={"upsert": "false"},
+                options=_create_signed_upload_options(),
             )
         )
         token = _required_text(_unwrap_provider_response(response), "token")
@@ -358,17 +397,21 @@ class SupabasePrivateStorageAdapter:
             raise StorageUnavailableError()
         provider_metadata = _as_mapping(object_info.get("metadata"))
         sources = (object_info,) if provider_metadata is None else (object_info, provider_metadata)
+        content_type = _first_normalized(
+            sources,
+            ("content_type", "contentType", "mimetype", "mimeType"),
+            _normalize_content_type,
+        )
+        size_bytes = _first_normalized(
+            sources,
+            ("size_bytes", "sizeBytes", "size"),
+            _normalize_size,
+        )
+        if content_type is None or size_bytes is None:
+            raise StorageUnavailableError()
         return StorageObjectMetadata(
-            content_type=_first_normalized(
-                sources,
-                ("content_type", "contentType", "mimetype", "mimeType"),
-                _normalize_content_type,
-            ),
-            size_bytes=_first_normalized(
-                sources,
-                ("size_bytes", "sizeBytes", "size"),
-                _normalize_size,
-            ),
+            content_type=content_type,
+            size_bytes=size_bytes,
             etag=_first_normalized(
                 sources,
                 ("etag", "eTag", "ETag"),
