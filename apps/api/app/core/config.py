@@ -38,8 +38,9 @@ PRODUCTION_SECRET_STORE_PROVIDERS = {
 _POSTGRESQL_DEFAULT_PORT = 5432
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
 _SUPABASE_BUCKET_NAME_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,62}")
-_SUPABASE_PROJECT_HOST_SUFFIX = ".supabase.co"
-_SUPABASE_DIRECT_STORAGE_HOST_SUFFIX = ".storage.supabase.co"
+_SUPABASE_PROJECT_HOST_RE = re.compile(
+    r"(?P<project_ref>[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\.supabase\.co"
+)
 
 
 def getenv_compat(new_name: str, legacy_name: str, default: str = "") -> str:
@@ -97,27 +98,37 @@ def _is_valid_supabase_tus_endpoint(value: str) -> bool:
     return urlparse(value).path.rstrip("/") == "/storage/v1/upload/resumable"
 
 
+def _supabase_project_ref_from_host(host: str) -> str | None:
+    normalized_host = host.casefold()
+    match = _SUPABASE_PROJECT_HOST_RE.fullmatch(normalized_host)
+    return match.group("project_ref") if match else None
+
+
+def _is_valid_supabase_project_url(value: str) -> bool:
+    if not _is_valid_https_url(value):
+        return False
+    parsed = urlparse(value)
+    return parsed.path in {"", "/"} and _supabase_project_ref_from_host(parsed.hostname or "") is not None
+
+
 def _allowed_supabase_storage_hosts(storage_url: str) -> frozenset[str]:
-    configured_host = urlparse(storage_url).hostname
-    if not configured_host:
+    if not _is_valid_supabase_project_url(storage_url):
         return frozenset()
-    configured_host = configured_host.rstrip(".").casefold()
-    allowed_hosts = {configured_host}
-    if configured_host.endswith(_SUPABASE_DIRECT_STORAGE_HOST_SUFFIX):
-        project_ref = configured_host[: -len(_SUPABASE_DIRECT_STORAGE_HOST_SUFFIX)]
-        if project_ref:
-            allowed_hosts.add(f"{project_ref}{_SUPABASE_PROJECT_HOST_SUFFIX}")
-    elif configured_host.endswith(_SUPABASE_PROJECT_HOST_SUFFIX):
-        project_ref = configured_host[: -len(_SUPABASE_PROJECT_HOST_SUFFIX)]
-        if project_ref:
-            allowed_hosts.add(f"{project_ref}{_SUPABASE_DIRECT_STORAGE_HOST_SUFFIX}")
-    return frozenset(allowed_hosts)
+    project_ref = _supabase_project_ref_from_host(urlparse(storage_url).hostname or "")
+    if project_ref is None:
+        return frozenset()
+    return frozenset(
+        {
+            f"{project_ref}.supabase.co",
+            f"{project_ref}.storage.supabase.co",
+        }
+    )
 
 
 def _is_valid_supabase_tus_endpoint_for_project(value: str, storage_url: str) -> bool:
     return _is_valid_supabase_tus_endpoint(value) and (
         urlparse(value).hostname or ""
-    ).rstrip(".").casefold() in _allowed_supabase_storage_hosts(storage_url)
+    ).casefold() in _allowed_supabase_storage_hosts(storage_url)
 
 
 def _is_valid_supabase_service_role_key(value: str) -> bool:
@@ -200,14 +211,15 @@ class Settings(BaseModel):
     def has_valid_supabase_private_storage_configuration(self) -> bool:
         return (
             self.storage_mode == "supabase_private"
-            and _is_valid_https_url(self.supabase_storage_url)
+            and _is_valid_supabase_project_url(self.supabase_storage_url)
             and _is_valid_supabase_service_role_key(self.supabase_storage_service_role_key)
             and _is_valid_supabase_bucket_name(self.supabase_storage_bucket)
             and _is_valid_supabase_tus_endpoint_for_project(
                 self.supabase_storage_tus_endpoint,
                 self.supabase_storage_url,
             )
-            and _is_positive_int(self.supabase_storage_signed_upload_ttl_seconds)
+            and self.supabase_storage_signed_upload_ttl_seconds
+            == DEFAULT_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS
             and _is_positive_int(self.supabase_storage_signed_download_ttl_seconds)
             and self.supabase_storage_tus_chunk_size_bytes == SUPABASE_TUS_CHUNK_SIZE_BYTES
             and 0 < self.capture_max_upload_size_bytes <= MAX_CAPTURE_UPLOAD_SIZE_BYTES

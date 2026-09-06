@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import json
 
 import httpx
 import pytest
@@ -20,6 +21,14 @@ OPAQUE_OBJECT_KEY = "tenant-opaque/assessment-opaque/capture-opaque"
 TUS_ENDPOINT = "https://project-ref.supabase.co/storage/v1/upload/resumable"
 DIRECT_STORAGE_TUS_ENDPOINT = "https://project-ref.storage.supabase.co/storage/v1/upload/resumable"
 UNRELATED_TUS_ENDPOINT = "https://other-project.supabase.co/storage/v1/upload/resumable"
+DIRECT_SIGNED_DOWNLOAD_URL = (
+    "https://project-ref.storage.supabase.co/storage/v1/object/sign/"
+    "capture-private/tenant-opaque/assessment-opaque/capture-opaque?token=synthetic-download-token"
+)
+UNRELATED_SIGNED_DOWNLOAD_URL = (
+    "https://other-project.supabase.co/storage/v1/object/sign/"
+    "capture-private/tenant-opaque/assessment-opaque/capture-opaque?token=synthetic-download-token"
+)
 CAPTURE_HARD_MAX_BYTES = 250 * 1024 * 1024
 
 
@@ -27,6 +36,20 @@ CAPTURE_HARD_MAX_BYTES = 250 * 1024 * 1024
 class FakeSdkResponse:
     data: object
     error: object | None = None
+
+
+class FailingModelDump:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def model_dump(self) -> object:
+        raise self.error
+
+
+class FailingMapping(dict[str, object]):
+    def get(self, key: str, default: object = None) -> object:
+        del key, default
+        raise KeyError("synthetic provider response shape")
 
 
 class FakeBucket:
@@ -258,6 +281,32 @@ def test_create_signed_upload_grant_rejects_unrelated_tus_project_before_provide
     assert bucket.create_signed_upload_url_calls == []
 
 
+def test_create_signed_upload_grant_rejects_unapproved_storage_url_before_client_construction() -> None:
+    factory_calls: list[tuple[str, str]] = []
+
+    def factory(url: str, service_role_key: str) -> object:
+        factory_calls.append((url, service_role_key))
+        return FakeSupabaseClient(FakeBucket())
+
+    adapter = SupabasePrivateStorageAdapter(
+        settings=_settings(
+            supabase_storage_url="https://attacker.example",
+            supabase_storage_tus_endpoint="https://attacker.example/storage/v1/upload/resumable",
+        ),
+        client_factory=factory,
+    )
+
+    with pytest.raises(StorageUnavailableError) as raised:
+        adapter.create_signed_upload_grant(
+            object_key=OPAQUE_OBJECT_KEY,
+            content_type="audio/webm",
+            declared_size_bytes=456,
+        )
+
+    assert raised.value.code == "storage_unavailable"
+    assert factory_calls == []
+
+
 def test_create_signed_upload_grant_accepts_supabase_direct_storage_tus_hostname() -> None:
     bucket = FakeBucket()
 
@@ -318,6 +367,26 @@ def test_create_signed_download_grant_uses_private_signed_url_not_public_url() -
     assert bucket.public_url_calls == 0
 
 
+def test_create_signed_download_grant_accepts_the_direct_storage_host() -> None:
+    bucket = FakeBucket()
+    bucket.signed_download_response = FakeSdkResponse(data={"signedURL": DIRECT_SIGNED_DOWNLOAD_URL})
+
+    grant = _adapter(bucket).create_signed_download_grant(OPAQUE_OBJECT_KEY)
+
+    assert grant.url == DIRECT_SIGNED_DOWNLOAD_URL
+
+
+def test_create_signed_download_grant_rejects_an_unrelated_host() -> None:
+    bucket = FakeBucket()
+    bucket.signed_download_response = FakeSdkResponse(data={"signedURL": UNRELATED_SIGNED_DOWNLOAD_URL})
+
+    with pytest.raises(StorageUnavailableError) as raised:
+        _adapter(bucket).create_signed_download_grant(OPAQUE_OBJECT_KEY)
+
+    assert raised.value.code == "storage_unavailable"
+    assert OPAQUE_OBJECT_KEY not in str(raised.value)
+
+
 def test_create_signed_download_grant_rejects_a_public_url_response() -> None:
     bucket = FakeBucket()
     bucket.signed_download_response = {
@@ -353,6 +422,7 @@ def test_get_object_metadata_normalizes_sdk_data_without_echoing_the_object_key(
         {"mimetype": "application/octet-stream", "size": "456"},
         {"mimetype": "audio/webm", "size": "not-a-size"},
         {"mimetype": "audio/webm", "size": -1},
+        {"mimetype": "audio/webm", "size": CAPTURE_HARD_MAX_BYTES + 1},
     ),
 )
 def test_get_object_metadata_fails_closed_without_valid_authoritative_type_and_size(
@@ -366,6 +436,72 @@ def test_get_object_metadata_fails_closed_without_valid_authoritative_type_and_s
 
     assert raised.value.code == "storage_unavailable"
     assert OPAQUE_OBJECT_KEY not in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "provider_error",
+    (
+        AttributeError("synthetic SDK attribute failure"),
+        KeyError("synthetic provider key"),
+        TypeError("synthetic provider type failure"),
+        ValueError("synthetic provider value failure"),
+        json.JSONDecodeError("synthetic provider JSON failure", "{}", 0),
+    ),
+)
+def test_provider_boundary_maps_sdk_and_parse_exceptions_to_bare_storage_unavailable(
+    provider_error: Exception,
+) -> None:
+    bucket = FakeBucket()
+    bucket.raise_on["info"] = provider_error
+
+    with pytest.raises(StorageUnavailableError) as raised:
+        _adapter(bucket).get_object_metadata(OPAQUE_OBJECT_KEY)
+
+    assert raised.value.code == "storage_unavailable"
+    assert str(raised.value) == "storage_unavailable"
+    assert raised.value.__cause__ is None
+
+
+@pytest.mark.parametrize(
+    "provider_response",
+    (
+        FailingModelDump(ValueError("synthetic model dump failure")),
+        FailingModelDump(TypeError("synthetic model dump type failure")),
+        FailingModelDump(json.JSONDecodeError("synthetic model dump JSON failure", "{}", 0)),
+        FakeSdkResponse(data=FailingMapping()),
+    ),
+)
+def test_malformed_sdk_metadata_shapes_fail_closed_without_provider_details(
+    provider_response: object,
+) -> None:
+    bucket = FakeBucket()
+    bucket.info_response = FakeSdkResponse(data=provider_response)
+
+    with pytest.raises(StorageUnavailableError) as raised:
+        _adapter(bucket).get_object_metadata(OPAQUE_OBJECT_KEY)
+
+    assert raised.value.code == "storage_unavailable"
+    assert str(raised.value) == "storage_unavailable"
+    assert raised.value.__cause__ is None
+
+
+@pytest.mark.parametrize("configured_ttl", (7199, 7201))
+def test_create_signed_upload_grant_rejects_a_non_provider_controlled_upload_ttl(
+    configured_ttl: int,
+) -> None:
+    bucket = FakeBucket()
+
+    with pytest.raises(StorageUnavailableError):
+        _adapter(
+            bucket,
+            supabase_storage_signed_upload_ttl_seconds=configured_ttl,
+        ).create_signed_upload_grant(
+            object_key=OPAQUE_OBJECT_KEY,
+            content_type="audio/webm",
+            declared_size_bytes=456,
+        )
+
+    assert bucket.create_signed_upload_url_calls == []
 
 
 def test_provider_failure_and_error_payload_fail_closed_without_provider_details() -> None:

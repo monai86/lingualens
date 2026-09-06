@@ -7,13 +7,20 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
+import json
 import re
 from typing import Protocol, TypeVar, cast
 from urllib.parse import urlparse
 
 import httpx
 
-from app.core.config import MAX_CAPTURE_UPLOAD_SIZE_BYTES, Settings, get_settings
+from app.core.config import (
+    DEFAULT_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS,
+    MAX_CAPTURE_UPLOAD_SIZE_BYTES,
+    Settings,
+    _allowed_supabase_storage_hosts,
+    get_settings,
+)
 
 
 STORAGE_UNAVAILABLE = "storage_unavailable"
@@ -140,7 +147,15 @@ def _utc_now() -> datetime:
 
 
 def _provider_exception_types() -> tuple[type[BaseException], ...]:
-    exception_types: list[type[BaseException]] = [AttributeError, httpx.HTTPError, OSError]
+    exception_types: list[type[BaseException]] = [
+        AttributeError,
+        KeyError,
+        TypeError,
+        json.JSONDecodeError,
+        ValueError,
+        httpx.HTTPError,
+        OSError,
+    ]
     try:
         from storage3.exceptions import StorageApiError, StorageException
     except ImportError:
@@ -255,10 +270,20 @@ def _is_private_signed_url(url: str) -> bool:
     return (
         parsed.scheme == "https"
         and bool(parsed.netloc)
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.fragment == ""
         and bool(parsed.query)
         and "/object/sign/" in parsed.path
         and "/object/public/" not in parsed.path
     )
+
+
+def _is_private_signed_url_for_project(url: str, storage_url: str) -> bool:
+    parsed = urlparse(url)
+    return _is_private_signed_url(url) and (parsed.hostname or "").casefold() in {
+        host.casefold() for host in _allowed_supabase_storage_hosts(storage_url)
+    }
 
 
 def _normalize_size(value: object) -> int | None:
@@ -292,6 +317,49 @@ def _first_normalized(
             if normalized is not None:
                 return normalized
     return None
+
+
+def _normalize_object_metadata(payload: object) -> StorageObjectMetadata:
+    object_info = _as_mapping(payload)
+    if not object_info:
+        raise StorageUnavailableError()
+    provider_metadata = _as_mapping(object_info.get("metadata"))
+    sources = (object_info,) if provider_metadata is None else (object_info, provider_metadata)
+    content_type = _first_normalized(
+        sources,
+        ("content_type", "contentType", "mimetype", "mimeType"),
+        _normalize_content_type,
+    )
+    size_bytes = _first_normalized(
+        sources,
+        ("size_bytes", "sizeBytes", "size"),
+        _normalize_size,
+    )
+    if content_type is None or size_bytes is None or size_bytes > MAX_CAPTURE_UPLOAD_SIZE_BYTES:
+        raise StorageUnavailableError()
+    return StorageObjectMetadata(
+        content_type=content_type,
+        size_bytes=size_bytes,
+        etag=_first_normalized(
+            sources,
+            ("etag", "eTag", "ETag"),
+            _normalize_integrity_value,
+        ),
+        checksum=_first_normalized(
+            sources,
+            ("checksum", "checksum_sha256", "sha256"),
+            _normalize_integrity_value,
+        ),
+    )
+
+
+def _confirm_deleted_object(response: object, object_key: str) -> None:
+    deleted_objects = response if isinstance(response, list) else [response]
+    if len(deleted_objects) != 1:
+        raise StorageUnavailableError()
+    deleted_object = _as_mapping(deleted_objects[0])
+    if deleted_object is None or deleted_object.get("name") != object_key:
+        raise StorageUnavailableError()
 
 
 class CaptureStorageAdapter(Protocol):
@@ -347,12 +415,14 @@ class SupabasePrivateStorageAdapter:
                 options=_create_signed_upload_options(),
             )
         )
-        token = _required_text(_unwrap_provider_response(response), "token")
+        token = _call_provider(lambda: _required_text(_unwrap_provider_response(response), "token"))
         upload_metadata = {
             "bucketName": settings.supabase_storage_bucket,
             "objectName": object_key,
             "contentType": content_type,
         }
+        # supabase-py 2.31.0 has no upload-expiry argument; 7200 seconds is
+        # the provider-controlled contract represented by this residual expiry.
         expires_at = self._expiry(settings.supabase_storage_signed_upload_ttl_seconds)
         return SignedUploadGrant(
             tus_endpoint=settings.supabase_storage_tus_endpoint,
@@ -379,8 +449,10 @@ class SupabasePrivateStorageAdapter:
                 settings.supabase_storage_signed_download_ttl_seconds,
             )
         )
-        url = _required_text(_unwrap_provider_response(response), "signedURL", "signedUrl", "signed_url")
-        if not _is_private_signed_url(url):
+        url = _call_provider(
+            lambda: _required_text(_unwrap_provider_response(response), "signedURL", "signedUrl", "signed_url")
+        )
+        if not _call_provider(lambda: _is_private_signed_url_for_project(url, settings.supabase_storage_url)):
             raise StorageUnavailableError()
         return SignedDownloadGrant(
             url=url,
@@ -391,54 +463,27 @@ class SupabasePrivateStorageAdapter:
     def get_object_metadata(self, object_key: str) -> StorageObjectMetadata:
         object_key = _validate_object_key(object_key)
         settings = self._configured_settings()
-        payload = _unwrap_provider_response(_call_provider(lambda: self._bucket(settings).info(object_key)))
-        object_info = _as_mapping(payload)
-        if not object_info:
-            raise StorageUnavailableError()
-        provider_metadata = _as_mapping(object_info.get("metadata"))
-        sources = (object_info,) if provider_metadata is None else (object_info, provider_metadata)
-        content_type = _first_normalized(
-            sources,
-            ("content_type", "contentType", "mimetype", "mimeType"),
-            _normalize_content_type,
+        payload = _call_provider(
+            lambda: _unwrap_provider_response(self._bucket(settings).info(object_key))
         )
-        size_bytes = _first_normalized(
-            sources,
-            ("size_bytes", "sizeBytes", "size"),
-            _normalize_size,
-        )
-        if content_type is None or size_bytes is None:
-            raise StorageUnavailableError()
-        return StorageObjectMetadata(
-            content_type=content_type,
-            size_bytes=size_bytes,
-            etag=_first_normalized(
-                sources,
-                ("etag", "eTag", "ETag"),
-                _normalize_integrity_value,
-            ),
-            checksum=_first_normalized(
-                sources,
-                ("checksum", "checksum_sha256", "sha256"),
-                _normalize_integrity_value,
-            ),
-        )
+        return _call_provider(lambda: _normalize_object_metadata(payload))
 
     def delete_object(self, object_key: str) -> StorageDeletionResult:
         object_key = _validate_object_key(object_key)
         settings = self._configured_settings()
-        response = _unwrap_provider_response(_call_provider(lambda: self._bucket(settings).remove([object_key])))
-        deleted_objects = response if isinstance(response, list) else [response]
-        if len(deleted_objects) != 1:
-            raise StorageUnavailableError()
-        deleted_object = _as_mapping(deleted_objects[0])
-        if deleted_object is None or deleted_object.get("name") != object_key:
-            raise StorageUnavailableError()
+        response = _call_provider(
+            lambda: _unwrap_provider_response(self._bucket(settings).remove([object_key]))
+        )
+        _call_provider(lambda: _confirm_deleted_object(response, object_key))
         return StorageDeletionResult(deleted=True, status="deleted")
 
     def _configured_settings(self) -> Settings:
         settings = self._settings or get_settings()
-        if not settings.has_valid_supabase_private_storage_configuration:
+        if (
+            not settings.has_valid_supabase_private_storage_configuration
+            or settings.supabase_storage_signed_upload_ttl_seconds
+            != DEFAULT_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS
+        ):
             raise StorageUnavailableError()
         return settings
 

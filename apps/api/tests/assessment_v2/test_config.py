@@ -97,6 +97,12 @@ def test_capture_supabase_storage_configuration_uses_server_environment_variable
     ("field", "invalid_value"),
     (
         ("supabase_storage_url", "http://project-ref.supabase.co"),
+        ("supabase_storage_url", "https://attacker.example"),
+        ("supabase_storage_url", "https://project-ref.storage.supabase.co"),
+        ("supabase_storage_url", "https://project-ref.supabase.co/storage"),
+        ("supabase_storage_url", "https://user:password@project-ref.supabase.co"),
+        ("supabase_storage_url", "https://project-ref.supabase.co?tenant=other"),
+        ("supabase_storage_url", "https://project-ref.supabase.co#fragment"),
         ("supabase_storage_service_role_key", ""),
         ("supabase_storage_bucket", "capture/private"),
         ("supabase_storage_tus_endpoint", "https://project-ref.supabase.co/not-tus"),
@@ -104,6 +110,8 @@ def test_capture_supabase_storage_configuration_uses_server_environment_variable
         ("capture_max_upload_size_bytes", 0),
         ("capture_max_upload_size_bytes", -1),
         ("capture_max_upload_size_bytes", 250 * 1024 * 1024 + 1),
+        ("supabase_storage_signed_upload_ttl_seconds", 7199),
+        ("supabase_storage_signed_upload_ttl_seconds", 7201),
     ),
 )
 def test_production_supabase_private_storage_rejects_missing_or_invalid_configuration(
