@@ -19,9 +19,9 @@ ALLOWED_TRANSITIONS: dict[AssessmentState, frozenset[AssessmentState]] = {
     AssessmentState.DRAFT: frozenset({AssessmentState.READY_FOR_CAPTURE, AssessmentState.CANCELLED}),
     AssessmentState.READY_FOR_CAPTURE: frozenset({AssessmentState.CAPTURING, AssessmentState.CANCELLED}),
     AssessmentState.CAPTURING: frozenset({AssessmentState.PROCESSING, AssessmentState.CANCELLED}),
-    AssessmentState.PROCESSING: frozenset({AssessmentState.REVIEW_REQUIRED, AssessmentState.CANCELLED}),
-    AssessmentState.REVIEW_REQUIRED: frozenset({AssessmentState.READY_FOR_CLINICIAN, AssessmentState.CANCELLED}),
-    AssessmentState.READY_FOR_CLINICIAN: frozenset({AssessmentState.FINALIZED, AssessmentState.CANCELLED}),
+    AssessmentState.PROCESSING: frozenset({AssessmentState.CANCELLED}),
+    AssessmentState.REVIEW_REQUIRED: frozenset({AssessmentState.CANCELLED}),
+    AssessmentState.READY_FOR_CLINICIAN: frozenset({AssessmentState.CANCELLED}),
     AssessmentState.FINALIZED: frozenset(),
     AssessmentState.CANCELLED: frozenset(),
 }

@@ -13,10 +13,19 @@ from app.assessment_v2.domain.models import (
     AssessmentState,
     ConsentPurpose,
     ConsentStatus,
+    ProcessingRunStage,
+    ProcessingRunState,
+    RecordingQualityStatus,
+    RecordingUploadState,
 )
+from app.core.config import MAX_CAPTURE_UPLOAD_SIZE_BYTES
 
 
 _LANGUAGE_CODE = re.compile(r"^[A-Za-z]{2}$")
+_CAPTURE_CONTENT_TYPE = re.compile(
+    r"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+-]+)*$"
+)
+_CHECKSUM = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
 
 
 def _normalize_language_context(value: Any) -> dict[str, object]:
@@ -125,3 +134,124 @@ class ErrorBody(_StrictModel):
 class ErrorEnvelope(_StrictModel):
     error: ErrorBody
 
+
+class ProtocolSelectionRequest(_StrictModel):
+    """An intentionally empty request: selection is derived server-side."""
+
+
+class RecordingCreateRequest(_StrictModel):
+    content_type: str = Field(strict=True, min_length=3, max_length=128)
+    size_bytes: int = Field(strict=True, ge=1, le=MAX_CAPTURE_UPLOAD_SIZE_BYTES)
+    checksum: str = Field(strict=True, min_length=8, max_length=128, pattern=_CHECKSUM.pattern)
+
+    @field_validator("content_type")
+    @classmethod
+    def normalize_content_type(cls, value: str) -> str:
+        normalized = value.lower()
+        if _CAPTURE_CONTENT_TYPE.fullmatch(normalized) is None:
+            raise ValueError("content_type must be a media type")
+        return normalized
+
+
+class ProtocolActivityResponse(_StrictModel):
+    activity_code: str = Field(min_length=1, max_length=64)
+    required: bool
+    target_duration_seconds: int = Field(strict=True, ge=1, le=3600)
+    minimum_duration_seconds: int = Field(strict=True, ge=1, le=3600)
+
+
+class ProtocolSelectionResponse(_StrictModel):
+    protocol_version_key: str = Field(min_length=1, max_length=128)
+    selected_at: datetime
+    version: int = Field(strict=True, ge=1)
+
+
+class RecordingResponse(_StrictModel):
+    id: str = Field(min_length=1, max_length=64)
+    activity_code: str = Field(min_length=1, max_length=64)
+    content_type: str = Field(min_length=3, max_length=128)
+    size_bytes: int = Field(strict=True, ge=1, le=MAX_CAPTURE_UPLOAD_SIZE_BYTES)
+    upload_state: RecordingUploadState
+    expires_at: datetime
+    verified_at: datetime | None
+    version: int = Field(strict=True, ge=1)
+
+
+class CaptureProgressResponse(_StrictModel):
+    required_activities_total: int = Field(strict=True, ge=0, le=32)
+    required_activities_verified: int = Field(strict=True, ge=0, le=32)
+    required_activities_usable: int = Field(strict=True, ge=0, le=32)
+
+
+class CaptureResponse(_StrictModel):
+    assessment_id: str = Field(min_length=1, max_length=64)
+    state: AssessmentState
+    protocol: ProtocolSelectionResponse | None
+    activities: list[ProtocolActivityResponse]
+    recordings: list[RecordingResponse]
+    progress: CaptureProgressResponse
+
+
+class CaptureStateResponse(_StrictModel):
+    assessment_id: str = Field(min_length=1, max_length=64)
+    state: AssessmentState
+    version: int = Field(strict=True, ge=1)
+
+
+class UploadGrantResponse(_StrictModel):
+    tus_endpoint: str = Field(min_length=1, max_length=2048)
+    headers: dict[str, str]
+    upload_metadata: dict[str, str]
+    bucket: str = Field(min_length=1, max_length=128)
+    object_key: str = Field(min_length=1, max_length=512)
+    expires_at: datetime
+    expires_in_seconds: int = Field(strict=True, ge=1, le=7200)
+    chunk_size_bytes: int = Field(strict=True, ge=1, le=MAX_CAPTURE_UPLOAD_SIZE_BYTES)
+    upload_length_bytes: int = Field(strict=True, ge=1, le=MAX_CAPTURE_UPLOAD_SIZE_BYTES)
+    content_type: str = Field(min_length=3, max_length=128)
+    upsert: bool
+
+
+class UploadIntentResponse(_StrictModel):
+    recording: RecordingResponse
+    upload: UploadGrantResponse
+
+
+class ProcessingRunResponse(_StrictModel):
+    id: str = Field(min_length=1, max_length=64)
+    stage: ProcessingRunStage
+    state: ProcessingRunState
+    attempt_count: int = Field(strict=True, ge=0, le=1000)
+    error_code: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class RecordingIntentResponse(_StrictModel):
+    recording: RecordingResponse
+    processing_run: ProcessingRunResponse
+
+
+class CompleteUploadResponse(_StrictModel):
+    recording: RecordingResponse
+    processing_run: ProcessingRunResponse
+
+
+class RecordingQualityResponse(_StrictModel):
+    status: RecordingQualityStatus
+    evaluated_at: datetime
+    version: int = Field(strict=True, ge=1)
+
+
+class DownloadGrantResponse(_StrictModel):
+    url: str = Field(min_length=1, max_length=2048)
+    expires_at: datetime
+    expires_in_seconds: int = Field(strict=True, ge=1, le=900)
+
+
+class DownloadIntentResponse(_StrictModel):
+    recording: RecordingResponse
+    download: DownloadGrantResponse
+
+
+class DeleteRecordingResponse(_StrictModel):
+    id: str = Field(min_length=1, max_length=64)
+    deleted: bool

@@ -11,13 +11,33 @@ from app.assessment_v2.domain.models import (
     AccessScope,
     AssessmentSnapshot,
     AssessmentState,
+    CaptureSnapshot,
     ChildSnapshot,
+    CompleteCapture,
+    CompleteRecordingUpload,
     ConsentPurpose,
+    CreateRecording,
     CreateAssessment,
     CreateChild,
+    MarkRecordingUploading,
     RecordConsent,
+    ProcessingRunSnapshot,
+    RecordingQualitySnapshot,
+    RecordingIntentSnapshot,
+    RecordingSnapshot,
+    RecordingUploadState,
+    SelectProtocol,
+    StartCapture,
     StartAssessment,
     TransitionAssessment,
+)
+from app.assessment_v2.protocols import ProtocolUnavailableError, select_protocol
+from app.assessment_v2.storage import (
+    CaptureStorageAdapter,
+    SignedDownloadGrant,
+    SignedUploadGrant,
+    StorageInputError,
+    StorageUnavailableError,
 )
 from app.core.security import CurrentUser
 
@@ -53,6 +73,52 @@ class AssessmentRepository(Protocol):
         self, scope: AccessScope, command: TransitionAssessment, correlation_id: str
     ) -> AssessmentSnapshot: ...
 
+    def select_protocol_and_ready(
+        self, scope: AccessScope, command: SelectProtocol, correlation_id: str
+    ) -> CaptureSnapshot: ...
+
+    def get_recording_if_consented(
+        self, scope: AccessScope, recording_id: str
+    ) -> RecordingSnapshot | None: ...
+
+    def get_recording_quality_if_consented(
+        self, scope: AccessScope, recording_id: str
+    ) -> RecordingQualitySnapshot | None: ...
+
+    def get_processing_run_if_consented(
+        self, scope: AccessScope, processing_run_id: str
+    ) -> ProcessingRunSnapshot | None: ...
+
+    def mark_recording_deleted_if_consented(
+        self,
+        scope: AccessScope,
+        recording_id: str,
+        expected_version: int,
+        correlation_id: str,
+    ) -> RecordingSnapshot | None: ...
+
+    def mark_recording_uploading_if_capture_active(
+        self, scope: AccessScope, command: MarkRecordingUploading, correlation_id: str
+    ) -> RecordingSnapshot: ...
+
+    def complete_recording_upload_if_capture_active(
+        self, scope: AccessScope, command: CompleteRecordingUpload, correlation_id: str
+    ) -> RecordingIntentSnapshot: ...
+
+    def get_capture(self, scope: AccessScope, assessment_id: str) -> CaptureSnapshot | None: ...
+
+    def start_capture_if_consented(
+        self, scope: AccessScope, command: StartCapture, correlation_id: str
+    ) -> AssessmentSnapshot: ...
+
+    def create_recording_if_capture_active(
+        self, scope: AccessScope, command: CreateRecording, correlation_id: str
+    ) -> RecordingIntentSnapshot: ...
+
+    def complete_capture_if_required_usable(
+        self, scope: AccessScope, command: CompleteCapture, correlation_id: str
+    ) -> AssessmentSnapshot: ...
+
 
 class ClinicalPolicyError(Exception):
     """A safe, user-facing policy failure from the clinical service boundary."""
@@ -85,15 +151,36 @@ _POLICY_MESSAGES: dict[str, tuple[int, str]] = {
     "workflow_stage_unavailable": (409, "This workflow stage is not yet available."),
     "stale_assessment_version": (409, "The assessment version is stale."),
     "invalid_assessment_transition": (409, "The assessment transition is not permitted."),
+    "protocol_unavailable": (422, "A capture protocol is not available for this assessment."),
+    "capture_not_ready": (409, "Capture is not ready to start."),
+    "capture_not_active": (409, "Capture is not active."),
+    "recording_activity_invalid": (422, "The recording activity is not available for this assessment."),
+    "recording_not_found": (404, "Recording was not found."),
+    "recording_not_verified": (409, "Recording upload has not been verified."),
+    "upload_intent_expired": (409, "The upload intent has expired."),
+    "upload_verification_failed": (409, "The upload could not be verified."),
+    "capture_incomplete": (409, "Required capture activities are incomplete."),
+    "required_activity_not_usable": (409, "A required recording is not usable."),
+    "idempotency_conflict": (409, "The idempotency key was already used for a different request."),
+    "consent_revoked": (409, "Active clinical-assessment consent is required."),
+    "processing_run_not_found": (404, "Processing run was not found."),
+    "storage_unavailable": (503, "Private storage is temporarily unavailable."),
 }
 
 _Result = TypeVar("_Result")
 
 
 class AssessmentService:
-    def __init__(self, repository: AssessmentRepository, user: CurrentUser) -> None:
+    def __init__(
+        self,
+        repository: AssessmentRepository,
+        user: CurrentUser,
+        *,
+        storage: CaptureStorageAdapter | None = None,
+    ) -> None:
         self.repository = repository
         self.user = user
+        self.storage = storage
         self.now: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
 
     def create_child(self, command: CreateChild, correlation_id: str) -> ChildSnapshot:
@@ -180,6 +267,233 @@ class AssessmentService:
             lambda: self.repository.transition_assessment(self.scope, command, correlation_id)
         )
 
+    def select_protocol(self, assessment_id: str, correlation_id: str) -> CaptureSnapshot:
+        """Derive the capture protocol from persisted assessment context only."""
+
+        self._require_clinical_role()
+        assessment = self.get_assessment(assessment_id)
+        primary_language = assessment.language_context.get("primary")
+        additional_languages = assessment.language_context.get("additional")
+        try:
+            protocol = select_protocol(
+                primary_language=primary_language if isinstance(primary_language, str) else "",
+                additional_languages=(
+                    additional_languages
+                    if isinstance(additional_languages, (tuple, list))
+                    else None
+                ),
+                age_months=assessment.age_months,
+                purpose=assessment.purpose,
+            )
+        except ProtocolUnavailableError as error:
+            raise self._policy_error("protocol_unavailable") from error
+        return self._repository_call(
+            lambda: self.repository.select_protocol_and_ready(
+                self.scope,
+                SelectProtocol(
+                    assessment_id=assessment.id,
+                    protocol_version_key=protocol.protocol_version_key,
+                    expected_version=assessment.version,
+                ),
+                correlation_id,
+            )
+        )
+
+    def get_capture(self, assessment_id: str) -> CaptureSnapshot:
+        self._require_clinical_role()
+        capture = self._repository_call(
+            lambda: self.repository.get_capture(self.scope, assessment_id)
+        )
+        if capture is None:
+            raise self._policy_error("assessment_not_found")
+        return capture
+
+    def start_capture(self, assessment_id: str, correlation_id: str) -> AssessmentSnapshot:
+        self._require_clinical_role()
+        return self._repository_call(
+            lambda: self.repository.start_capture_if_consented(
+                self.scope,
+                StartCapture(assessment_id=assessment_id),
+                correlation_id,
+            )
+        )
+
+    def create_recording(
+        self, command: CreateRecording, correlation_id: str
+    ) -> RecordingIntentSnapshot:
+        self._require_clinical_role()
+        return self._repository_call(
+            lambda: self.repository.create_recording_if_capture_active(
+                self.scope,
+                command,
+                correlation_id,
+            )
+        )
+
+    def create_upload_intent(
+        self, recording_id: str, correlation_id: str
+    ) -> tuple[RecordingSnapshot, SignedUploadGrant]:
+        self._require_clinical_role()
+        recording = self._recording_or_error(recording_id)
+        if recording.upload_state not in {
+            RecordingUploadState.PENDING,
+            RecordingUploadState.UPLOADING,
+        }:
+            raise self._policy_error("upload_verification_failed")
+        if self._recording_expired(recording):
+            raise self._policy_error("upload_intent_expired")
+        storage = self._storage_or_error()
+        grant = self._storage_call(
+            lambda: storage.create_signed_upload_grant(
+                recording.object_key,
+                recording.declared_content_type,
+                recording.declared_size_bytes,
+            )
+        )
+        updated = self._repository_call(
+            lambda: self.repository.mark_recording_uploading_if_capture_active(
+                self.scope,
+                MarkRecordingUploading(
+                    recording_id=recording.id,
+                    expected_version=recording.version,
+                    expires_at=grant.expires_at,
+                ),
+                correlation_id,
+            )
+        )
+        return updated, grant
+
+    def complete_upload(self, recording_id: str, correlation_id: str) -> RecordingIntentSnapshot:
+        self._require_clinical_role()
+        recording = self._recording_or_error(recording_id)
+        if recording.upload_state is RecordingUploadState.VERIFIED:
+            return self._repository_call(
+                lambda: self.repository.complete_recording_upload_if_capture_active(
+                    self.scope,
+                    CompleteRecordingUpload(
+                        recording_id=recording.id,
+                        expected_version=recording.version,
+                        verified_content_type=(
+                            recording.verified_content_type or recording.declared_content_type
+                        ),
+                        verified_size_bytes=(
+                            recording.verified_size_bytes or recording.declared_size_bytes
+                        ),
+                        verified_checksum=(
+                            recording.verified_checksum or recording.declared_checksum
+                        ),
+                        verified_at=recording.verified_at or self.now(),
+                    ),
+                    correlation_id,
+                )
+            )
+        if recording.upload_state is not RecordingUploadState.UPLOADING:
+            raise self._policy_error("upload_verification_failed")
+        metadata = self._storage_call(
+            lambda: self._storage_or_error().get_object_metadata(
+                recording.object_key,
+                expected_content_type=recording.declared_content_type,
+                expected_size_bytes=recording.declared_size_bytes,
+            )
+        )
+        if (
+            metadata.content_type != recording.declared_content_type
+            or metadata.size_bytes != recording.declared_size_bytes
+        ):
+            raise self._policy_error("upload_verification_failed")
+        return self._repository_call(
+            lambda: self.repository.complete_recording_upload_if_capture_active(
+                self.scope,
+                CompleteRecordingUpload(
+                    recording_id=recording.id,
+                    expected_version=recording.version,
+                    verified_content_type=recording.declared_content_type,
+                    verified_size_bytes=recording.declared_size_bytes,
+                    verified_checksum=recording.declared_checksum,
+                    verified_at=self.now(),
+                ),
+                correlation_id,
+            )
+        )
+
+    def get_recording(self, recording_id: str) -> RecordingSnapshot:
+        """Return safe recording metadata only after authoritative verification."""
+
+        self._require_clinical_role()
+        recording = self._recording_or_error(recording_id)
+        if recording.upload_state is not RecordingUploadState.VERIFIED:
+            raise self._policy_error("recording_not_verified")
+        return recording
+
+    def get_recording_quality(self, recording_id: str) -> RecordingQualitySnapshot:
+        self._require_clinical_role()
+        self.get_recording(recording_id)
+        quality = self._repository_call(
+            lambda: self.repository.get_recording_quality_if_consented(self.scope, recording_id)
+        )
+        if quality is None:
+            raise self._policy_error("required_activity_not_usable")
+        return quality
+
+    def download_intent(
+        self, recording_id: str
+    ) -> tuple[RecordingSnapshot, SignedDownloadGrant]:
+        self._require_clinical_role()
+        recording = self.get_recording(recording_id)
+        grant = self._storage_call(
+            lambda: self._storage_or_error().create_signed_download_grant(recording.object_key)
+        )
+        return recording, grant
+
+    def delete_recording(self, recording_id: str, correlation_id: str) -> bool:
+        """Delete a private object then safely tombstone its metadata.
+
+        A missing or already-deleted record is a successful idempotent deletion.
+        The repository intentionally does not distinguish inaccessible records here.
+        """
+
+        self._require_clinical_role()
+        recording = self._repository_call(
+            lambda: self.repository.get_recording_if_consented(self.scope, recording_id)
+        )
+        if recording is None or recording.upload_state is RecordingUploadState.FAILED:
+            return True
+        self._storage_call(lambda: self._storage_or_error().delete_object(recording.object_key))
+        self._repository_call(
+            lambda: self.repository.mark_recording_deleted_if_consented(
+                self.scope,
+                recording.id,
+                recording.version,
+                correlation_id,
+            )
+        )
+        return True
+
+    def complete_capture(self, assessment_id: str, correlation_id: str) -> AssessmentSnapshot:
+        self._require_clinical_role()
+        assessment = self.get_assessment(assessment_id)
+        return self._repository_call(
+            lambda: self.repository.complete_capture_if_required_usable(
+                self.scope,
+                CompleteCapture(
+                    assessment_id=assessment.id,
+                    expected_version=assessment.version,
+                ),
+                correlation_id,
+            )
+        )
+
+    def get_processing_run(self, processing_run_id: str) -> ProcessingRunSnapshot:
+        self._require_clinical_role()
+        processing_run = self._repository_call(
+            lambda: self.repository.get_processing_run_if_consented(
+                self.scope, processing_run_id
+            )
+        )
+        if processing_run is None:
+            raise self._policy_error("processing_run_not_found")
+        return processing_run
+
     @property
     def scope(self) -> AccessScope:
         return AccessScope(
@@ -206,6 +520,36 @@ class AssessmentService:
             return operation()
         except RepositoryError as error:
             raise self._policy_error(error.code) from error
+
+    def _recording_or_error(self, recording_id: str) -> RecordingSnapshot:
+        recording = self._repository_call(
+            lambda: self.repository.get_recording_if_consented(self.scope, recording_id)
+        )
+        if recording is None:
+            raise self._policy_error("recording_not_found")
+        return recording
+
+    def _recording_expired(self, recording: RecordingSnapshot) -> bool:
+        expires_at = recording.expires_at
+        now = self.now()
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=timezone.utc)
+        return expires_at <= now
+
+    def _storage_or_error(self) -> CaptureStorageAdapter:
+        if self.storage is None:
+            raise self._policy_error("storage_unavailable")
+        return self.storage
+
+    def _storage_call(self, operation: Callable[[], _Result]) -> _Result:
+        try:
+            return operation()
+        except (StorageInputError, StorageUnavailableError):
+            raise self._policy_error("storage_unavailable") from None
+        except Exception:
+            raise self._policy_error("storage_unavailable") from None
 
     @staticmethod
     def _policy_error(code: str) -> ClinicalPolicyError:

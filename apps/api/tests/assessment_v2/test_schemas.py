@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from importlib import import_module
 
 import pytest
 from pydantic import ValidationError
 
-from app.assessment_v2.domain.models import AssessmentPurpose, AssessmentState
+from app.assessment_v2.domain.models import (
+    AssessmentPurpose,
+    AssessmentState,
+    ProcessingRunStage,
+    ProcessingRunState,
+    RecordingQualityStatus,
+    RecordingUploadState,
+)
 from app.assessment_v2.schemas import (
     AssessmentCreateRequest,
     AssessmentResponse,
@@ -173,3 +181,132 @@ def test_responses_expose_safe_clinical_fields_without_child_name_or_exact_dob()
         version=1,
     )
     assert consent.status.value == "active"
+
+
+def test_capture_requests_are_strict_and_bound_upload_metadata() -> None:
+    capture_schemas = import_module("app.assessment_v2.schemas")
+    assert all(
+        hasattr(capture_schemas, name)
+        for name in ("ProtocolSelectionRequest", "RecordingCreateRequest")
+    )
+    RecordingCreateRequest = capture_schemas.RecordingCreateRequest
+    ProtocolSelectionRequest = capture_schemas.ProtocolSelectionRequest
+
+    request = RecordingCreateRequest(
+        content_type="audio/webm",
+        size_bytes=456,
+        checksum="sha256:0123456789abcdef0123456789abcdef",
+    )
+
+    assert request.content_type == "audio/webm"
+    assert request.size_bytes == 456
+
+    for unsafe_field in (
+        {"filename": "sample.webm"},
+        {"child_name": "Synthetic Child"},
+        {"organization_id": "org_alpha"},
+        {"state": "verified"},
+    ):
+        with pytest.raises(ValidationError):
+            RecordingCreateRequest(
+                content_type="audio/webm",
+                size_bytes=456,
+                checksum="sha256:0123456789abcdef0123456789abcdef",
+                **unsafe_field,
+            )
+
+    with pytest.raises(ValidationError):
+        RecordingCreateRequest(content_type="audio/webm", size_bytes=0, checksum="sha256:abc")
+    with pytest.raises(ValidationError):
+        RecordingCreateRequest(
+            content_type="audio/webm",
+            size_bytes=456,
+            checksum="checksum with whitespace",
+        )
+    with pytest.raises(ValidationError):
+        ProtocolSelectionRequest(unexpected="input")
+
+
+def test_capture_responses_expose_only_safe_recording_and_processing_fields() -> None:
+    capture_schemas = import_module("app.assessment_v2.schemas")
+    expected_names = (
+        "CaptureProgressResponse",
+        "CaptureResponse",
+        "ProcessingRunResponse",
+        "ProtocolActivityResponse",
+        "ProtocolSelectionResponse",
+        "RecordingQualityResponse",
+        "RecordingResponse",
+    )
+    assert all(hasattr(capture_schemas, name) for name in expected_names)
+    CaptureProgressResponse = capture_schemas.CaptureProgressResponse
+    CaptureResponse = capture_schemas.CaptureResponse
+    ProcessingRunResponse = capture_schemas.ProcessingRunResponse
+    ProtocolActivityResponse = capture_schemas.ProtocolActivityResponse
+    ProtocolSelectionResponse = capture_schemas.ProtocolSelectionResponse
+    RecordingQualityResponse = capture_schemas.RecordingQualityResponse
+    RecordingResponse = capture_schemas.RecordingResponse
+
+    recording_fields = set(RecordingResponse.model_fields)
+    capture_fields = set(CaptureResponse.model_fields)
+    processing_fields = set(ProcessingRunResponse.model_fields)
+    quality_fields = set(RecordingQualityResponse.model_fields)
+
+    assert {"id", "activity_code", "content_type", "size_bytes", "upload_state", "version"} <= recording_fields
+    assert {"assessment_id", "state", "protocol", "activities", "recordings", "progress"} <= capture_fields
+    assert processing_fields == {"id", "stage", "state", "attempt_count", "error_code"}
+    assert quality_fields == {"status", "evaluated_at", "version"}
+    assert {"object_key", "checksum", "filename", "child_name", "organization_id"}.isdisjoint(
+        recording_fields | capture_fields | processing_fields | quality_fields
+    )
+
+    response = CaptureResponse(
+        assessment_id="assessment_opaque_01",
+        state=AssessmentState.CAPTURING,
+        protocol=ProtocolSelectionResponse(
+            protocol_version_key="thai_guided_language_sample:v0",
+            selected_at=datetime(2026, 9, 6, tzinfo=timezone.utc),
+            version=1,
+        ),
+        activities=[
+            ProtocolActivityResponse(
+                activity_code="free_play",
+                required=True,
+                target_duration_seconds=180,
+                minimum_duration_seconds=120,
+            )
+        ],
+        recordings=[
+            RecordingResponse(
+                id="recording_opaque_01",
+                activity_code="free_play",
+                content_type="audio/webm",
+                size_bytes=456,
+                upload_state=RecordingUploadState.UPLOADING,
+                expires_at=datetime(2026, 9, 6, tzinfo=timezone.utc),
+                verified_at=None,
+                version=2,
+            )
+        ],
+        progress=CaptureProgressResponse(
+            required_activities_total=1,
+            required_activities_verified=0,
+            required_activities_usable=0,
+        ),
+    )
+    processing = ProcessingRunResponse(
+        id="run_opaque_01",
+        stage=ProcessingRunStage.QUALITY_ANALYSIS,
+        state=ProcessingRunState.QUEUED,
+        attempt_count=0,
+        error_code=None,
+    )
+    quality = RecordingQualityResponse(
+        status=RecordingQualityStatus.USABLE,
+        evaluated_at=datetime(2026, 9, 6, tzinfo=timezone.utc),
+        version=1,
+    )
+
+    assert response.recordings[0].activity_code == "free_play"
+    assert processing.stage is ProcessingRunStage.QUALITY_ANALYSIS
+    assert quality.status is RecordingQualityStatus.USABLE

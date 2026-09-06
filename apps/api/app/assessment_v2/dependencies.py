@@ -12,6 +12,7 @@ from app.assessment_v2.db.repositories import AssessmentRepository
 from app.assessment_v2.db.session import assessment_session_for
 from app.assessment_v2.domain.models import AccessScope
 from app.assessment_v2.services import AssessmentService, ClinicalPolicyError
+from app.assessment_v2.storage import CaptureStorageAdapter, SupabasePrivateStorageAdapter
 from app.core.config import Settings, get_settings
 from app.core.security import CurrentUser, get_current_user
 
@@ -41,10 +42,19 @@ def get_assessment_repository(
     return AssessmentRepository(session)
 
 
+def get_capture_storage(
+    settings: Settings = Depends(get_settings),
+) -> CaptureStorageAdapter:
+    """Construct the private adapter lazily; provider access happens per operation."""
+
+    return SupabasePrivateStorageAdapter(settings=settings)
+
+
 def get_assessment_service(
     request: Request,
     user: CurrentUser = Depends(get_current_user),
     repository: AssessmentRepository = Depends(get_assessment_repository),
+    storage: CaptureStorageAdapter = Depends(get_capture_storage),
 ) -> AssessmentService:
     """Synchronize identity, then authorize against persisted membership state."""
 
@@ -67,4 +77,4 @@ def get_assessment_service(
             403,
             "Active organization membership is required.",
         )
-    return AssessmentService(repository, user)
+    return AssessmentService(repository, user, storage=storage)

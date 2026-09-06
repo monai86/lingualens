@@ -26,9 +26,6 @@ def assessment(state: AssessmentState = AssessmentState.DRAFT, version: int = 1)
         (AssessmentState.DRAFT, AssessmentState.READY_FOR_CAPTURE),
         (AssessmentState.READY_FOR_CAPTURE, AssessmentState.CAPTURING),
         (AssessmentState.CAPTURING, AssessmentState.PROCESSING),
-        (AssessmentState.PROCESSING, AssessmentState.REVIEW_REQUIRED),
-        (AssessmentState.REVIEW_REQUIRED, AssessmentState.READY_FOR_CLINICIAN),
-        (AssessmentState.READY_FOR_CLINICIAN, AssessmentState.FINALIZED),
     ],
 )
 def test_allows_forward_workflow(source: AssessmentState, target: AssessmentState) -> None:
@@ -82,6 +79,24 @@ def test_rejects_skipped_state() -> None:
 def test_rejects_backward_state() -> None:
     with pytest.raises(InvalidAssessmentTransition) as error:
         transition_assessment(assessment(AssessmentState.PROCESSING), AssessmentState.CAPTURING, 1)
+
+    assert error.value.code == "invalid_assessment_transition"
+
+
+@pytest.mark.parametrize(
+    ("source", "target"),
+    [
+        (AssessmentState.PROCESSING, AssessmentState.REVIEW_REQUIRED),
+        (AssessmentState.REVIEW_REQUIRED, AssessmentState.READY_FOR_CLINICIAN),
+        (AssessmentState.READY_FOR_CLINICIAN, AssessmentState.FINALIZED),
+    ],
+)
+def test_rejects_transitions_outside_the_capture_v2_slice(
+    source: AssessmentState,
+    target: AssessmentState,
+) -> None:
+    with pytest.raises(InvalidAssessmentTransition) as error:
+        transition_assessment(assessment(source), target, 1)
 
     assert error.value.code == "invalid_assessment_transition"
 
