@@ -949,6 +949,8 @@ class AssessmentRepository:
                 )
             if recording.upload_state != RecordingUploadState.UPLOADED.value:
                 raise RepositoryError("upload_verification_failed")
+            if command.server_computed_checksum != recording.declared_checksum:
+                raise RepositoryError("upload_verification_failed")
             if (
                 command.verified_content_type != recording.declared_content_type
                 or command.verified_size_bytes != recording.declared_size_bytes

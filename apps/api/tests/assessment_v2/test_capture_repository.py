@@ -17,6 +17,7 @@ from app.assessment_v2.db.models import (
     ProtocolActivityRecord,
     ProtocolVersionRecord,
     RecordingQualityResultRecord,
+    RecordingRecord,
 )
 from app.assessment_v2.db.repositories import AssessmentRepository, RepositoryError
 from app.assessment_v2.domain.models import (
@@ -271,6 +272,27 @@ def test_verified_required_recording_needs_a_persisted_usable_quality_result_bef
     assert completed_upload.recording.verified_checksum is None
     assert completed_upload.processing_run.stage.value == "upload_verification"
     assert completed_upload.processing_run.state.value == "queued"
+    with pytest.raises(RepositoryError) as checksum_mismatch:
+        repo.verify_recording_upload(
+            scope,
+            domain.VerifyRecordingUpload(
+                recording_id=uploading.id,
+                expected_version=completed_upload.recording.version,
+                verified_content_type="audio/webm",
+                verified_size_bytes=456,
+                server_computed_checksum="sha256:fedcba9876543210fedcba9876543210",
+                verified_at=datetime.now(timezone.utc),
+            ),
+            correlation_id="0123456789abcdef0123456789abcdef",
+        )
+    assert checksum_mismatch.value.code == "upload_verification_failed"
+    still_unverified = session.scalar(
+        select(RecordingRecord).where(RecordingRecord.recording_id == uploading.id)
+    )
+    assert still_unverified is not None
+    assert still_unverified.upload_state == "uploaded"
+    assert still_unverified.verified_checksum is None
+    assert still_unverified.version == completed_upload.recording.version
     verified = repo.verify_recording_upload(
         scope,
         domain.VerifyRecordingUpload(
@@ -278,7 +300,7 @@ def test_verified_required_recording_needs_a_persisted_usable_quality_result_bef
             expected_version=completed_upload.recording.version,
             verified_content_type="audio/webm",
             verified_size_bytes=456,
-            server_computed_checksum="sha256:fedcba9876543210fedcba9876543210",
+            server_computed_checksum="sha256:0123456789abcdef0123456789abcdef",
             verified_at=datetime.now(timezone.utc),
         ),
         correlation_id="0123456789abcdef0123456789abcdef",
@@ -320,7 +342,7 @@ def test_verified_required_recording_needs_a_persisted_usable_quality_result_bef
     )
 
     assert verified.recording.upload_state.value == "verified"
-    assert verified.recording.verified_checksum == "sha256:fedcba9876543210fedcba9876543210"
+    assert verified.recording.verified_checksum == "sha256:0123456789abcdef0123456789abcdef"
     assert completed_capture.state is AssessmentState.PROCESSING
     assert completed_capture.version == assessment.version + 1
 
