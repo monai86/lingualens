@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from sqlalchemy import and_, desc, func, select, update
+from sqlalchemy import and_, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -1365,13 +1365,47 @@ class AssessmentRepository:
 
         from app.assessment_v2.worker import CaptureWorkItem
 
+        latest_consent_status = (
+            select(ConsentRecord.status)
+            .where(
+                ConsentRecord.organization_id == AssessmentRecord.organization_id,
+                ConsentRecord.child_id == AssessmentRecord.child_id,
+                ConsentRecord.purpose == ConsentPurpose.CLINICAL_ASSESSMENT.value,
+            )
+            .order_by(desc(ConsentRecord.version))
+            .limit(1)
+            .scalar_subquery()
+        )
         for _ in range(100):
             with self.session.begin_nested():
                 run = self.session.scalar(
                     select(ProcessingRunRecord)
+                    .join(
+                        RecordingRecord,
+                        and_(
+                            RecordingRecord.organization_id == ProcessingRunRecord.organization_id,
+                            RecordingRecord.recording_id == ProcessingRunRecord.recording_id,
+                        ),
+                    )
+                    .join(
+                        AssessmentRecord,
+                        and_(
+                            AssessmentRecord.organization_id == RecordingRecord.organization_id,
+                            AssessmentRecord.assessment_id == RecordingRecord.assessment_id,
+                        ),
+                    )
                     .where(
                         ProcessingRunRecord.state == ProcessingRunState.QUEUED.value,
                         ProcessingRunRecord.available_at <= _utc_now(),
+                        or_(
+                            ProcessingRunRecord.stage != ProcessingRunStage.UPLOAD_VERIFICATION.value,
+                            and_(
+                                ProcessingRunRecord.stage == ProcessingRunStage.UPLOAD_VERIFICATION.value,
+                                RecordingRecord.upload_state == RecordingUploadState.UPLOADED.value,
+                            ),
+                            latest_consent_status.is_(None),
+                            latest_consent_status != ConsentStatus.ACTIVE.value,
+                        ),
                     )
                     .order_by(ProcessingRunRecord.available_at, ProcessingRunRecord.created_at)
                     .with_for_update(skip_locked=True)

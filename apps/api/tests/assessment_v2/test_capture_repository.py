@@ -28,6 +28,7 @@ from app.assessment_v2.domain.models import (
     ConsentStatus,
     CreateAssessment,
     CreateChild,
+    ProcessingRunState,
     RecordConsent,
 )
 from app.core.security import CurrentUser
@@ -214,6 +215,32 @@ def test_recording_intent_is_atomic_idempotent_and_uses_only_opaque_object_paths
     stored = session.scalar(select(AssessmentRecord).where(AssessmentRecord.assessment_id == assessment.id))
     assert stored is not None
     assert stored.state == AssessmentState.CAPTURING.value
+
+
+def test_worker_does_not_claim_upload_verification_before_upload_completion(session: Session) -> None:
+    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    created = repo.create_recording_if_capture_active(
+        scope,
+        domain.CreateRecording(
+            assessment_id=assessment.id,
+            activity_code="free_play",
+            content_type="audio/webm",
+            size_bytes=456,
+            checksum="sha256:0123456789abcdef0123456789abcdef",
+            idempotency_key="recording-worker-gate-01",
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    assert repo.claim_next_processing_run() is None
+    stored_run = session.scalar(
+        select(ProcessingRunRecord).where(
+            ProcessingRunRecord.processing_run_id == created.processing_run.id
+        )
+    )
+    assert stored_run is not None
+    assert stored_run.state == ProcessingRunState.QUEUED.value
+    assert stored_run.attempt_count == 0
 
 
 def test_verified_required_recording_needs_a_persisted_usable_quality_result_before_capture_completion(

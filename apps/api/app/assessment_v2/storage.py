@@ -391,13 +391,16 @@ def _match_expected_metadata(
     return metadata
 
 
-def _confirm_deleted_object(response: object, object_key: str) -> None:
+def _confirm_deleted_object(response: object, object_key: str) -> str:
     deleted_objects = response if isinstance(response, list) else [response]
+    if not deleted_objects:
+        return "already_absent"
     if len(deleted_objects) != 1:
         raise StorageUnavailableError()
     deleted_object = _as_mapping(deleted_objects[0])
     if deleted_object is None or deleted_object.get("name") != object_key:
         raise StorageUnavailableError()
+    return "deleted"
 
 
 class CaptureStorageAdapter(Protocol):
@@ -533,8 +536,8 @@ class SupabasePrivateStorageAdapter:
         response = _call_provider(
             lambda: _unwrap_provider_response(self._bucket(settings).remove([object_key]))
         )
-        _call_provider(lambda: _confirm_deleted_object(response, object_key))
-        return StorageDeletionResult(deleted=True, status="deleted")
+        status = _call_provider(lambda: _confirm_deleted_object(response, object_key))
+        return StorageDeletionResult(deleted=status == "deleted", status=status)
 
     def download_object(self, object_key: str) -> bytes:
         with tempfile.NamedTemporaryFile(prefix="lingualens-download-", suffix=".media") as temporary:

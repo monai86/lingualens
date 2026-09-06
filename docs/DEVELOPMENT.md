@@ -85,8 +85,10 @@ a server-computed SHA-256, and then runs bounded `ffprobe`/`ffmpeg` quality
 checks. It never stores raw media in the database and never creates transcripts,
 features, diagnoses, or numeric ASD risk. Compose builds the capture-worker from
 the root `Dockerfile`, which includes `ffprobe` and `ffmpeg`; the service health
-check verifies both binaries. Configure private Supabase Storage and a durable
-Redis queue before any nonmock deployment. A missing media tool is reported as
+check verifies both binaries. Capture V2 uses the database-backed
+`processing_runs` table as its durable queue and does not use the legacy Redis
+job-queue contract. Configure private Supabase Storage and a worker database
+connection before any nonmock deployment. A missing media tool is reported as
 quality `unavailable`, while retryable processing failures are capped at three
 attempts.
 

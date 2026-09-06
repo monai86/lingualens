@@ -596,6 +596,16 @@ def test_delete_object_fails_closed_when_provider_does_not_confirm_requested_obj
     assert OPAQUE_OBJECT_KEY not in str(raised.value)
 
 
+def test_delete_object_treats_an_empty_provider_result_as_already_absent() -> None:
+    bucket = FakeBucket()
+    bucket.remove_response = []
+
+    result = _adapter(bucket).delete_object(OPAQUE_OBJECT_KEY)
+
+    assert result.deleted is False
+    assert result.status == "already_absent"
+
+
 def test_download_object_returns_private_bytes_with_a_hard_size_bound(monkeypatch) -> None:
     bucket = FakeBucket()
 

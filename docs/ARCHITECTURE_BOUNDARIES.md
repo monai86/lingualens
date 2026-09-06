@@ -107,7 +107,9 @@ The progression for asynchronous scientific work is deliberately incremental:
 3. a dedicated queue only after measured workload proves the database-backed
    approach insufficient.
 
-The current API worker has two concrete queue adapters: in-memory for local
-tests/demo runs and Redis for a managed worker deployment. There is no Celery
-adapter in the repository, so production configuration accepts Redis only until
-another implementation is actually added and tested.
+The legacy API worker has two concrete queue adapters: in-memory for local
+tests/demo runs and Redis for a managed worker deployment. Capture V2 is a
+separate database-backed worker: it claims `processing_runs` directly with
+row-level locking and does not use the legacy Redis contract. A dedicated
+Capture V2 queue adapter can be added only after its enqueue, lease, retry, and
+acknowledgement semantics are implemented and tested.

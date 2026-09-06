@@ -12,8 +12,9 @@ for implementation and review; it is not evidence that every flow is complete.
 | Supabase Auth | User identity, sessions, MFA, invitation-backed onboarding. |
 | Supabase Postgres | Clinical records, organizations, membership, reports, jobs, audit, privacy operations. |
 | Supabase private Storage | Audio/media objects and export artifacts under scoped private paths. |
-| Redis/job queue | Durable processing leases, retries, and worker coordination. |
-| Worker | Media verification, ASR requests, feature extraction, and controlled derived writes. |
+| Capture processing runs | Durable Capture V2 leases, retries, and worker coordination in Postgres. |
+| Redis/job queue | Legacy v1 worker queue; not part of the Capture V2 contract. |
+| Worker | Capture V2 media verification and bounded quality checks; future ASR/feature work remains gated. |
 | ASR provider | Approved speech-to-text service with region/model provenance. |
 | Observability provider | Privacy-safe operational telemetry and critical alerts. |
 

@@ -34,7 +34,9 @@
 - `/api/v1` และ client เดิมยังเป็น therapist product ที่ใช้งานอยู่
 - `/api/v2` มี child, consent, assessment lifecycle และ Capture V2 สำหรับ
   protocol selection, private upload intent, durable processing, checksum
-  verification และ non-diagnostic quality states; evidence/profile slices ยังไม่เปิด
+  verification และ non-diagnostic quality states; worker ใช้ `processing_runs`
+  เป็น durable database queue และไม่ใช้ legacy Redis queue; evidence/profile
+  slices ยังไม่เปิด
 - `LINGUALENS_DATABASE_URL`/v1 Alembic และ
   `LINGUALENS_ASSESSMENT_DATABASE_URL`/v2 Alembic เป็นคนละฐานและคนละ history
 - ฐาน v2 เริ่มว่าง ไม่มีการ import หรือ rewrite records/audio/storage จาก v1

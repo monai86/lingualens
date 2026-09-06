@@ -290,9 +290,10 @@ worker requires private Supabase Storage configuration for real objects and
 `ffprobe`/`ffmpeg` for quality checks; missing media tools produce an explicit
 unavailable quality state. Local Compose includes a capture-worker image with
 those tools and runs a polling worker with `python -m app.assessment_v2.worker_runtime`.
-Production must use Redis/durable queue configuration and must not fall back to
-an in-memory queue. The workflow remains research/education decision support;
-it does not diagnose ASD or expose numeric risk.
+Capture V2 treats the database-backed `processing_runs` table as its durable
+queue; the legacy Redis queue remains separate and is not part of this worker's
+contract. The workflow remains research/education decision support; it does not
+diagnose ASD or expose numeric risk.
 
 Clients remain on `/api/v1` until a later migration plan. Rollback is additive:
 stop mounting `/api/v2` and disable `LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP`;
