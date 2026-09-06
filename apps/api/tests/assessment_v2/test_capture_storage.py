@@ -596,14 +596,37 @@ def test_delete_object_fails_closed_when_provider_does_not_confirm_requested_obj
     assert OPAQUE_OBJECT_KEY not in str(raised.value)
 
 
-def test_download_object_returns_private_bytes_with_a_hard_size_bound() -> None:
+def test_download_object_returns_private_bytes_with_a_hard_size_bound(monkeypatch) -> None:
     bucket = FakeBucket()
+
+    class _StreamResponse:
+        status_code = 200
+        headers = {"content-length": "7"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+        def iter_bytes(self, *, chunk_size: int):
+            assert chunk_size == 1024 * 1024
+            yield b"capture"
+
+    monkeypatch.setattr(httpx, "stream", lambda *args, **kwargs: _StreamResponse())
 
     result = _adapter(bucket).download_object(OPAQUE_OBJECT_KEY)
 
     assert result == b"capture"
-    assert bucket.download_calls == [OPAQUE_OBJECT_KEY]
+    assert bucket.create_signed_url_calls == [(OPAQUE_OBJECT_KEY, 900)]
 
-    bucket.download_response = FakeSdkResponse(data=b"")
+    class _EmptyStreamResponse(_StreamResponse):
+        headers = {"content-length": "0"}
+
+        def iter_bytes(self, *, chunk_size: int):
+            del chunk_size
+            yield b""
+
+    monkeypatch.setattr(httpx, "stream", lambda *args, **kwargs: _EmptyStreamResponse())
     with pytest.raises(StorageUnavailableError):
         _adapter(bucket).download_object(OPAQUE_OBJECT_KEY)

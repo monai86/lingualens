@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from importlib import import_module
 import json
 import re
+import tempfile
 from typing import Protocol, TypeVar, cast
 from urllib.parse import urlparse
 
@@ -421,6 +422,8 @@ class CaptureStorageAdapter(Protocol):
 
     def download_object(self, object_key: str) -> bytes: ...
 
+    def download_object_to_path(self, object_key: str, destination: str) -> None: ...
+
 
 class SupabasePrivateStorageAdapter:
     """A lazy, injectable adapter over a configured private Supabase bucket."""
@@ -534,17 +537,47 @@ class SupabasePrivateStorageAdapter:
         return StorageDeletionResult(deleted=True, status="deleted")
 
     def download_object(self, object_key: str) -> bytes:
+        with tempfile.NamedTemporaryFile(prefix="lingualens-download-", suffix=".media") as temporary:
+            self.download_object_to_path(object_key, temporary.name)
+            return temporary.read()
+
+    def download_object_to_path(self, object_key: str, destination: str) -> None:
+        """Stream a private object into a bounded local file.
+
+        The provider SDK's convenience download method buffers the response.
+        Worker paths therefore use the signed private URL and enforce the size
+        limit while bytes are arriving.
+        """
+
         object_key = _validate_object_key(object_key)
         settings = self._configured_settings()
-        payload = _call_provider(
-            lambda: _unwrap_provider_response(self._bucket(settings).download(object_key))
-        )
-        if not isinstance(payload, (bytes, bytearray)):
-            raise StorageUnavailableError()
+        grant = self.create_signed_download_grant(object_key)
         maximum_size_bytes = min(settings.capture_max_upload_size_bytes, MAX_CAPTURE_UPLOAD_SIZE_BYTES)
-        if not payload or len(payload) > maximum_size_bytes:
+        total = 0
+        try:
+            with httpx.stream(
+                "GET",
+                grant.url,
+                timeout=30.0,
+                follow_redirects=False,
+            ) as response:
+                if response.status_code != 200:
+                    raise StorageUnavailableError()
+                declared_length = response.headers.get("content-length")
+                if declared_length is not None and declared_length.isdecimal() and int(declared_length) > maximum_size_bytes:
+                    raise StorageUnavailableError()
+                with open(destination, "wb") as output:
+                    for chunk in response.iter_bytes(chunk_size=1024 * 1024):
+                        total += len(chunk)
+                        if total > maximum_size_bytes:
+                            raise StorageUnavailableError()
+                        output.write(chunk)
+        except StorageUnavailableError:
+            raise
+        except (httpx.HTTPError, OSError):
+            raise StorageUnavailableError() from None
+        if total <= 0:
             raise StorageUnavailableError()
-        return bytes(payload)
 
     def _configured_settings(self) -> Settings:
         settings = self._settings or get_settings()

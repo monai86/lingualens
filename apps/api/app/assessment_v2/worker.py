@@ -11,6 +11,8 @@ from dataclasses import dataclass
 import hashlib
 from pathlib import Path
 import tempfile
+from contextlib import contextmanager
+from collections.abc import Iterator
 from typing import Protocol
 
 from app.assessment_v2.domain.models import ProcessingRunStage
@@ -23,6 +25,7 @@ from app.assessment_v2.quality import (
     evaluate_quality,
 )
 from app.assessment_v2.storage import StorageUnavailableError
+from app.core.config import MAX_CAPTURE_UPLOAD_SIZE_BYTES
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +66,8 @@ class CaptureWorkerRepository(Protocol):
 
 class CaptureWorkerStorage(Protocol):
     def download_object(self, object_key: str) -> bytes: ...
+
+    def download_object_to_path(self, object_key: str, destination: str) -> None: ...
 
     def delete_object(self, object_key: str) -> object: ...
 
@@ -106,11 +111,15 @@ class CaptureProcessingWorker:
             return WorkerResult("failed", item.run_id)
 
     def _verify_upload(self, item: CaptureWorkItem) -> WorkerResult:
-        payload = self.storage.download_object(item.object_key)
-        if len(payload) != item.declared_size_bytes:
+        if item.declared_size_bytes <= 0 or item.declared_size_bytes > MAX_CAPTURE_UPLOAD_SIZE_BYTES:
             self.repository.fail_processing_run(item, "upload_verification_failed")
             return WorkerResult("failed", item.run_id)
-        computed = f"sha256:{hashlib.sha256(payload).hexdigest()}"
+        with self._materialized_media(item) as media_path:
+            size, digest = self._hash_file(media_path)
+        if size != item.declared_size_bytes:
+            self.repository.fail_processing_run(item, "upload_verification_failed")
+            return WorkerResult("failed", item.run_id)
+        computed = f"sha256:{digest}"
         if computed != item.declared_checksum:
             self.repository.fail_processing_run(item, "upload_verification_failed")
             return WorkerResult("failed", item.run_id)
@@ -118,15 +127,15 @@ class CaptureProcessingWorker:
         return WorkerResult("verified" if verified else "cancelled", item.run_id)
 
     def _analyze_quality(self, item: CaptureWorkItem) -> WorkerResult:
-        payload = self.storage.download_object(item.object_key)
-        if len(payload) != item.declared_size_bytes:
+        if item.declared_size_bytes <= 0 or item.declared_size_bytes > MAX_CAPTURE_UPLOAD_SIZE_BYTES:
             self.repository.fail_processing_run(item, "quality_analysis_failed")
             return WorkerResult("failed", item.run_id)
-        with tempfile.NamedTemporaryFile(prefix="lingualens-capture-", suffix=".media") as temporary:
-            temporary.write(payload)
-            temporary.flush()
+        with self._materialized_media(item) as media_path:
+            if media_path.stat().st_size != item.declared_size_bytes:
+                self.repository.fail_processing_run(item, "quality_analysis_failed")
+                return WorkerResult("failed", item.run_id)
             try:
-                quality = self.probe.probe(Path(temporary.name))
+                quality = self.probe.probe(media_path)
             except MediaProbeUnavailable:
                 quality = MediaQuality(
                     duration_seconds=None,
@@ -163,6 +172,31 @@ class CaptureProcessingWorker:
         )
         persisted = self.repository.persist_quality_result(item, quality, decision)
         return WorkerResult("quality_recorded" if persisted else "cancelled", item.run_id)
+
+    @contextmanager
+    def _materialized_media(self, item: CaptureWorkItem) -> Iterator[Path]:
+        with tempfile.NamedTemporaryFile(prefix="lingualens-capture-", suffix=".media") as temporary:
+            destination = Path(temporary.name)
+            download_to_path = getattr(self.storage, "download_object_to_path", None)
+            if callable(download_to_path):
+                download_to_path(item.object_key, temporary.name)
+            else:
+                payload = self.storage.download_object(item.object_key)
+                if len(payload) > MAX_CAPTURE_UPLOAD_SIZE_BYTES:
+                    raise StorageUnavailableError()
+                temporary.write(payload)
+                temporary.flush()
+            yield destination
+
+    @staticmethod
+    def _hash_file(path: Path) -> tuple[int, str]:
+        digest = hashlib.sha256()
+        size = 0
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                size += len(chunk)
+                digest.update(chunk)
+        return size, digest.hexdigest()
 
     def _cleanup(self, item: CaptureWorkItem) -> WorkerResult:
         self.storage.delete_object(item.object_key)
