@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+import re
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, func, select
@@ -73,6 +75,51 @@ def create_child(repo: AssessmentRepository, scope_value: AccessScope, code: str
     )
 
 
+def assign_clinician(
+    session: Session,
+    clinician: AccessScope,
+    child_id: str,
+) -> CareTeamAssignmentRecord:
+    assignment = CareTeamAssignmentRecord(
+        assignment_id=uuid4().hex,
+        organization_id=clinician.organization_id,
+        child_id=child_id,
+        user_id=clinician.user_id,
+        role="assigned_clinician",
+        active=True,
+    )
+    session.add(assignment)
+    session.flush()
+    return assignment
+
+
+def grant_active_clinical_assessment_consent(
+    repo: AssessmentRepository,
+    scope_value: AccessScope,
+    child_id: str,
+) -> None:
+    repo.add_consent(
+        scope_value,
+        child_id,
+        RecordConsent(
+            purpose=ConsentPurpose.CLINICAL_ASSESSMENT,
+            scope_version="clinical-v1",
+            status=ConsentStatus.ACTIVE,
+        ),
+        correlation_id="consent-active",
+    )
+
+
+def assessment_command(child_id: str, clinician_id: str) -> CreateAssessment:
+    return CreateAssessment(
+        child_id=child_id,
+        purpose=AssessmentPurpose.INITIAL,
+        age_months=36,
+        language_context={"primary": "th", "additional": []},
+        assigned_clinician_id=clinician_id,
+    )
+
+
 def test_create_child_assigns_creator_and_audits(session: Session) -> None:
     repo = AssessmentRepository(session)
     therapist = scope("therapist_01")
@@ -133,6 +180,100 @@ def test_assignee_must_be_an_active_member_of_the_child_care_team(session: Sessi
 
     assert repo.can_assign_clinician(alpha_therapist, alpha_child.id, alpha_therapist.user_id) is True
     assert repo.can_assign_clinician(alpha_therapist, alpha_child.id, beta_therapist.user_id) is False
+
+
+def test_assessment_creation_rechecks_a_deactivated_assignee_care_team_assignment(
+    session: Session,
+) -> None:
+    repo = AssessmentRepository(session)
+    supervisor = scope("supervisor_01", role="clinical_supervisor")
+    assignee = scope("therapist_assignee")
+    synchronize(repo, supervisor)
+    synchronize(repo, assignee)
+    child = create_child(repo, supervisor, "LL-ASSIGNMENT-STATE")
+    assignment = assign_clinician(session, assignee, child.id)
+    grant_active_clinical_assessment_consent(repo, supervisor, child.id)
+
+    assert repo.can_assign_clinician(supervisor, child.id, assignee.user_id) is True
+    assignment.active = False
+    session.flush()
+    audit_count = session.scalar(select(func.count()).select_from(AuditEventRecord))
+
+    with pytest.raises(RepositoryError) as error:
+        repo.create_assessment_if_consented(
+            supervisor,
+            assessment_command(child.id, assignee.user_id),
+            correlation_id="assessment-after-assignment-change",
+        )
+
+    assert error.value.code == "clinician_assignment_not_permitted"
+    assert session.scalar(select(func.count()).select_from(AssessmentRecord)) == 0
+    assert session.scalar(select(func.count()).select_from(AuditEventRecord)) == audit_count
+
+
+def test_assessment_creation_rechecks_a_deactivated_assignee_membership(
+    session: Session,
+) -> None:
+    repo = AssessmentRepository(session)
+    supervisor = scope("supervisor_01", role="clinical_supervisor")
+    assignee = scope("therapist_assignee")
+    synchronize(repo, supervisor)
+    synchronize(repo, assignee)
+    child = create_child(repo, supervisor, "LL-MEMBERSHIP-STATE")
+    assign_clinician(session, assignee, child.id)
+    grant_active_clinical_assessment_consent(repo, supervisor, child.id)
+
+    assert repo.can_assign_clinician(supervisor, child.id, assignee.user_id) is True
+    membership = session.scalar(
+        select(OrganizationMembershipRecord).where(
+            OrganizationMembershipRecord.organization_id == assignee.organization_id,
+            OrganizationMembershipRecord.user_id == assignee.user_id,
+        )
+    )
+    assert membership is not None
+    membership.active = False
+    session.flush()
+    audit_count = session.scalar(select(func.count()).select_from(AuditEventRecord))
+
+    with pytest.raises(RepositoryError) as error:
+        repo.create_assessment_if_consented(
+            supervisor,
+            assessment_command(child.id, assignee.user_id),
+            correlation_id="assessment-after-membership-change",
+        )
+
+    assert error.value.code == "clinician_assignment_not_permitted"
+    assert session.scalar(select(func.count()).select_from(AssessmentRecord)) == 0
+    assert session.scalar(select(func.count()).select_from(AuditEventRecord)) == audit_count
+
+
+def test_repository_audit_boundary_sanitizes_direct_correlation_input(session: Session) -> None:
+    repo = AssessmentRepository(session)
+    therapist = scope("therapist_01")
+    synchronize(repo, therapist)
+    untrusted_correlation_id = "operator-supplied-correlation-value"
+
+    child = repo.create_child(
+        therapist,
+        CreateChild(
+            display_code="LL-AUDIT-CORRELATION-UNTRUSTED",
+            birth_year=2021,
+            birth_month=6,
+            language_context={"primary": "th", "additional": []},
+        ),
+        correlation_id=untrusted_correlation_id,
+    )
+
+    audit = session.scalar(
+        select(AuditEventRecord)
+        .where(AuditEventRecord.action == "child.created")
+        .where(AuditEventRecord.target_id == child.id)
+        .order_by(AuditEventRecord.occurred_at.desc())
+    )
+
+    assert audit is not None
+    assert re.fullmatch(r"[0-9a-f]{32}", audit.correlation_id)
+    assert audit.correlation_id != untrusted_correlation_id
 
 
 def test_assessment_creation_rechecks_consent_inside_the_insert_transaction(session: Session) -> None:

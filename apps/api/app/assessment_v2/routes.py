@@ -25,10 +25,15 @@ from app.assessment_v2.services import AssessmentService
 
 
 _V2_ERROR_RESPONSES = {
+    400: {"model": ErrorEnvelope},
+    401: {"model": ErrorEnvelope},
     403: {"model": ErrorEnvelope},
     404: {"model": ErrorEnvelope},
+    405: {"model": ErrorEnvelope},
     409: {"model": ErrorEnvelope},
     422: {"model": ErrorEnvelope},
+    429: {"model": ErrorEnvelope},
+    500: {"model": ErrorEnvelope},
 }
 
 router = APIRouter(tags=["assessment-v2"])

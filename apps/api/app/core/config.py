@@ -4,6 +4,8 @@ from pathlib import Path
 import warnings
 
 from pydantic import BaseModel
+from sqlalchemy.engine import URL, make_url
+from sqlalchemy.exc import ArgumentError
 
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://therapist:therapist@localhost/therapist_app_v2"
@@ -25,6 +27,8 @@ PRODUCTION_SECRET_STORE_PROVIDERS = {
     "infisical",
     "vault",
 }
+_POSTGRESQL_DEFAULT_PORT = 5432
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
 
 
 def getenv_compat(new_name: str, legacy_name: str, default: str = "") -> str:
@@ -38,6 +42,27 @@ def getenv_compat(new_name: str, legacy_name: str, default: str = "") -> str:
         )
         return os.environ[legacy_name]
     return default
+
+
+def _parse_database_url(value: str) -> URL | None:
+    try:
+        parsed = make_url(value)
+        _ = parsed.port
+    except (ArgumentError, ValueError):
+        return None
+    return parsed
+
+
+def _postgresql_target(value: URL) -> tuple[str, int, str]:
+    host = value.host or str(value.query.get("host", ""))
+    normalized_host = host.strip().rstrip(".").lower()
+    if normalized_host in _LOOPBACK_HOSTS:
+        normalized_host = "loopback"
+    return (
+        normalized_host,
+        value.port if value.port is not None else _POSTGRESQL_DEFAULT_PORT,
+        value.database or "",
+    )
 
 
 class Settings(BaseModel):
@@ -132,7 +157,15 @@ class Settings(BaseModel):
                 raise ValueError(
                     "Production assessment database URL must come from managed secrets and cannot use demo defaults."
                 )
-            if self.database_url == self.assessment_database_url:
+            assessment_url = _parse_database_url(self.assessment_database_url)
+            if assessment_url is None or assessment_url.get_backend_name() != "postgresql":
+                raise ValueError("Production assessment database URL must use PostgreSQL.")
+            v1_url = _parse_database_url(self.database_url)
+            if (
+                v1_url is not None
+                and v1_url.get_backend_name() == "postgresql"
+                and _postgresql_target(v1_url) == _postgresql_target(assessment_url)
+            ):
                 raise ValueError("Production v1 and assessment v2 database URLs must be different.")
             if self.run_assessment_migrations_on_startup:
                 raise ValueError("Production assessment migrations must be run as a controlled release action, not startup automation.")

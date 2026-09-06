@@ -9,6 +9,7 @@ from uuid import uuid4
 from sqlalchemy import and_, desc, func, select, update
 from sqlalchemy.orm import Session
 
+from app.assessment_v2.correlation import sanitize_correlation_id
 from app.assessment_v2.db.models import (
     AssessmentRecord,
     AuditEventRecord,
@@ -32,6 +33,9 @@ from app.assessment_v2.domain.models import (
 )
 from app.assessment_v2.domain.transitions import InvalidAssessmentTransition, transition_assessment
 from app.core.security import CurrentUser
+
+
+_ASSIGNABLE_MEMBERSHIP_ROLES = frozenset({"therapist", "clinical_supervisor"})
 
 
 class RepositoryError(ValueError):
@@ -217,40 +221,19 @@ class AssessmentRepository:
     def create_assessment(
         self, scope: AccessScope, command: CreateAssessment, correlation_id: str
     ) -> AssessmentSnapshot:
-        self._require_child_access(scope, command.child_id)
-        now = _utc_now()
         with self.session.begin_nested():
-            assessment = AssessmentRecord(
-                assessment_id=uuid4().hex,
-                organization_id=scope.organization_id,
-                child_id=command.child_id,
-                purpose=command.purpose.value,
-                state="draft",
-                age_months=command.age_months,
-                language_context=_context_to_storage(command.language_context),
-                assigned_clinician_id=command.assigned_clinician_id,
-                version=1,
-                created_at=now,
-                updated_at=now,
-            )
-            self.session.add(assessment)
-            self._append_audit(scope, "assessment.created", "assessment", assessment.assessment_id, correlation_id, [
-                "child_id",
-                "purpose",
-                "age_months",
-                "language_context",
-                "assigned_clinician_id",
-            ])
-            self.session.flush()
-            return self._assessment_snapshot(assessment)
+            self._locked_child(scope, command.child_id)
+            self._require_locked_assignee_eligibility(scope, command.child_id, command.assigned_clinician_id)
+            return self._insert_assessment(scope, command, correlation_id)
 
     def create_assessment_if_consented(
         self, scope: AccessScope, command: CreateAssessment, correlation_id: str
     ) -> AssessmentSnapshot:
         """Lock the child while checking consent and inserting the assessment."""
 
-        self._locked_child(scope, command.child_id)
         with self.session.begin_nested():
+            self._locked_child(scope, command.child_id)
+            self._require_locked_assignee_eligibility(scope, command.child_id, command.assigned_clinician_id)
             latest = self.session.scalar(
                 select(ConsentRecord)
                 .where(
@@ -286,7 +269,7 @@ class AssessmentRepository:
                     CareTeamAssignmentRecord.user_id == clinician_id,
                     CareTeamAssignmentRecord.active.is_(True),
                     OrganizationMembershipRecord.active.is_(True),
-                    OrganizationMembershipRecord.role.in_(("therapist", "clinical_supervisor")),
+                    OrganizationMembershipRecord.role.in_(_ASSIGNABLE_MEMBERSHIP_ROLES),
                 )
             )
             is not None
@@ -420,6 +403,39 @@ class AssessmentRepository:
             raise RepositoryError("child_not_found")
         return child
 
+    def _require_locked_assignee_eligibility(
+        self,
+        scope: AccessScope,
+        child_id: str,
+        clinician_id: str,
+    ) -> None:
+        membership = self.session.scalar(
+            select(OrganizationMembershipRecord)
+            .where(
+                OrganizationMembershipRecord.organization_id == scope.organization_id,
+                OrganizationMembershipRecord.user_id == clinician_id,
+            )
+            .with_for_update()
+        )
+        if (
+            membership is None
+            or not membership.active
+            or membership.role not in _ASSIGNABLE_MEMBERSHIP_ROLES
+        ):
+            raise RepositoryError("clinician_assignment_not_permitted")
+
+        assignment = self.session.scalar(
+            select(CareTeamAssignmentRecord)
+            .where(
+                CareTeamAssignmentRecord.organization_id == scope.organization_id,
+                CareTeamAssignmentRecord.child_id == child_id,
+                CareTeamAssignmentRecord.user_id == clinician_id,
+            )
+            .with_for_update()
+        )
+        if assignment is None or not assignment.active:
+            raise RepositoryError("clinician_assignment_not_permitted")
+
     def _insert_assessment(
         self, scope: AccessScope, command: CreateAssessment, correlation_id: str
     ) -> AssessmentSnapshot:
@@ -480,7 +496,7 @@ class AssessmentRepository:
                 target_type=target_type,
                 target_id=target_id,
                 outcome="success",
-                correlation_id=correlation_id,
+                correlation_id=sanitize_correlation_id(correlation_id),
                 target_version=target_version,
                 metadata_json={"changed_fields": changed_fields},
                 occurred_at=_utc_now(),

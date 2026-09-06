@@ -115,6 +115,18 @@ async def handle_database_error(request: Request, exception: SQLAlchemyError):
     raise exception
 
 
+@app.exception_handler(Exception)
+async def handle_unexpected_error(request: Request, exception: Exception):
+    if request.url.path.startswith(settings_obj.assessment_api_prefix):
+        return assessment_error_response(
+            request,
+            "internal_error",
+            500,
+            "The clinical operation could not be completed.",
+        )
+    raise exception
+
+
 @app.on_event("startup")
 def apply_startup_migrations() -> None:
     if settings_obj.run_migrations_on_startup:

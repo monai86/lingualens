@@ -84,3 +84,45 @@ def test_production_rejects_reusing_the_v1_database_for_assessment_v2() -> None:
         values = _production_values()
         values.update(database_url=shared_url, assessment_database_url=shared_url)
         Settings(**values).validate_runtime_security()
+
+
+def test_production_rejects_assessment_database_target_shared_with_v1_despite_url_variants() -> None:
+    values = _production_values()
+    values.update(
+        database_url="postgresql+psycopg://v1_reader:synthetic@DB.EXAMPLE/isolated_database",
+        assessment_database_url=(
+            "postgresql://v2_writer:synthetic@db.example:5432/isolated_database?sslmode=require"
+        ),
+    )
+
+    with pytest.raises(ValueError, match="different"):
+        Settings(**values).validate_runtime_security()
+
+
+@pytest.mark.parametrize(
+    "assessment_database_url",
+    (
+        "sqlite:////managed/assessment-v2.db",
+        "mysql+pymysql://assessment_user:synthetic@db.example/assessment_v2",
+    ),
+)
+def test_production_rejects_non_postgresql_assessment_database_urls(
+    assessment_database_url: str,
+) -> None:
+    with pytest.raises(ValueError, match="PostgreSQL"):
+        Settings(
+            **_production_values(),
+            assessment_database_url=assessment_database_url,
+        ).validate_runtime_security()
+
+
+def test_production_keeps_distinct_v1_postgresql_driver_configuration_compatible() -> None:
+    values = _production_values()
+    values.update(
+        database_url="postgresql+asyncpg://v1_reader:synthetic@db.example/therapist_app_v1",
+        assessment_database_url="postgresql+psycopg://v2_writer:synthetic@db.example/assessment_v2",
+    )
+
+    settings = Settings(**values).validate_runtime_security()
+
+    assert settings.database_url.startswith("postgresql+asyncpg://")

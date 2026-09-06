@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -222,6 +223,44 @@ def test_v2_validation_and_cross_scope_errors_are_safe(
     out_of_team = client.get("/api/v2/children/out-of-team-child")
     assert other_tenant.status_code == out_of_team.status_code == 404
     assert other_tenant.json()["error"]["code"] == out_of_team.json()["error"]["code"] == "child_not_found"
+
+
+def test_v2_unexpected_dependency_error_uses_a_safe_envelope_with_correlation() -> None:
+    unsafe_message = "unexpected implementation detail"
+
+    def broken_service() -> FakeAssessmentService:
+        raise RuntimeError(unsafe_message)
+
+    app.dependency_overrides[get_assessment_service] = broken_service
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get("/api/v2/children")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 500
+    assert response.headers.get("content-type", "").startswith("application/json")
+    correlation_id = response.headers["x-request-id"]
+    assert re.fullmatch(r"[0-9a-f]{32}", correlation_id)
+    assert response.json() == {
+        "error": {
+            "code": "internal_error",
+            "message": "The clinical operation could not be completed.",
+            "details": {},
+            "correlation_id": correlation_id,
+        }
+    }
+    assert unsafe_message not in response.text
+
+
+def test_v2_routes_declare_safe_internal_error_responses_in_openapi() -> None:
+    openapi = app.openapi()
+    responses = openapi["paths"]["/api/v2/children"]["post"]["responses"]
+
+    assert "500" in responses
+    assert responses["500"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ErrorEnvelope"
+    }
 
 
 def test_v1_validation_keeps_existing_fastapi_error_shape(
