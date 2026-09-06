@@ -112,6 +112,7 @@ def test_capture_supabase_storage_configuration_uses_server_environment_variable
         ("capture_max_upload_size_bytes", 250 * 1024 * 1024 + 1),
         ("supabase_storage_signed_upload_ttl_seconds", 7199),
         ("supabase_storage_signed_upload_ttl_seconds", 7201),
+        ("supabase_storage_signed_download_ttl_seconds", 901),
     ),
 )
 def test_production_supabase_private_storage_rejects_missing_or_invalid_configuration(
@@ -131,6 +132,18 @@ def test_production_supabase_private_storage_accepts_explicit_private_tus_config
     assert settings.storage_mode == "supabase_private"
     assert settings.supabase_storage_tus_chunk_size_bytes == 6 * 1024 * 1024
     assert settings.capture_max_upload_size_bytes == 250 * 1024 * 1024
+
+
+@pytest.mark.parametrize("download_ttl", (1, 900))
+def test_production_supabase_private_storage_accepts_positive_download_ttl_up_to_default(
+    download_ttl: int,
+) -> None:
+    values = _supabase_private_production_values()
+    values["supabase_storage_signed_download_ttl_seconds"] = download_ttl
+
+    settings = Settings(**values).validate_runtime_security()
+
+    assert settings.supabase_storage_signed_download_ttl_seconds == download_ttl
 
 
 def test_production_supabase_private_storage_accepts_the_documented_direct_storage_tus_hostname() -> None:

@@ -83,6 +83,7 @@ class SignedUploadGrant:
     expires_at: datetime
     expires_in_seconds: int
     chunk_size_bytes: int
+    upload_length_bytes: int
     content_type: str
     upsert: bool
 
@@ -353,6 +354,40 @@ def _normalize_object_metadata(payload: object) -> StorageObjectMetadata:
     )
 
 
+def _validate_expected_content_type(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = _normalize_content_type(value)
+    if normalized is None:
+        raise StorageUnavailableError()
+    return normalized
+
+
+def _validate_expected_size(value: int | None) -> int | None:
+    if value is None:
+        return None
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or value <= 0
+        or value > MAX_CAPTURE_UPLOAD_SIZE_BYTES
+    ):
+        raise StorageUnavailableError()
+    return value
+
+
+def _match_expected_metadata(
+    metadata: StorageObjectMetadata,
+    expected_content_type: str | None,
+    expected_size_bytes: int | None,
+) -> StorageObjectMetadata:
+    if expected_content_type is not None and metadata.content_type != expected_content_type:
+        raise StorageUnavailableError()
+    if expected_size_bytes is not None and metadata.size_bytes != expected_size_bytes:
+        raise StorageUnavailableError()
+    return metadata
+
+
 def _confirm_deleted_object(response: object, object_key: str) -> None:
     deleted_objects = response if isinstance(response, list) else [response]
     if len(deleted_objects) != 1:
@@ -372,7 +407,13 @@ class CaptureStorageAdapter(Protocol):
 
     def create_signed_download_grant(self, object_key: str) -> SignedDownloadGrant: ...
 
-    def get_object_metadata(self, object_key: str) -> StorageObjectMetadata: ...
+    def get_object_metadata(
+        self,
+        object_key: str,
+        *,
+        expected_content_type: str | None = None,
+        expected_size_bytes: int | None = None,
+    ) -> StorageObjectMetadata: ...
 
     def delete_object(self, object_key: str) -> StorageDeletionResult: ...
 
@@ -429,14 +470,16 @@ class SupabasePrivateStorageAdapter:
             headers={
                 "x-signature": token,
                 "Upload-Metadata": _format_upload_metadata(upload_metadata),
+                "Upload-Length": str(declared_size_bytes),
             },
             upload_metadata=upload_metadata,
             bucket=settings.supabase_storage_bucket,
             object_key=object_key,
-            expires_at=expires_at,
-            expires_in_seconds=settings.supabase_storage_signed_upload_ttl_seconds,
-            chunk_size_bytes=settings.supabase_storage_tus_chunk_size_bytes,
-            content_type=content_type,
+                expires_at=expires_at,
+                expires_in_seconds=settings.supabase_storage_signed_upload_ttl_seconds,
+                chunk_size_bytes=settings.supabase_storage_tus_chunk_size_bytes,
+                upload_length_bytes=declared_size_bytes,
+                content_type=content_type,
             upsert=False,
         )
 
@@ -460,13 +503,22 @@ class SupabasePrivateStorageAdapter:
             expires_in_seconds=settings.supabase_storage_signed_download_ttl_seconds,
         )
 
-    def get_object_metadata(self, object_key: str) -> StorageObjectMetadata:
+    def get_object_metadata(
+        self,
+        object_key: str,
+        *,
+        expected_content_type: str | None = None,
+        expected_size_bytes: int | None = None,
+    ) -> StorageObjectMetadata:
         object_key = _validate_object_key(object_key)
+        expected_content_type = _validate_expected_content_type(expected_content_type)
+        expected_size_bytes = _validate_expected_size(expected_size_bytes)
         settings = self._configured_settings()
         payload = _call_provider(
             lambda: _unwrap_provider_response(self._bucket(settings).info(object_key))
         )
-        return _call_provider(lambda: _normalize_object_metadata(payload))
+        metadata = _call_provider(lambda: _normalize_object_metadata(payload))
+        return _match_expected_metadata(metadata, expected_content_type, expected_size_bytes)
 
     def delete_object(self, object_key: str) -> StorageDeletionResult:
         object_key = _validate_object_key(object_key)

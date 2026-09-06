@@ -221,6 +221,8 @@ class Settings(BaseModel):
             and self.supabase_storage_signed_upload_ttl_seconds
             == DEFAULT_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS
             and _is_positive_int(self.supabase_storage_signed_download_ttl_seconds)
+            and self.supabase_storage_signed_download_ttl_seconds
+            <= DEFAULT_SUPABASE_STORAGE_SIGNED_DOWNLOAD_TTL_SECONDS
             and self.supabase_storage_tus_chunk_size_bytes == SUPABASE_TUS_CHUNK_SIZE_BYTES
             and 0 < self.capture_max_upload_size_bytes <= MAX_CAPTURE_UPLOAD_SIZE_BYTES
         )

@@ -175,6 +175,8 @@ def test_create_signed_upload_grant_uses_private_tus_contract_without_service_ke
     assert grant.content_type == "audio/webm"
     assert grant.upsert is False
     assert grant.chunk_size_bytes == 6 * 1024 * 1024
+    assert grant.upload_length_bytes == 456
+    assert grant.headers["Upload-Length"] == "456"
     assert grant.expires_in_seconds == 7200
     assert grant.expires_at == datetime(2026, 9, 6, 12, 30, tzinfo=UTC)
     assert bucket.create_signed_upload_url_calls[0][0] == OPAQUE_OBJECT_KEY
@@ -404,7 +406,11 @@ def test_create_signed_download_grant_rejects_a_public_url_response() -> None:
 def test_get_object_metadata_normalizes_sdk_data_without_echoing_the_object_key() -> None:
     bucket = FakeBucket()
 
-    metadata = _adapter(bucket).get_object_metadata(OPAQUE_OBJECT_KEY)
+    metadata = _adapter(bucket).get_object_metadata(
+        OPAQUE_OBJECT_KEY,
+        expected_content_type="audio/webm",
+        expected_size_bytes=456,
+    )
 
     assert metadata.content_type == "audio/webm"
     assert metadata.size_bytes == 456
@@ -412,6 +418,31 @@ def test_get_object_metadata_normalizes_sdk_data_without_echoing_the_object_key(
     assert metadata.checksum == "sha256:0123456789abcdef"
     assert bucket.info_calls == [OPAQUE_OBJECT_KEY]
     assert OPAQUE_OBJECT_KEY not in repr(metadata)
+
+
+@pytest.mark.parametrize(
+    ("expected_content_type", "expected_size_bytes"),
+    (
+        ("audio/wav", 456),
+        ("audio/webm", 457),
+    ),
+)
+def test_get_object_metadata_rejects_declared_intent_mismatches_without_details(
+    expected_content_type: str,
+    expected_size_bytes: int,
+) -> None:
+    bucket = FakeBucket()
+
+    with pytest.raises(StorageUnavailableError) as raised:
+        _adapter(bucket).get_object_metadata(
+            OPAQUE_OBJECT_KEY,
+            expected_content_type=expected_content_type,
+            expected_size_bytes=expected_size_bytes,
+        )
+
+    assert raised.value.code == "storage_unavailable"
+    assert str(raised.value) == "storage_unavailable"
+    assert OPAQUE_OBJECT_KEY not in str(raised.value)
 
 
 @pytest.mark.parametrize(
