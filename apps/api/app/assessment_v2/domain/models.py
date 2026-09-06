@@ -33,6 +33,53 @@ class ConsentStatus(StrEnum):
     WITHDRAWN = "withdrawn"
 
 
+class RecordingUploadState(StrEnum):
+    PENDING = "pending"
+    UPLOADING = "uploading"
+    UPLOADED = "uploaded"
+    VERIFIED = "verified"
+    EXPIRED = "expired"
+    FAILED = "failed"
+
+
+class ProcessingRunStage(StrEnum):
+    UPLOAD_VERIFICATION = "upload_verification"
+    QUALITY_ANALYSIS = "quality_analysis"
+
+
+class ProcessingRunState(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class RecordingQualityStatus(StrEnum):
+    PENDING = "pending"
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class ProtocolActivity:
+    activity_key: str
+    required: bool
+    target_duration_seconds: int
+    minimum_duration_seconds: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProtocolVersion:
+    protocol_version_key: str
+    primary_language: str
+    minimum_age_months: int
+    maximum_age_months: int
+    supported_purposes: tuple[AssessmentPurpose, ...]
+    activities: tuple[ProtocolActivity, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class AssessmentSnapshot:
     id: str
