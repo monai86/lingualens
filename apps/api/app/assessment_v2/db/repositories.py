@@ -36,6 +36,7 @@ from app.assessment_v2.domain.models import (
     CompleteCapture,
     CompleteRecordingUpload,
     ConsentPurpose,
+    ConsentStatus,
     ConsentSnapshot,
     CreateRecording,
     CreateAssessment,
@@ -702,6 +703,26 @@ class AssessmentRepository:
             scope, recording_id, correlation_id, expected_version=expected_version
         )
 
+    def complete_cleanup_for_recording(self, scope: AccessScope, recording_id: str) -> None:
+        with self.session.begin_nested():
+            self.session.execute(
+                update(ProcessingRunRecord)
+                .where(
+                    ProcessingRunRecord.organization_id == scope.organization_id,
+                    ProcessingRunRecord.recording_id == recording_id,
+                    ProcessingRunRecord.stage == ProcessingRunStage.CLEANUP.value,
+                    ProcessingRunRecord.state.in_(
+                        (ProcessingRunState.QUEUED.value, ProcessingRunState.RUNNING.value)
+                    ),
+                )
+                .values(
+                    state=ProcessingRunState.SUCCEEDED.value,
+                    error_code=None,
+                    updated_at=_utc_now(),
+                )
+            )
+            self.session.flush()
+
     def _tombstone_recording_if_consented(
         self,
         scope: AccessScope,
@@ -717,6 +738,7 @@ class AssessmentRepository:
             recording, assessment = context
             self._require_current_capture_consent(scope, assessment.child_id)
             if recording.upload_state == RecordingUploadState.FAILED.value:
+                self._queue_cleanup_run(scope, recording)
                 return self._recording_snapshot(recording)
             result = self.session.execute(
                 update(RecordingRecord)
@@ -763,6 +785,7 @@ class AssessmentRepository:
                     updated_at=_utc_now(),
                 )
             )
+            self._queue_cleanup_run(scope, recording)
             updated = self.session.scalar(
                 select(RecordingRecord).where(
                     RecordingRecord.organization_id == scope.organization_id,
@@ -1174,6 +1197,45 @@ class AssessmentRepository:
         self.session.flush()
         return run
 
+    def _queue_cleanup_run(
+        self, scope: AccessScope, recording: RecordingRecord
+    ) -> ProcessingRunRecord:
+        existing = self.session.scalar(
+            select(ProcessingRunRecord)
+            .where(
+                ProcessingRunRecord.organization_id == scope.organization_id,
+                ProcessingRunRecord.recording_id == recording.recording_id,
+                ProcessingRunRecord.stage == ProcessingRunStage.CLEANUP.value,
+            )
+            .with_for_update()
+        )
+        if existing is not None:
+            if existing.state in {
+                ProcessingRunState.FAILED.value,
+                ProcessingRunState.CANCELLED.value,
+            }:
+                existing.state = ProcessingRunState.QUEUED.value
+                existing.error_code = None
+                existing.available_at = _utc_now()
+                existing.updated_at = _utc_now()
+            return existing
+        now = _utc_now()
+        run = ProcessingRunRecord(
+            processing_run_id=uuid4().hex,
+            organization_id=scope.organization_id,
+            recording_id=recording.recording_id,
+            stage=ProcessingRunStage.CLEANUP.value,
+            state=ProcessingRunState.QUEUED.value,
+            idempotency_key=f"cleanup-{recording.recording_id}",
+            attempt_count=0,
+            available_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(run)
+        self.session.flush()
+        return run
+
     def _resolve_existing_recording_intent(
         self,
         scope: AccessScope,
@@ -1292,6 +1354,263 @@ class AssessmentRepository:
         """Return the persisted membership state for an authenticated scope."""
 
         return self._has_active_membership(scope)
+
+    def claim_next_processing_run(self):
+        """Claim one durable capture run for the background worker.
+
+        This method intentionally returns an opaque work item rather than a
+        therapist-facing snapshot. Consent is checked again at claim time;
+        cleanup is the sole stage allowed to continue after withdrawal.
+        """
+
+        from app.assessment_v2.worker import CaptureWorkItem
+
+        for _ in range(100):
+            with self.session.begin_nested():
+                run = self.session.scalar(
+                    select(ProcessingRunRecord)
+                    .where(
+                        ProcessingRunRecord.state == ProcessingRunState.QUEUED.value,
+                        ProcessingRunRecord.available_at <= _utc_now(),
+                    )
+                    .order_by(ProcessingRunRecord.available_at, ProcessingRunRecord.created_at)
+                    .with_for_update(skip_locked=True)
+                    .limit(1)
+                )
+                if run is None:
+                    return None
+                context = self._worker_recording_context(run.organization_id, run.recording_id)
+                if context is None:
+                    run.state = ProcessingRunState.FAILED.value
+                    run.error_code = "recording_not_found"
+                    run.updated_at = _utc_now()
+                    continue
+                recording, assessment = context
+                stage = ProcessingRunStage(run.stage)
+                if stage is not ProcessingRunStage.CLEANUP and not self._has_current_capture_consent(
+                    run.organization_id, assessment.child_id
+                ):
+                    run.state = ProcessingRunState.CANCELLED.value
+                    run.error_code = "consent_revoked"
+                    run.updated_at = _utc_now()
+                    continue
+                if run.attempt_count >= 3:
+                    run.state = ProcessingRunState.FAILED.value
+                    run.error_code = "retry_limit_exceeded"
+                    run.updated_at = _utc_now()
+                    continue
+                activity = None
+                if stage is not ProcessingRunStage.CLEANUP:
+                    activity = self.session.scalar(
+                        select(ProtocolActivityRecord).where(
+                            ProtocolActivityRecord.protocol_version_key
+                            == recording.protocol_version_key,
+                            ProtocolActivityRecord.activity_key == recording.activity_key,
+                        )
+                    )
+                    if activity is None:
+                        run.state = ProcessingRunState.FAILED.value
+                        run.error_code = "recording_activity_invalid"
+                        run.updated_at = _utc_now()
+                        continue
+                if stage is ProcessingRunStage.QUALITY_ANALYSIS and recording.upload_state != RecordingUploadState.VERIFIED.value:
+                    run.state = ProcessingRunState.FAILED.value
+                    run.error_code = "recording_not_verified"
+                    run.updated_at = _utc_now()
+                    continue
+                run.state = ProcessingRunState.RUNNING.value
+                run.attempt_count += 1
+                run.updated_at = _utc_now()
+                self.session.flush()
+                return CaptureWorkItem(
+                    run_id=run.processing_run_id,
+                    organization_id=run.organization_id,
+                    recording_id=recording.recording_id,
+                    stage=stage,
+                    object_key=recording.object_key,
+                    declared_checksum=recording.declared_checksum,
+                    declared_content_type=recording.declared_content_type,
+                    declared_size_bytes=recording.declared_size_bytes,
+                    minimum_duration_seconds=(activity.minimum_duration_seconds if activity else 0),
+                    target_duration_seconds=(activity.target_duration_seconds if activity else 0),
+                )
+        return None
+
+    def verify_recording_upload_worker(self, item, checksum: str) -> bool:
+        with self.session.begin_nested():
+            run = self._worker_run(item)
+            context = self._worker_recording_context(item.organization_id, item.recording_id)
+            if run is None or context is None:
+                raise RepositoryError("recording_not_found")
+            recording, assessment = context
+            if not self._has_current_capture_consent(item.organization_id, assessment.child_id):
+                run.state = ProcessingRunState.CANCELLED.value
+                run.error_code = "consent_revoked"
+                run.updated_at = _utc_now()
+                self.session.flush()
+                return False
+            if recording.upload_state == RecordingUploadState.VERIFIED.value:
+                run.state = ProcessingRunState.SUCCEEDED.value
+                run.error_code = None
+                run.updated_at = _utc_now()
+                return True
+            if (
+                run.stage != ProcessingRunStage.UPLOAD_VERIFICATION.value
+                or run.state != ProcessingRunState.RUNNING.value
+                or recording.upload_state != RecordingUploadState.UPLOADED.value
+                or checksum != recording.declared_checksum
+            ):
+                raise RepositoryError("upload_verification_failed")
+            recording.upload_state = RecordingUploadState.VERIFIED.value
+            recording.verified_content_type = recording.declared_content_type
+            recording.verified_size_bytes = recording.declared_size_bytes
+            recording.verified_checksum = checksum
+            recording.verified_at = _utc_now()
+            recording.version += 1
+            recording.updated_at = _utc_now()
+            run.state = ProcessingRunState.SUCCEEDED.value
+            run.error_code = None
+            run.updated_at = _utc_now()
+            self._queue_quality_run(AccessScope("capture-worker", item.organization_id, "org_admin"), recording)
+            self.session.flush()
+            return True
+
+    def persist_quality_result(self, item, quality, decision) -> bool:
+        with self.session.begin_nested():
+            run = self._worker_run(item)
+            context = self._worker_recording_context(item.organization_id, item.recording_id)
+            if run is None or context is None:
+                raise RepositoryError("recording_not_found")
+            recording, assessment = context
+            if not self._has_current_capture_consent(item.organization_id, assessment.child_id):
+                run.state = ProcessingRunState.CANCELLED.value
+                run.error_code = "consent_revoked"
+                run.updated_at = _utc_now()
+                self.session.flush()
+                return False
+            if run.stage != ProcessingRunStage.QUALITY_ANALYSIS.value or run.state != ProcessingRunState.RUNNING.value:
+                raise RepositoryError("processing_run_not_found")
+            if recording.upload_state != RecordingUploadState.VERIFIED.value:
+                run.state = ProcessingRunState.CANCELLED.value
+                run.error_code = "recording_not_verified"
+                run.updated_at = _utc_now()
+                self.session.flush()
+                return False
+            existing = self.session.scalar(
+                select(RecordingQualityResultRecord).where(
+                    RecordingQualityResultRecord.organization_id == item.organization_id,
+                    RecordingQualityResultRecord.recording_id == item.recording_id,
+                )
+            )
+            values = {
+                "status": decision.status,
+                "measured_duration_seconds": quality.duration_seconds,
+                "measured_loudness_db": quality.loudness_db,
+                "measured_silence_ratio": quality.silence_ratio,
+                "measured_decodability": quality.decodability,
+                "unavailable_checks_json": list(decision.unavailable_checks),
+                "provenance": "capture-quality-v1",
+                "evaluated_at": _utc_now(),
+                "updated_at": _utc_now(),
+            }
+            if existing is None:
+                self.session.add(
+                    RecordingQualityResultRecord(
+                        recording_quality_result_id=uuid4().hex,
+                        organization_id=item.organization_id,
+                        recording_id=item.recording_id,
+                        version=1,
+                        created_at=_utc_now(),
+                        **values,
+                    )
+                )
+            else:
+                for name, value in values.items():
+                    setattr(existing, name, value)
+                existing.version += 1
+            run.state = ProcessingRunState.SUCCEEDED.value
+            run.error_code = None
+            run.updated_at = _utc_now()
+            self.session.flush()
+            return True
+
+    def complete_cleanup(self, item) -> None:
+        with self.session.begin_nested():
+            run = self._worker_run(item)
+            if run is None:
+                raise RepositoryError("processing_run_not_found")
+            if run.stage != ProcessingRunStage.CLEANUP.value:
+                raise RepositoryError("processing_run_not_found")
+            run.state = ProcessingRunState.SUCCEEDED.value
+            run.error_code = None
+            run.updated_at = _utc_now()
+            self.session.flush()
+
+    def fail_processing_run(self, item, error_code: str) -> None:
+        with self.session.begin_nested():
+            run = self._worker_run(item)
+            if run is None or run.state != ProcessingRunState.RUNNING.value:
+                return
+            run.error_code = error_code
+            run.state = (
+                ProcessingRunState.FAILED.value
+                if run.attempt_count >= 3
+                else ProcessingRunState.QUEUED.value
+            )
+            run.available_at = _utc_now()
+            run.updated_at = _utc_now()
+            self.session.flush()
+
+    def cancel_processing_run(self, item, error_code: str) -> None:
+        with self.session.begin_nested():
+            run = self._worker_run(item)
+            if run is None:
+                return
+            run.state = ProcessingRunState.CANCELLED.value
+            run.error_code = error_code
+            run.updated_at = _utc_now()
+            self.session.flush()
+
+    def _worker_run(self, item) -> ProcessingRunRecord | None:
+        return self.session.scalar(
+            select(ProcessingRunRecord)
+            .where(
+                ProcessingRunRecord.organization_id == item.organization_id,
+                ProcessingRunRecord.processing_run_id == item.run_id,
+            )
+            .with_for_update()
+        )
+
+    def _worker_recording_context(
+        self, organization_id: str, recording_id: str
+    ) -> tuple[RecordingRecord, AssessmentRecord] | None:
+        return self.session.execute(
+            select(RecordingRecord, AssessmentRecord)
+            .join(
+                AssessmentRecord,
+                and_(
+                    AssessmentRecord.organization_id == RecordingRecord.organization_id,
+                    AssessmentRecord.assessment_id == RecordingRecord.assessment_id,
+                ),
+            )
+            .where(
+                RecordingRecord.organization_id == organization_id,
+                RecordingRecord.recording_id == recording_id,
+            )
+        ).one_or_none()
+
+    def _has_current_capture_consent(self, organization_id: str, child_id: str) -> bool:
+        latest = self.session.scalar(
+            select(ConsentRecord)
+            .where(
+                ConsentRecord.organization_id == organization_id,
+                ConsentRecord.child_id == child_id,
+                ConsentRecord.purpose == ConsentPurpose.CLINICAL_ASSESSMENT.value,
+            )
+            .order_by(desc(ConsentRecord.version))
+            .limit(1)
+        )
+        return latest is not None and latest.status == ConsentStatus.ACTIVE.value
 
     def _require_active_membership(self, scope: AccessScope) -> None:
         if not self._has_active_membership(scope):

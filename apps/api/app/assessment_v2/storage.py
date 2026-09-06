@@ -131,6 +131,8 @@ class SupabaseBucket(Protocol):
 
     def remove(self, paths: list[str]) -> object: ...
 
+    def download(self, path: str) -> object: ...
+
 
 class SupabaseStorage(Protocol):
     def from_(self, bucket_name: str) -> SupabaseBucket: ...
@@ -417,6 +419,8 @@ class CaptureStorageAdapter(Protocol):
 
     def delete_object(self, object_key: str) -> StorageDeletionResult: ...
 
+    def download_object(self, object_key: str) -> bytes: ...
+
 
 class SupabasePrivateStorageAdapter:
     """A lazy, injectable adapter over a configured private Supabase bucket."""
@@ -528,6 +532,19 @@ class SupabasePrivateStorageAdapter:
         )
         _call_provider(lambda: _confirm_deleted_object(response, object_key))
         return StorageDeletionResult(deleted=True, status="deleted")
+
+    def download_object(self, object_key: str) -> bytes:
+        object_key = _validate_object_key(object_key)
+        settings = self._configured_settings()
+        payload = _call_provider(
+            lambda: _unwrap_provider_response(self._bucket(settings).download(object_key))
+        )
+        if not isinstance(payload, (bytes, bytearray)):
+            raise StorageUnavailableError()
+        maximum_size_bytes = min(settings.capture_max_upload_size_bytes, MAX_CAPTURE_UPLOAD_SIZE_BYTES)
+        if not payload or len(payload) > maximum_size_bytes:
+            raise StorageUnavailableError()
+        return bytes(payload)
 
     def _configured_settings(self) -> Settings:
         settings = self._settings or get_settings()

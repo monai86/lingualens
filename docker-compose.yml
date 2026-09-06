@@ -26,6 +26,30 @@ services:
       - PYTHONPATH=/workspace/apps/api
       - THERAPIST_APP_V2_DEBUG_FEATURE_OVERRIDE=false
 
+  capture-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    command: python -m app.assessment_v2.worker_runtime
+    environment:
+      - PYTHONPATH=/app
+      - LINGUALENS_MOCK_MODE=true
+      - LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP=false
+      - LINGUALENS_ASSESSMENT_DATABASE_URL=postgresql+psycopg://lingualens_assessment_app:local-assessment-only@postgres:5432/lingualens_assessment_v2
+      - LINGUALENS_JOB_QUEUE_MODE=redis
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "ffprobe -version >/dev/null 2>&1 && ffmpeg -version >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   frontend:
     image: node:20-slim
     working_dir: /workspace/apps/lingualens-app

@@ -58,6 +58,8 @@ class FakeBucket:
         self.create_signed_url_calls: list[tuple[str, int]] = []
         self.info_calls: list[str] = []
         self.remove_calls: list[list[str]] = []
+        self.download_calls: list[str] = []
+        self.download_response: object = FakeSdkResponse(data=b"capture")
         self.public_url_calls = 0
         self.signed_upload_response: object = {
             "signed_url": "https://project-ref.supabase.co/storage/v1/object/upload/sign/capture-private/token",
@@ -101,6 +103,11 @@ class FakeBucket:
         self.remove_calls.append(paths)
         self._raise_if_requested("remove")
         return self.remove_response
+
+    def download(self, path: str) -> object:
+        self.download_calls.append(path)
+        self._raise_if_requested("download")
+        return self.download_response
 
     def get_public_url(self, path: str) -> str:
         del path
@@ -587,3 +594,16 @@ def test_delete_object_fails_closed_when_provider_does_not_confirm_requested_obj
 
     assert raised.value.code == "storage_unavailable"
     assert OPAQUE_OBJECT_KEY not in str(raised.value)
+
+
+def test_download_object_returns_private_bytes_with_a_hard_size_bound() -> None:
+    bucket = FakeBucket()
+
+    result = _adapter(bucket).download_object(OPAQUE_OBJECT_KEY)
+
+    assert result == b"capture"
+    assert bucket.download_calls == [OPAQUE_OBJECT_KEY]
+
+    bucket.download_response = FakeSdkResponse(data=b"")
+    with pytest.raises(StorageUnavailableError):
+        _adapter(bucket).download_object(OPAQUE_OBJECT_KEY)

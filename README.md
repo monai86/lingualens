@@ -251,11 +251,13 @@ Generated folders from previous local builds may be deleted.
 ### Assessment v2 Foundation (additive)
 
 The current therapist product and existing clients continue to use `/api/v1`.
-The new assessment-centric foundation is exposed additively at `/api/v2` and
-currently supports only child, consent, and assessment lifecycle operations;
-Capture and feature-analysis slices are not mounted yet. The v2 database starts
-empty: no v1 records, audio, storage keys, or JSON data are imported or
-rewritten.
+The new assessment-centric workflow is exposed additively at `/api/v2` and
+supports child, consent, assessment lifecycle, and the Capture V2 slice:
+protocol selection, consent-gated activities, private signed uploads, durable
+processing runs, worker-owned checksum verification, and basic non-diagnostic
+audio quality states. Feature-analysis slices are not mounted yet. The v2
+database starts empty: no v1 records, audio, storage keys, or JSON data are
+imported or rewritten.
 
 The two boundaries are intentionally separate:
 
@@ -282,6 +284,15 @@ PYTHONPATH=apps/api:src python scripts/check_assessment_v2_compose.py
 The Compose runtime check creates a disposable PostgreSQL stack, verifies that
 the v2 history runs at API startup, confirms the API can create a child through
 `/api/v2`, and verifies the runtime role is `NOSUPERUSER`/`NOBYPASSRLS`.
+
+Capture processing is run from durable `processing_runs` records. The capture
+worker requires private Supabase Storage configuration for real objects and
+`ffprobe`/`ffmpeg` for quality checks; missing media tools produce an explicit
+unavailable quality state. Local Compose includes a capture-worker image with
+those tools and runs a polling worker with `python -m app.assessment_v2.worker_runtime`.
+Production must use Redis/durable queue configuration and must not fall back to
+an in-memory queue. The workflow remains research/education decision support;
+it does not diagnose ASD or expose numeric risk.
 
 Clients remain on `/api/v1` until a later migration plan. Rollback is additive:
 stop mounting `/api/v2` and disable `LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP`;

@@ -70,6 +70,7 @@ PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
 docker compose up -d postgres
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_postgres.py
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_compose.py
+PYTHONPATH=apps/api:src python -m app.assessment_v2.worker_runtime
 ```
 
 The v2 database and Alembic history are separate from `LINGUALENS_DATABASE_URL`
@@ -78,6 +79,16 @@ v1 records or storage objects are imported. Supabase Auth establishes identity,
 FastAPI owns policy, and PostgreSQL RLS is defense in depth. Clients continue
 to use `/api/v1` until a later migration plan. Rollback means unmounting `/api/v2`
 and leaving v2 startup migrations disabled; v1 data is not changed.
+
+The Capture V2 worker polls durable `processing_runs`, verifies upload bytes with
+a server-computed SHA-256, and then runs bounded `ffprobe`/`ffmpeg` quality
+checks. It never stores raw media in the database and never creates transcripts,
+features, diagnoses, or numeric ASD risk. Compose builds the capture-worker from
+the root `Dockerfile`, which includes `ffprobe` and `ffmpeg`; the service health
+check verifies both binaries. Configure private Supabase Storage and a durable
+Redis queue before any nonmock deployment. A missing media tool is reported as
+quality `unavailable`, while retryable processing failures are capped at three
+attempts.
 
 Targeted checks:
 

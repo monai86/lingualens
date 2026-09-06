@@ -3,12 +3,18 @@
 ## Unreleased
 
 ### Added
+- Added Capture V2 under `/api/v2`: immutable protocol selection, consent-gated
+  activity recordings, private Supabase TUS upload intents, durable upload and
+  quality processing runs, server-owned checksum verification, bounded
+  non-diagnostic media quality checks, tombstone-first cleanup, and a Compose
+  capture-worker runtime with `ffprobe`/`ffmpeg`. No ASD diagnosis or numeric
+  risk output is produced.
 - Added an additive assessment v2 foundation under `apps/api` with a fresh,
   separately migrated database boundary, consent-gated assessment lifecycle,
   tenant/care-team policy, atomic consent gating, safe error envelopes, and
   PostgreSQL RLS checks using a non-superuser Compose runtime role.
-  Existing `/api/v1` clients and data remain unchanged; Capture and feature
-  analysis are deferred to later slices.
+  Existing `/api/v1` clients and data remain unchanged; feature analysis remains
+  deferred to a later slice.
 - Added Visual Fundamental Pitch Contour Overlay (`self._show_pitch_overlay`) in Desktop GUI with real-time F0 curve rendering, voiced autocorrelation sampling, 250 Hz child pitch threshold guideline, and dynamic toolbar toggle (**📈 F0 Curve: ON/OFF**).
 - Added Batch Audio Ingestion Queue & Modal Runner in Desktop GUI (**📦 Batch Ingest Files...**), supporting multi-file automated ingestion into dedicated case sessions with real-time status tracking.
 - Added Longitudinal Assessment Trajectory Tracker (`subtab_longitudinal`, `tree_longitudinal`) providing cross-session developmental progress monitoring, MLU-w growth delta, vocabulary TTR trajectory, and historical session comparison.

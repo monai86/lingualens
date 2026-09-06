@@ -33,6 +33,8 @@ from app.assessment_v2.domain.models import (
 from app.core.security import CurrentUser
 from app.assessment_v2.services import AssessmentService, ClinicalPolicyError
 from app.assessment_v2.storage import StorageDeletionResult, StorageUnavailableError
+from app.assessment_v2.quality import MediaQuality
+from app.assessment_v2.worker import CaptureProcessingWorker
 
 
 @pytest.fixture
@@ -226,7 +228,7 @@ def test_verified_required_recording_needs_a_persisted_usable_quality_result_bef
             "complete_capture_if_required_usable",
         )
     )
-    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    repo, scope, child, assessment, domain = _ready_capture_repository(session)
     created = repo.create_recording_if_capture_active(
         scope,
         domain.CreateRecording(
@@ -485,3 +487,111 @@ def test_delete_persists_tombstone_before_storage_and_retries_cleanup_safely(
 
     assert service.delete_recording(created.recording.id, "0123456789abcdef0123456789abcdef") is True
     assert observed_states == ["failed", "failed"]
+    cleanup_run = session.scalar(
+        select(ProcessingRunRecord).where(
+            ProcessingRunRecord.organization_id == scope.organization_id,
+            ProcessingRunRecord.recording_id == created.recording.id,
+            ProcessingRunRecord.stage == "cleanup",
+        )
+    )
+    assert cleanup_run is not None
+    assert cleanup_run.state == "succeeded"
+
+
+def test_sqlite_worker_claims_upload_then_quality_runs_from_durable_state(
+    session: Session,
+) -> None:
+    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    payload = b"capture"
+    checksum = "sha256:" + __import__("hashlib").sha256(payload).hexdigest()
+    created = repo.create_recording_if_capture_active(
+        scope,
+        domain.CreateRecording(
+            assessment_id=assessment.id,
+            activity_code="free_play",
+            content_type="audio/webm",
+            size_bytes=len(payload),
+            checksum=checksum,
+            idempotency_key="recording-worker-01",
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    uploading = repo.mark_recording_uploading_if_capture_active(
+        scope,
+        domain.MarkRecordingUploading(
+            recording_id=created.recording.id,
+            expected_version=created.recording.version,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    repo.complete_recording_upload_if_capture_active(
+        scope,
+        domain.CompleteRecordingUpload(
+            recording_id=uploading.id,
+            expected_version=uploading.version,
+            observed_content_type="audio/webm",
+            observed_size_bytes=len(payload),
+            completed_at=datetime.now(timezone.utc),
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    class _Storage:
+        def download_object(self, object_key: str) -> bytes:
+            assert object_key.startswith("capture/")
+            return payload
+
+        def delete_object(self, object_key: str) -> None:
+            del object_key
+
+    upload_result = CaptureProcessingWorker(repo, _Storage()).run_once()
+    assert upload_result.status == "verified"
+    quality_result = CaptureProcessingWorker(
+        repo,
+        _Storage(),
+        probe=type(
+            "Probe",
+            (),
+            {"probe": lambda _self, _path: MediaQuality(135.0, -24.0, 0.1, 1.0, ())},
+        )(),
+    ).run_once()
+    assert quality_result.status == "quality_recorded"
+
+
+def test_worker_cancels_queued_capture_processing_after_consent_withdrawal(
+    session: Session,
+) -> None:
+    repo, scope, child, assessment, domain = _ready_capture_repository(session)
+    created = repo.create_recording_if_capture_active(
+        scope,
+        domain.CreateRecording(
+            assessment_id=assessment.id,
+            activity_code="free_play",
+            content_type="audio/webm",
+            size_bytes=7,
+            checksum="sha256:" + "a" * 64,
+            idempotency_key="recording-worker-consent-01",
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    repo.add_consent(
+        scope,
+        child.id,
+        domain.RecordConsent(
+            purpose=domain.ConsentPurpose.CLINICAL_ASSESSMENT,
+            scope_version="capture-v2",
+            status=domain.ConsentStatus.WITHDRAWN,
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    assert repo.claim_next_processing_run() is None
+    run = session.scalar(
+        select(ProcessingRunRecord).where(
+            ProcessingRunRecord.organization_id == scope.organization_id,
+            ProcessingRunRecord.processing_run_id == created.processing_run.id,
+        )
+    )
+    assert run is not None
+    assert run.state == "cancelled"

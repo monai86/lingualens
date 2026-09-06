@@ -237,7 +237,7 @@ def test_capture_migration_seeds_catalog_and_reverses_to_0002(monkeypatch) -> No
                 revision = connection.execute("select version_num from alembic_version").fetchone()
 
             assert CAPTURE_TABLES.issubset(tables_at_head)
-            assert revision == ("0003_capture_protocols_recordings",)
+            assert revision == ("0004_capture_cleanup_stage",)
 
             with sqlite3.connect(database_path) as connection:
                 for statement in (

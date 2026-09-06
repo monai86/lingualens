@@ -30,7 +30,7 @@ EXPECTED_TABLES = {
     "processing_runs",
     "recording_quality_results",
 }
-HEAD_REVISION = "0003_capture_protocols_recordings"
+HEAD_REVISION = "0004_capture_cleanup_stage"
 PROTOCOL_VERSION_KEY = "thai_guided_language_sample:v0"
 EXPECTED_PURPOSES = "initial,developmental_follow_up,post_intervention_follow_up,additional_evidence"
 

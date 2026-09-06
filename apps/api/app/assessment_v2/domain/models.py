@@ -45,6 +45,7 @@ class RecordingUploadState(StrEnum):
 class ProcessingRunStage(StrEnum):
     UPLOAD_VERIFICATION = "upload_verification"
     QUALITY_ANALYSIS = "quality_analysis"
+    CLEANUP = "cleanup"
 
 
 class ProcessingRunState(StrEnum):

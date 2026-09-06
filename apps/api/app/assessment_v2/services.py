@@ -98,6 +98,8 @@ class AssessmentRepository(Protocol):
         correlation_id: str,
     ) -> RecordingSnapshot | None: ...
 
+    def complete_cleanup_for_recording(self, scope: AccessScope, recording_id: str) -> None: ...
+
     def mark_recording_uploading_if_capture_active(
         self, scope: AccessScope, command: MarkRecordingUploading, correlation_id: str
     ) -> RecordingSnapshot: ...
@@ -487,6 +489,9 @@ class AssessmentService:
         if tombstone is None:
             return True
         self._storage_call(lambda: self._storage_or_error().delete_object(tombstone.object_key))
+        self._repository_call(
+            lambda: self.repository.complete_cleanup_for_recording(self.scope, tombstone.id)
+        )
         return True
 
     def complete_capture(self, assessment_id: str, correlation_id: str) -> AssessmentSnapshot:
