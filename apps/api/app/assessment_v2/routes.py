@@ -422,11 +422,7 @@ def create_upload_intent(
     return UploadIntentResponse(
         recording=_recording_response(recording),
         upload=UploadGrantResponse(
-            tus_endpoint=grant.tus_endpoint,
-            headers=dict(grant.headers),
-            upload_metadata=dict(grant.upload_metadata),
-            bucket=grant.bucket,
-            object_key=grant.object_key,
+            url=grant.url,
             expires_at=grant.expires_at,
             expires_in_seconds=grant.expires_in_seconds,
             chunk_size_bytes=grant.chunk_size_bytes,

@@ -129,6 +129,7 @@ class _Storage:
             upload_length_bytes=declared_size_bytes,
             content_type=content_type,
             upsert=False,
+            url="https://project-ref.supabase.co/storage/v1/object/upload/sign/capture-private/token",
         )
 
     def get_object_metadata(

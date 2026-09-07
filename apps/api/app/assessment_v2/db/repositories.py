@@ -63,6 +63,7 @@ from app.core.security import CurrentUser
 
 _ASSIGNABLE_MEMBERSHIP_ROLES = frozenset({"therapist", "clinical_supervisor"})
 _CAPTURE_UPLOAD_INTENT_TTL = timedelta(hours=2)
+_SYSTEM_PROCESSING_KEY_PREFIX = "__system__:"
 _AUDIT_CHANGED_FIELDS = frozenset(
     {
         "activity_code",
@@ -121,6 +122,45 @@ def _context_from_storage(value: str) -> dict[str, object]:
 class AssessmentRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    def commit_transaction(self) -> None:
+        """Durably commit an external-side-effect boundary.
+
+        Capture deletion writes a tombstone and cleanup run before asking
+        private Storage to delete bytes.  The service calls this explicit
+        boundary so a provider failure cannot roll those records back.
+        """
+
+        self.session.commit()
+
+    @staticmethod
+    def _worker_scope(organization_id: str) -> AccessScope:
+        return AccessScope("capture-worker", organization_id, "org_admin")
+
+    @staticmethod
+    def _worker_correlation(run_id: str) -> str:
+        # Processing run IDs are generated opaque 32-hex identifiers and are
+        # accepted by the correlation sanitizer, giving worker events a stable
+        # trace without putting a human-readable label in the audit field.
+        return run_id
+
+    def _audit_worker_run(
+        self,
+        run: ProcessingRunRecord,
+        action: str,
+        changed_fields: list[str],
+        *,
+        outcome: str = "success",
+    ) -> None:
+        self._append_audit(
+            self._worker_scope(run.organization_id),
+            action,
+            "processing_run",
+            run.processing_run_id,
+            self._worker_correlation(run.processing_run_id),
+            changed_fields,
+            outcome=outcome,
+        )
 
     def synchronize_principal(self, principal: CurrentUser, correlation_id: str) -> None:
         with self.session.begin_nested():
@@ -493,6 +533,9 @@ class AssessmentRepository:
     ) -> RecordingIntentSnapshot:
         """Create the pending recording and its idempotency anchor in one transaction."""
 
+        if command.idempotency_key.startswith(_SYSTEM_PROCESSING_KEY_PREFIX):
+            raise RepositoryError("idempotency_conflict")
+
         try:
             with self.session.begin_nested():
                 assessment = self._locked_assessment(scope, command.assessment_id)
@@ -703,6 +746,61 @@ class AssessmentRepository:
             scope, recording_id, correlation_id, expected_version=expected_version
         )
 
+    def expire_recording_upload_if_needed(
+        self,
+        scope: AccessScope,
+        recording_id: str,
+        expected_version: int,
+        correlation_id: str,
+    ) -> RecordingSnapshot | None:
+        """Persist expiry when a therapist retries an abandoned upload."""
+
+        with self.session.begin_nested():
+            context = self._recording_with_assessment(scope, recording_id, lock=True)
+            if context is None:
+                return None
+            recording, assessment = context
+            self._require_current_capture_consent(scope, assessment.child_id)
+            if recording.upload_state not in {
+                RecordingUploadState.PENDING.value,
+                RecordingUploadState.UPLOADING.value,
+            } or not _is_expired(recording.expires_at):
+                return self._recording_snapshot(recording)
+            if recording.version != expected_version:
+                raise RepositoryError("upload_verification_failed")
+            recording.upload_state = RecordingUploadState.EXPIRED.value
+            recording.version += 1
+            recording.updated_at = _utc_now()
+            upload_run = self.session.scalar(
+                select(ProcessingRunRecord)
+                .where(
+                    ProcessingRunRecord.organization_id == scope.organization_id,
+                    ProcessingRunRecord.recording_id == recording_id,
+                    ProcessingRunRecord.stage == ProcessingRunStage.UPLOAD_VERIFICATION.value,
+                    ProcessingRunRecord.state.in_(
+                        (ProcessingRunState.QUEUED.value, ProcessingRunState.RUNNING.value)
+                    ),
+                )
+                .with_for_update()
+            )
+            if upload_run is not None:
+                upload_run.state = ProcessingRunState.CANCELLED.value
+                upload_run.error_code = "upload_intent_expired"
+                upload_run.updated_at = _utc_now()
+                self._audit_worker_run(upload_run, "processing_run.cancelled", ["processing_state"])
+            self._queue_cleanup_run(self._worker_scope(scope.organization_id), recording)
+            self._append_audit(
+                scope,
+                "recording.upload_expired",
+                "recording",
+                recording.recording_id,
+                correlation_id,
+                ["upload_state", "version"],
+                target_version=recording.version,
+            )
+            self.session.flush()
+            return self._recording_snapshot(recording)
+
     def complete_cleanup_for_recording(self, scope: AccessScope, recording_id: str) -> None:
         with self.session.begin_nested():
             self.session.execute(
@@ -737,6 +835,8 @@ class AssessmentRepository:
                 return None
             recording, assessment = context
             self._require_current_capture_consent(scope, assessment.child_id)
+            if assessment.state == AssessmentState.FINALIZED.value:
+                raise RepositoryError("evidence_locked")
             if recording.upload_state == RecordingUploadState.FAILED.value:
                 self._queue_cleanup_run(scope, recording)
                 return self._recording_snapshot(recording)
@@ -785,6 +885,50 @@ class AssessmentRepository:
                     updated_at=_utc_now(),
                 )
             )
+            quality = self.session.scalar(
+                select(RecordingQualityResultRecord)
+                .where(
+                    RecordingQualityResultRecord.organization_id == scope.organization_id,
+                    RecordingQualityResultRecord.recording_id == recording_id,
+                )
+                .with_for_update()
+            )
+            if quality is not None:
+                quality.status = RecordingQualityStatus.UNAVAILABLE.value
+                quality.measured_duration_seconds = None
+                quality.measured_loudness_db = None
+                quality.measured_silence_ratio = None
+                quality.measured_decodability = None
+                quality.unavailable_checks_json = ["recording_deleted"]
+                quality.evaluated_at = _utc_now()
+                quality.version += 1
+                quality.updated_at = _utc_now()
+                self._append_audit(
+                    scope,
+                    "recording.quality_invalidated",
+                    "recording_quality_result",
+                    quality.recording_quality_result_id,
+                    correlation_id,
+                    ["quality_status", "version"],
+                    target_version=quality.version,
+                )
+            if assessment.state in {
+                AssessmentState.PROCESSING.value,
+                AssessmentState.REVIEW_REQUIRED.value,
+                AssessmentState.READY_FOR_CLINICIAN.value,
+            }:
+                assessment.state = AssessmentState.CAPTURING.value
+                assessment.version += 1
+                assessment.updated_at = _utc_now()
+                self._append_audit(
+                    scope,
+                    "assessment.evidence_invalidated",
+                    "assessment",
+                    assessment.assessment_id,
+                    correlation_id,
+                    ["state", "version"],
+                    target_version=assessment.version,
+                )
             self._queue_cleanup_run(scope, recording)
             updated = self.session.scalar(
                 select(RecordingRecord).where(
@@ -1187,7 +1331,7 @@ class AssessmentRepository:
             recording_id=recording.recording_id,
             stage=ProcessingRunStage.QUALITY_ANALYSIS.value,
             state=ProcessingRunState.QUEUED.value,
-            idempotency_key=f"quality-{recording.recording_id}",
+            idempotency_key=f"{_SYSTEM_PROCESSING_KEY_PREFIX}quality:{recording.recording_id}",
             attempt_count=0,
             available_at=now,
             created_at=now,
@@ -1226,7 +1370,7 @@ class AssessmentRepository:
             recording_id=recording.recording_id,
             stage=ProcessingRunStage.CLEANUP.value,
             state=ProcessingRunState.QUEUED.value,
-            idempotency_key=f"cleanup-{recording.recording_id}",
+            idempotency_key=f"{_SYSTEM_PROCESSING_KEY_PREFIX}cleanup:{recording.recording_id}",
             attempt_count=0,
             available_at=now,
             created_at=now,
@@ -1333,21 +1477,28 @@ class AssessmentRepository:
         return updated
 
     def _has_active_membership(self, scope: AccessScope) -> bool:
-        return (
-            self.session.scalar(
-                select(OrganizationMembershipRecord.membership_id)
-                .join(
-                    OrganizationRecord,
-                    OrganizationRecord.organization_id == OrganizationMembershipRecord.organization_id,
-                )
-                .where(
-                    OrganizationMembershipRecord.organization_id == scope.organization_id,
-                    OrganizationMembershipRecord.user_id == scope.user_id,
-                    OrganizationMembershipRecord.active.is_(True),
-                    OrganizationRecord.active.is_(True),
-                )
+        return self.active_membership_role(scope) is not None
+
+    def active_membership_role(self, scope: AccessScope) -> str | None:
+        """Return the persisted role for the active tenant membership.
+
+        JWT role claims are an authentication hint, not the authorization
+        source of truth. Callers must use this value for the request scope so
+        a stale privileged claim cannot widen care-team access.
+        """
+
+        return self.session.scalar(
+            select(OrganizationMembershipRecord.role)
+            .join(
+                OrganizationRecord,
+                OrganizationRecord.organization_id == OrganizationMembershipRecord.organization_id,
             )
-            is not None
+            .where(
+                OrganizationMembershipRecord.organization_id == scope.organization_id,
+                OrganizationMembershipRecord.user_id == scope.user_id,
+                OrganizationMembershipRecord.active.is_(True),
+                OrganizationRecord.active.is_(True),
+            )
         )
 
     def has_active_membership(self, scope: AccessScope) -> bool:
@@ -1401,7 +1552,10 @@ class AssessmentRepository:
                             ProcessingRunRecord.stage != ProcessingRunStage.UPLOAD_VERIFICATION.value,
                             and_(
                                 ProcessingRunRecord.stage == ProcessingRunStage.UPLOAD_VERIFICATION.value,
-                                RecordingRecord.upload_state == RecordingUploadState.UPLOADED.value,
+                                or_(
+                                    RecordingRecord.upload_state == RecordingUploadState.UPLOADED.value,
+                                    RecordingRecord.expires_at <= _utc_now(),
+                                ),
                             ),
                             latest_consent_status.is_(None),
                             latest_consent_status != ConsentStatus.ACTIVE.value,
@@ -1418,20 +1572,51 @@ class AssessmentRepository:
                     run.state = ProcessingRunState.FAILED.value
                     run.error_code = "recording_not_found"
                     run.updated_at = _utc_now()
+                    self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
                     continue
                 recording, assessment = context
                 stage = ProcessingRunStage(run.stage)
+                if (
+                    stage is ProcessingRunStage.UPLOAD_VERIFICATION
+                    and recording.upload_state
+                    in {
+                        RecordingUploadState.PENDING.value,
+                        RecordingUploadState.UPLOADING.value,
+                    }
+                    and _is_expired(recording.expires_at)
+                ):
+                    recording.upload_state = RecordingUploadState.EXPIRED.value
+                    recording.version += 1
+                    recording.updated_at = _utc_now()
+                    run.state = ProcessingRunState.CANCELLED.value
+                    run.error_code = "upload_intent_expired"
+                    run.updated_at = _utc_now()
+                    self._queue_cleanup_run(self._worker_scope(run.organization_id), recording)
+                    self._append_audit(
+                        self._worker_scope(run.organization_id),
+                        "recording.upload_expired",
+                        "recording",
+                        recording.recording_id,
+                        f"worker:{run.processing_run_id}",
+                        ["upload_state", "version"],
+                        target_version=recording.version,
+                    )
+                    self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
+                    self.session.flush()
+                    continue
                 if stage is not ProcessingRunStage.CLEANUP and not self._has_current_capture_consent(
                     run.organization_id, assessment.child_id
                 ):
                     run.state = ProcessingRunState.CANCELLED.value
                     run.error_code = "consent_revoked"
                     run.updated_at = _utc_now()
+                    self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
                     continue
                 if run.attempt_count >= 3:
                     run.state = ProcessingRunState.FAILED.value
                     run.error_code = "retry_limit_exceeded"
                     run.updated_at = _utc_now()
+                    self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
                     continue
                 activity = None
                 if stage is not ProcessingRunStage.CLEANUP:
@@ -1446,15 +1631,18 @@ class AssessmentRepository:
                         run.state = ProcessingRunState.FAILED.value
                         run.error_code = "recording_activity_invalid"
                         run.updated_at = _utc_now()
+                        self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
                         continue
                 if stage is ProcessingRunStage.QUALITY_ANALYSIS and recording.upload_state != RecordingUploadState.VERIFIED.value:
                     run.state = ProcessingRunState.FAILED.value
                     run.error_code = "recording_not_verified"
                     run.updated_at = _utc_now()
+                    self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
                     continue
                 run.state = ProcessingRunState.RUNNING.value
                 run.attempt_count += 1
                 run.updated_at = _utc_now()
+                self._audit_worker_run(run, "processing_run.claimed", ["processing_state"])
                 self.session.flush()
                 return CaptureWorkItem(
                     run_id=run.processing_run_id,
@@ -1481,12 +1669,14 @@ class AssessmentRepository:
                 run.state = ProcessingRunState.CANCELLED.value
                 run.error_code = "consent_revoked"
                 run.updated_at = _utc_now()
+                self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
                 self.session.flush()
                 return False
             if recording.upload_state == RecordingUploadState.VERIFIED.value:
                 run.state = ProcessingRunState.SUCCEEDED.value
                 run.error_code = None
                 run.updated_at = _utc_now()
+                self._audit_worker_run(run, "processing_run.succeeded", ["processing_state"])
                 return True
             if (
                 run.stage != ProcessingRunStage.UPLOAD_VERIFICATION.value
@@ -1494,6 +1684,15 @@ class AssessmentRepository:
                 or recording.upload_state != RecordingUploadState.UPLOADED.value
                 or checksum != recording.declared_checksum
             ):
+                self._append_audit(
+                    self._worker_scope(item.organization_id),
+                    "processing_run.verification_rejected",
+                    "processing_run",
+                    run.processing_run_id,
+                    self._worker_correlation(run.processing_run_id),
+                    [],
+                    outcome="failure",
+                )
                 raise RepositoryError("upload_verification_failed")
             recording.upload_state = RecordingUploadState.VERIFIED.value
             recording.verified_content_type = recording.declared_content_type
@@ -1505,7 +1704,18 @@ class AssessmentRepository:
             run.state = ProcessingRunState.SUCCEEDED.value
             run.error_code = None
             run.updated_at = _utc_now()
-            self._queue_quality_run(AccessScope("capture-worker", item.organization_id, "org_admin"), recording)
+            quality_run = self._queue_quality_run(self._worker_scope(item.organization_id), recording)
+            self._append_audit(
+                self._worker_scope(item.organization_id),
+                "recording.upload_verified",
+                "recording",
+                recording.recording_id,
+                self._worker_correlation(run.processing_run_id),
+                ["upload_state", "verified_at", "version"],
+                target_version=recording.version,
+            )
+            self._audit_worker_run(run, "processing_run.succeeded", ["processing_state"])
+            self._audit_worker_run(quality_run, "processing_run.queued", ["processing_state"])
             self.session.flush()
             return True
 
@@ -1520,6 +1730,7 @@ class AssessmentRepository:
                 run.state = ProcessingRunState.CANCELLED.value
                 run.error_code = "consent_revoked"
                 run.updated_at = _utc_now()
+                self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
                 self.session.flush()
                 return False
             if run.stage != ProcessingRunStage.QUALITY_ANALYSIS.value or run.state != ProcessingRunState.RUNNING.value:
@@ -1528,6 +1739,7 @@ class AssessmentRepository:
                 run.state = ProcessingRunState.CANCELLED.value
                 run.error_code = "recording_not_verified"
                 run.updated_at = _utc_now()
+                self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
                 self.session.flush()
                 return False
             existing = self.session.scalar(
@@ -1548,23 +1760,33 @@ class AssessmentRepository:
                 "updated_at": _utc_now(),
             }
             if existing is None:
-                self.session.add(
-                    RecordingQualityResultRecord(
-                        recording_quality_result_id=uuid4().hex,
-                        organization_id=item.organization_id,
-                        recording_id=item.recording_id,
-                        version=1,
-                        created_at=_utc_now(),
-                        **values,
-                    )
+                quality_record = RecordingQualityResultRecord(
+                    recording_quality_result_id=uuid4().hex,
+                    organization_id=item.organization_id,
+                    recording_id=item.recording_id,
+                    version=1,
+                    created_at=_utc_now(),
+                    **values,
                 )
+                self.session.add(quality_record)
             else:
+                quality_record = existing
                 for name, value in values.items():
                     setattr(existing, name, value)
                 existing.version += 1
             run.state = ProcessingRunState.SUCCEEDED.value
             run.error_code = None
             run.updated_at = _utc_now()
+            self._append_audit(
+                self._worker_scope(item.organization_id),
+                "recording.quality_recorded",
+                "recording_quality_result",
+                quality_record.recording_quality_result_id,
+                self._worker_correlation(run.processing_run_id),
+                ["quality_status", "version"],
+                target_version=quality_record.version,
+            )
+            self._audit_worker_run(run, "processing_run.succeeded", ["processing_state"])
             self.session.flush()
             return True
 
@@ -1578,6 +1800,7 @@ class AssessmentRepository:
             run.state = ProcessingRunState.SUCCEEDED.value
             run.error_code = None
             run.updated_at = _utc_now()
+            self._audit_worker_run(run, "processing_run.succeeded", ["processing_state"])
             self.session.flush()
 
     def fail_processing_run(self, item, error_code: str) -> None:
@@ -1593,6 +1816,11 @@ class AssessmentRepository:
             )
             run.available_at = _utc_now()
             run.updated_at = _utc_now()
+            self._audit_worker_run(
+                run,
+                "processing_run.failed" if run.state == ProcessingRunState.FAILED.value else "processing_run.retry_scheduled",
+                ["processing_state"],
+            )
             self.session.flush()
 
     def cancel_processing_run(self, item, error_code: str) -> None:
@@ -1603,6 +1831,7 @@ class AssessmentRepository:
             run.state = ProcessingRunState.CANCELLED.value
             run.error_code = error_code
             run.updated_at = _utc_now()
+            self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
             self.session.flush()
 
     def _worker_run(self, item) -> ProcessingRunRecord | None:
@@ -1775,6 +2004,7 @@ class AssessmentRepository:
         changed_fields: list[str],
         *,
         target_version: int | None = None,
+        outcome: str = "success",
     ) -> None:
         safe_changed_fields = [
             field for field in changed_fields if field in _AUDIT_CHANGED_FIELDS
@@ -1787,7 +2017,7 @@ class AssessmentRepository:
                 action=action,
                 target_type=target_type,
                 target_id=target_id,
-                outcome="success",
+                outcome=outcome,
                 correlation_id=sanitize_correlation_id(correlation_id),
                 target_version=target_version,
                 metadata_json={"changed_fields": safe_changed_fields},

@@ -181,6 +181,7 @@ class Settings(BaseModel):
     supabase_storage_signed_download_ttl_seconds: int = DEFAULT_SUPABASE_STORAGE_SIGNED_DOWNLOAD_TTL_SECONDS
     supabase_storage_tus_chunk_size_bytes: int = SUPABASE_TUS_CHUNK_SIZE_BYTES
     capture_max_upload_size_bytes: int = DEFAULT_CAPTURE_MAX_UPLOAD_SIZE_BYTES
+    capture_worker_organization_ids: str = ""
     cors_allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     csrf_origin_guard_enabled: bool = True
     ai_report_drafting_enabled: bool = False
@@ -428,6 +429,9 @@ class Settings(BaseModel):
                     "THERAPIST_APP_V2_SUPABASE_STORAGE_MAX_UPLOAD_SIZE_BYTES",
                     str(DEFAULT_CAPTURE_MAX_UPLOAD_SIZE_BYTES),
                 )
+            ),
+            capture_worker_organization_ids=os.getenv(
+                "LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS", ""
             ),
             cors_allowed_origins=getenv_compat(
                 "LINGUALENS_CORS_ALLOWED_ORIGINS",

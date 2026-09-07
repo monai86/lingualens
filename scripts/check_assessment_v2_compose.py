@@ -78,6 +78,36 @@ def _assert_runtime_role() -> None:
         raise RuntimeError("Compose assessment runtime role must not bypass PostgreSQL RLS.")
 
 
+def _seed_probe_membership() -> None:
+    """Provision only the synthetic membership needed by the mock API probe."""
+
+    with psycopg.connect(
+        "postgresql://lingualens_assessment_app:local-assessment-only"
+        f"@127.0.0.1:{DATABASE_PORT}/lingualens_assessment_v2"
+    ) as connection:
+        connection.execute(
+            "INSERT INTO organizations (organization_id, display_label, active) "
+            "VALUES (%s, %s, true) ON CONFLICT (organization_id) DO NOTHING",
+            ("compose-check-org", "Synthetic Compose Check Organization"),
+        )
+        connection.execute(
+            "INSERT INTO user_profiles (user_id, display_label) VALUES (%s, %s) "
+            "ON CONFLICT (user_id) DO NOTHING",
+            ("compose-check-therapist", "Synthetic Compose Check Therapist"),
+        )
+        connection.execute(
+            "INSERT INTO organization_memberships "
+            "(membership_id, organization_id, user_id, role, active) "
+            "VALUES (%s, %s, %s, %s, true) ON CONFLICT (organization_id, user_id) DO NOTHING",
+            (
+                "compose-check-membership",
+                "compose-check-org",
+                "compose-check-therapist",
+                "therapist",
+            ),
+        )
+
+
 def _probe_v2() -> None:
     request = Request(
         f"http://127.0.0.1:{API_PORT}/api/v2/children",
@@ -138,6 +168,7 @@ def main() -> int:
         _assert_runtime_role()
         api_process = _start_host_api()
         _wait_for_api()
+        _seed_probe_membership()
         _probe_v2()
         print("assessment-v2 Compose runtime check passed")
         return 0

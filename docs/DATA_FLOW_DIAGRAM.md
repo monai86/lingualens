@@ -45,7 +45,7 @@ FastAPI
      allowed media type, retention policy
   -> Supabase Storage: create short-lived signed upload URL for scoped path
   -> Postgres: persist upload intent and audit event
-  <- Browser: signed upload URL and required constraints
+  <- Browser: short-lived signed upload URL and required constraints only
 ```
 
 No audio bytes are sent to FastAPI during intent creation.
@@ -60,7 +60,9 @@ Supabase Storage
 ```
 
 The signed URL must be short-lived, object-path scoped, and bound to the upload
-intent constraints. Permanent storage credentials never leave the server.
+intent constraints. The API does not return bucket names, permanent object
+keys, or provider TUS metadata to the browser. Permanent storage credentials
+never leave the server.
 
 ## 4. Completion Verification Flow
 

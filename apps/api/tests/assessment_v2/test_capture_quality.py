@@ -88,6 +88,9 @@ def test_subprocess_probe_parses_only_bounded_commands() -> None:
     assert result.loudness_db == -24.0
     assert result.silence_ratio == pytest.approx(10.0 / 135.25)
     assert result.decodability == 1.0
+    ffmpeg_commands = [command for command in calls if command[0] == "ffmpeg"]
+    assert ffmpeg_commands
+    assert all(command[command.index("-v") + 1] == "info" for command in ffmpeg_commands)
     assert all("/tmp/opaque-media" in command for command in calls)
     assert all(";" not in part and "&&" not in part for command in calls for part in command)
 

@@ -195,7 +195,7 @@ def test_capture_requests_are_strict_and_bound_upload_metadata() -> None:
     request = RecordingCreateRequest(
         content_type="audio/webm",
         size_bytes=456,
-        checksum="sha256:0123456789abcdef0123456789abcdef",
+        checksum="sha256:" + "0123456789abcdef" * 4,
     )
 
     assert request.content_type == "audio/webm"
@@ -211,7 +211,7 @@ def test_capture_requests_are_strict_and_bound_upload_metadata() -> None:
             RecordingCreateRequest(
                 content_type="audio/webm",
                 size_bytes=456,
-                checksum="sha256:0123456789abcdef0123456789abcdef",
+                checksum="sha256:" + "0123456789abcdef" * 4,
                 **unsafe_field,
             )
 
@@ -222,6 +222,18 @@ def test_capture_requests_are_strict_and_bound_upload_metadata() -> None:
             content_type="audio/webm",
             size_bytes=456,
             checksum="checksum with whitespace",
+        )
+    with pytest.raises(ValidationError):
+        RecordingCreateRequest(
+            content_type="audio/flac",
+            size_bytes=456,
+            checksum="sha256:" + "0" * 64,
+        )
+    with pytest.raises(ValidationError):
+        RecordingCreateRequest(
+            content_type="audio/webm",
+            size_bytes=456,
+            checksum="sha256:" + "0" * 32,
         )
     with pytest.raises(ValidationError):
         ProtocolSelectionRequest(unexpected="input")

@@ -66,15 +66,21 @@ def get_assessment_service(
             "This role is not permitted for the clinical workflow.",
         )
     repository.synchronize_principal(user, correlation_id)
-    scope = AccessScope(
+    identity_scope = AccessScope(
         user_id=user.user_id,
         organization_id=user.organization_id,
         role=user.role,
     )
-    if not repository.has_active_membership(scope):
+    persisted_role = repository.active_membership_role(identity_scope)
+    if persisted_role is None:
         raise ClinicalPolicyError(
             "inactive_membership",
             403,
             "Active organization membership is required.",
         )
-    return AssessmentService(repository, user, storage=storage)
+    return AssessmentService(
+        repository,
+        user,
+        storage=storage,
+        authorized_role=persisted_role,
+    )

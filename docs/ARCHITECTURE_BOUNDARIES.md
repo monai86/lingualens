@@ -112,4 +112,6 @@ tests/demo runs and Redis for a managed worker deployment. Capture V2 is a
 separate database-backed worker: it claims `processing_runs` directly with
 row-level locking and does not use the legacy Redis contract. A dedicated
 Capture V2 queue adapter can be added only after its enqueue, lease, retry, and
-acknowledgement semantics are implemented and tested.
+acknowledgement semantics are implemented and tested. The worker must poll
+through a tenant allowlist (`LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS`) so
+PostgreSQL RLS is never bypassed by an unscoped tenant-discovery query.

@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from app.assessment_v2.db.base import AssessmentBase
 from app.assessment_v2.db.models import (
     AssessmentRecord,
+    AuditEventRecord,
     OrganizationMembershipRecord,
     ProcessingRunRecord,
     ProtocolActivityRecord,
@@ -34,7 +35,7 @@ from app.assessment_v2.domain.models import (
 from app.core.security import CurrentUser
 from app.assessment_v2.services import AssessmentService, ClinicalPolicyError
 from app.assessment_v2.storage import StorageDeletionResult, StorageUnavailableError
-from app.assessment_v2.quality import MediaQuality
+from app.assessment_v2.quality import MediaQuality, QualityDecision
 from app.assessment_v2.worker import CaptureProcessingWorker
 
 
@@ -243,6 +244,157 @@ def test_worker_does_not_claim_upload_verification_before_upload_completion(sess
     assert stored_run.attempt_count == 0
 
 
+def test_worker_expires_abandoned_uploads_and_queues_cleanup(session: Session) -> None:
+    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    created = repo.create_recording_if_capture_active(
+        scope,
+        domain.CreateRecording(
+            assessment_id=assessment.id,
+            activity_code="free_play",
+            content_type="audio/webm",
+            size_bytes=456,
+            checksum="sha256:" + "0" * 64,
+            idempotency_key="recording-expired-upload-01",
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    recording = session.scalar(
+        select(RecordingRecord).where(RecordingRecord.recording_id == created.recording.id)
+    )
+    assert recording is not None
+    recording.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    session.flush()
+
+    cleanup_item = repo.claim_next_processing_run()
+
+    assert recording.upload_state == "expired"
+    cleanup = session.scalar(
+        select(ProcessingRunRecord).where(
+            ProcessingRunRecord.recording_id == recording.recording_id,
+            ProcessingRunRecord.stage == "cleanup",
+        )
+    )
+    assert cleanup is not None
+    # The worker claims the newly queued cleanup run in the same polling
+    # cycle, so the durable record is already running when this call returns.
+    assert cleanup.state == ProcessingRunState.RUNNING.value
+    assert cleanup_item is not None
+    assert cleanup_item.stage.value == "cleanup"
+
+
+def test_upload_intent_expiry_is_persisted_when_the_therapist_retries(session: Session) -> None:
+    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    created = repo.create_recording_if_capture_active(
+        scope,
+        domain.CreateRecording(
+            assessment_id=assessment.id,
+            activity_code="free_play",
+            content_type="audio/webm",
+            size_bytes=456,
+            checksum="sha256:0123456789abcdef0123456789abcdef",
+            idempotency_key="recording-expiry-api-01",
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    recording = session.scalar(
+        select(RecordingRecord).where(RecordingRecord.recording_id == created.recording.id)
+    )
+    assert recording is not None
+    recording.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    session.flush()
+    service = AssessmentService(
+        repo,
+        CurrentUser(
+            user_id=scope.user_id,
+            organization_id=scope.organization_id,
+            role=scope.role,
+            display_name="Synthetic Therapist",
+        ),
+    )
+
+    with pytest.raises(ClinicalPolicyError) as raised:
+        service.create_upload_intent(created.recording.id, "0123456789abcdef0123456789abcdef")
+
+    assert raised.value.code == "upload_intent_expired"
+    assert recording.upload_state == "expired"
+    cleanup = session.scalar(
+        select(ProcessingRunRecord).where(
+            ProcessingRunRecord.recording_id == recording.recording_id,
+            ProcessingRunRecord.stage == "cleanup",
+        )
+    )
+    assert cleanup is not None
+
+
+def test_worker_transitions_emit_auditable_events(session: Session) -> None:
+    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    created = repo.create_recording_if_capture_active(
+        scope,
+        domain.CreateRecording(
+            assessment_id=assessment.id,
+            activity_code="free_play",
+            content_type="audio/webm",
+            size_bytes=456,
+            checksum="sha256:0123456789abcdef0123456789abcdef",
+            idempotency_key="recording-worker-audit-01",
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    uploading = repo.mark_recording_uploading_if_capture_active(
+        scope,
+        domain.MarkRecordingUploading(
+            recording_id=created.recording.id,
+            expected_version=created.recording.version,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    uploaded = repo.complete_recording_upload_if_capture_active(
+        scope,
+        domain.CompleteRecordingUpload(
+            recording_id=uploading.id,
+            expected_version=uploading.version,
+            observed_content_type="audio/webm",
+            observed_size_bytes=456,
+            completed_at=datetime.now(timezone.utc),
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    upload_item = repo.claim_next_processing_run()
+    assert upload_item is not None
+    assert repo.verify_recording_upload_worker(
+        upload_item,
+        "sha256:0123456789abcdef0123456789abcdef",
+    ) is True
+    quality_item = repo.claim_next_processing_run()
+    assert quality_item is not None
+    assert repo.persist_quality_result(
+        quality_item,
+        MediaQuality(135.0, -24.0, 0.1, 1.0, ()),
+        QualityDecision(status="usable", unavailable_checks=()),
+    ) is True
+
+    events = session.scalars(
+        select(AuditEventRecord)
+        .where(
+            AuditEventRecord.organization_id == scope.organization_id,
+            AuditEventRecord.actor_user_id == "capture-worker",
+        )
+        .order_by(AuditEventRecord.occurred_at, AuditEventRecord.audit_event_id)
+    ).all()
+    actions = {event.action for event in events}
+    assert {
+        "processing_run.claimed",
+        "processing_run.succeeded",
+        "processing_run.queued",
+        "recording.upload_verified",
+        "recording.quality_recorded",
+    }.issubset(actions)
+    assert all(len(event.correlation_id) == 32 for event in events)
+    assert all(int(event.correlation_id, 16) >= 0 for event in events)
+
+
 def test_verified_required_recording_needs_a_persisted_usable_quality_result_before_capture_completion(
     session: Session,
 ) -> None:
@@ -414,6 +566,12 @@ def test_recording_quality_processing_and_delete_remain_tenant_scoped_and_idempo
             version=1,
         )
     )
+    stored_assessment = session.scalar(
+        select(AssessmentRecord).where(AssessmentRecord.assessment_id == assessment.id)
+    )
+    assert stored_assessment is not None
+    stored_assessment.state = AssessmentState.PROCESSING.value
+    stored_assessment.version += 1
     session.flush()
 
     quality = repo.get_recording_quality_if_consented(scope, created.recording.id)
@@ -430,8 +588,17 @@ def test_recording_quality_processing_and_delete_remain_tenant_scoped_and_idempo
         deleted.version,
         correlation_id="0123456789abcdef0123456789abcdef",
     )
+    invalidated_quality = repo.get_recording_quality_if_consented(scope, created.recording.id)
+    invalidated_assessment = session.scalar(
+        select(AssessmentRecord).where(AssessmentRecord.assessment_id == assessment.id)
+    )
 
     assert quality is not None and quality.status.value == "usable"
+    assert invalidated_quality is not None
+    assert invalidated_quality.status.value == "unavailable"
+    assert invalidated_quality.unavailable_checks == ("recording_deleted",)
+    assert invalidated_assessment is not None
+    assert invalidated_assessment.state == AssessmentState.CAPTURING.value
     assert run is not None and run.id == created.processing_run.id
     assert deleted.upload_state.value == "failed"
     assert deleted_again.upload_state.value == "failed"
@@ -495,6 +662,9 @@ def test_delete_persists_tombstone_before_storage_and_retries_cleanup_safely(
     with pytest.raises(ClinicalPolicyError) as failed_cleanup:
         service.delete_recording(created.recording.id, "0123456789abcdef0123456789abcdef")
 
+    # Simulate the request transaction being rolled back after Storage fails.
+    # The tombstone must already be durable before that rollback can happen.
+    session.rollback()
     tombstone = session.scalar(
         select(RecordingRecord).where(
             RecordingRecord.organization_id == scope.organization_id,
@@ -584,6 +754,67 @@ def test_sqlite_worker_claims_upload_then_quality_runs_from_durable_state(
         )(),
     ).run_once()
     assert quality_result.status == "quality_recorded"
+
+
+def test_client_idempotency_key_cannot_collide_with_worker_quality_key(
+    session: Session,
+) -> None:
+    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    payload = b"capture"
+    checksum = "sha256:" + __import__("hashlib").sha256(payload).hexdigest()
+    first = repo.create_recording_if_capture_active(
+        scope,
+        domain.CreateRecording(
+            assessment_id=assessment.id,
+            activity_code="free_play",
+            content_type="audio/webm",
+            size_bytes=len(payload),
+            checksum=checksum,
+            idempotency_key="recording-worker-collision-source",
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    repo.mark_recording_uploading_if_capture_active(
+        scope,
+        domain.MarkRecordingUploading(
+            recording_id=first.recording.id,
+            expected_version=first.recording.version,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    repo.complete_recording_upload_if_capture_active(
+        scope,
+        domain.CompleteRecordingUpload(
+            recording_id=first.recording.id,
+            expected_version=2,
+            observed_content_type="audio/webm",
+            observed_size_bytes=len(payload),
+            completed_at=datetime.now(timezone.utc),
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    repo.create_recording_if_capture_active(
+        scope,
+        domain.CreateRecording(
+            assessment_id=assessment.id,
+            activity_code="shared_book",
+            content_type="audio/webm",
+            size_bytes=len(payload),
+            checksum=checksum,
+            idempotency_key=f"quality-{first.recording.id}",
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    class _Storage:
+        def download_object(self, object_key: str) -> bytes:
+            del object_key
+            return payload
+
+    result = CaptureProcessingWorker(repo, _Storage()).run_once()
+
+    assert result.status == "verified"
 
 
 def test_worker_cancels_queued_capture_processing_after_consent_withdrawal(

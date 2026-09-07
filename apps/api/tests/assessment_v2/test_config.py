@@ -80,6 +80,7 @@ def test_capture_supabase_storage_configuration_uses_server_environment_variable
     monkeypatch.setenv("LINGUALENS_SUPABASE_STORAGE_SIGNED_DOWNLOAD_TTL_SECONDS", "900")
     monkeypatch.setenv("LINGUALENS_SUPABASE_STORAGE_TUS_CHUNK_SIZE_BYTES", str(6 * 1024 * 1024))
     monkeypatch.setenv("LINGUALENS_SUPABASE_STORAGE_MAX_UPLOAD_SIZE_BYTES", str(250 * 1024 * 1024))
+    monkeypatch.setenv("LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS", "org_alpha,org_beta")
 
     settings = Settings.from_env()
 
@@ -91,6 +92,7 @@ def test_capture_supabase_storage_configuration_uses_server_environment_variable
     assert settings.supabase_storage_signed_download_ttl_seconds == 900
     assert settings.supabase_storage_tus_chunk_size_bytes == 6 * 1024 * 1024
     assert settings.capture_max_upload_size_bytes == 250 * 1024 * 1024
+    assert settings.capture_worker_organization_ids == "org_alpha,org_beta"
 
 
 @pytest.mark.parametrize(

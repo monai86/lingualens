@@ -155,8 +155,9 @@ persistence layer หลักของ lingualens.
     `docs/DATA_FLOW_DIAGRAM.md`, and
     `docs/DATA_CLASSIFICATION_INVENTORY.md`.
 22. Browser/PWA clients may use Supabase Auth and FastAPI-issued short-lived
-    signed storage URLs only; all clinical reads/writes and workflow transitions
-    must pass through `apps/api`.
+    signed storage URLs only; upload responses must not expose permanent bucket,
+    object-key, or provider TUS metadata; all clinical reads/writes and workflow
+    transitions must pass through `apps/api`.
 23. lingualens is responsive web/PWA only. Do not recreate the removed
     Vite/Capacitor app or add a native shell without a new accepted ADR.
 24. One-day production-like pilot scope is frozen in

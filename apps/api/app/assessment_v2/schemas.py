@@ -18,6 +18,7 @@ from app.assessment_v2.domain.models import (
     RecordingQualityStatus,
     RecordingUploadState,
 )
+from app.assessment_v2.storage import CAPTURE_ALLOWED_MIME_TYPES
 from app.core.config import MAX_CAPTURE_UPLOAD_SIZE_BYTES
 
 
@@ -25,7 +26,7 @@ _LANGUAGE_CODE = re.compile(r"^[A-Za-z]{2}$")
 _CAPTURE_CONTENT_TYPE = re.compile(
     r"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+(?:;[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+-]+)*$"
 )
-_CHECKSUM = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
+_CHECKSUM = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def _normalize_language_context(value: Any) -> dict[str, object]:
@@ -148,7 +149,7 @@ class RecordingCreateRequest(_StrictModel):
     @classmethod
     def normalize_content_type(cls, value: str) -> str:
         normalized = value.lower()
-        if _CAPTURE_CONTENT_TYPE.fullmatch(normalized) is None:
+        if _CAPTURE_CONTENT_TYPE.fullmatch(normalized) is None or normalized not in CAPTURE_ALLOWED_MIME_TYPES:
             raise ValueError("content_type must be a media type")
         return normalized
 
@@ -199,11 +200,10 @@ class CaptureStateResponse(_StrictModel):
 
 
 class UploadGrantResponse(_StrictModel):
-    tus_endpoint: str = Field(min_length=1, max_length=2048)
-    headers: dict[str, str]
-    upload_metadata: dict[str, str]
-    bucket: str = Field(min_length=1, max_length=128)
-    object_key: str = Field(min_length=1, max_length=512)
+    # The browser receives only a short-lived provider URL. Permanent bucket
+    # and object locators remain server-side so API responses cannot become a
+    # storage inventory or a reusable path oracle.
+    url: str = Field(min_length=1, max_length=4096)
     expires_at: datetime
     expires_in_seconds: int = Field(strict=True, ge=1, le=7200)
     chunk_size_bytes: int = Field(strict=True, ge=1, le=MAX_CAPTURE_UPLOAD_SIZE_BYTES)

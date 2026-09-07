@@ -204,6 +204,7 @@ def real_capture_client() -> Iterator[TestClient]:
                     upload_length_bytes=declared_size_bytes,
                     content_type=content_type,
                     upsert=False,
+                    url="https://storage.invalid/object/upload/sign/capture-private/token",
                 )
 
         app.dependency_overrides[get_current_user] = lambda: principal
@@ -227,7 +228,11 @@ def test_real_dependency_stack_upload_intent_returns_safe_metadata(
     assert response.status_code == 200
     body = response.json()
     assert body["recording"]["upload_state"] == "uploading"
-    assert body["upload"]["bucket"] == "capture-private"
-    assert body["upload"]["object_key"].startswith("capture/")
+    assert body["upload"]["url"].startswith("https://storage.invalid/")
+    assert "bucket" not in body["upload"]
+    assert "object_key" not in body["upload"]
+    assert "upload_metadata" not in body["upload"]
+    assert "Upload-Metadata" not in response.text
+    assert "capture/" not in response.text
     assert "declared_checksum" not in body["recording"]
     assert "sha256:0123456789abcdef0123456789abcdef" not in response.text

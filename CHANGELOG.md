@@ -9,6 +9,10 @@
   non-diagnostic media quality checks, tombstone-first cleanup, and a Compose
   capture-worker runtime with `ffprobe`/`ffmpeg`. No ASD diagnosis or numeric
   risk output is produced.
+- Hardened Capture V2 upload lifecycle behavior: persisted membership roles are
+  authoritative, expired intents queue cleanup, worker transitions are audited,
+  accepted evidence invalidates stale quality results and reopens capture, and
+  public upload responses contain only short-lived signed URLs and constraints.
 - Added an additive assessment v2 foundation under `apps/api` with a fresh,
   separately migrated database boundary, consent-gated assessment lifecycle,
   tenant/care-team policy, atomic consent gating, safe error envelopes, and

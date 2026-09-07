@@ -62,7 +62,7 @@ class FakeBucket:
         self.download_response: object = FakeSdkResponse(data=b"capture")
         self.public_url_calls = 0
         self.signed_upload_response: object = {
-            "signed_url": "https://project-ref.supabase.co/storage/v1/object/upload/sign/capture-private/token",
+            "signed_url": "https://project-ref.supabase.co/storage/v1/object/upload/sign/capture-private/token?token=synthetic-upload-signature",
             "token": "synthetic-upload-signature",
         }
         self.signed_download_response: object = FakeSdkResponse(
@@ -164,6 +164,7 @@ def test_create_signed_upload_grant_uses_private_tus_contract_without_service_ke
     )
 
     assert grant.tus_endpoint == TUS_ENDPOINT
+    assert grant.url == "https://project-ref.supabase.co/storage/v1/object/upload/sign/capture-private/token?token=synthetic-upload-signature"
     assert grant.headers["x-signature"] == "synthetic-upload-signature"
     assert grant.headers["Upload-Metadata"] == ",".join(
         (

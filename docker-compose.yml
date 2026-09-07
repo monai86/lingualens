@@ -12,6 +12,11 @@ services:
       - THERAPIST_APP_V2_DEBUG_FEATURE_OVERRIDE=false
       - LINGUALENS_ASSESSMENT_DATABASE_URL=postgresql+psycopg://lingualens_assessment_app:local-assessment-only@postgres:5432/lingualens_assessment_v2
       - LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP=true
+      - LINGUALENS_STORAGE_MODE=supabase_private
+      - LINGUALENS_SUPABASE_STORAGE_URL=${LINGUALENS_SUPABASE_STORAGE_URL:-}
+      - LINGUALENS_SUPABASE_STORAGE_SERVICE_ROLE_KEY=${LINGUALENS_SUPABASE_STORAGE_SERVICE_ROLE_KEY:-}
+      - LINGUALENS_SUPABASE_STORAGE_BUCKET=${LINGUALENS_SUPABASE_STORAGE_BUCKET:-}
+      - LINGUALENS_SUPABASE_STORAGE_TUS_ENDPOINT=${LINGUALENS_SUPABASE_STORAGE_TUS_ENDPOINT:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -27,6 +32,7 @@ services:
       - THERAPIST_APP_V2_DEBUG_FEATURE_OVERRIDE=false
 
   capture-worker:
+    profiles: ["capture-pilot"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -37,6 +43,12 @@ services:
       - LINGUALENS_MOCK_MODE=true
       - LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP=false
       - LINGUALENS_ASSESSMENT_DATABASE_URL=postgresql+psycopg://lingualens_assessment_app:local-assessment-only@postgres:5432/lingualens_assessment_v2
+      - LINGUALENS_STORAGE_MODE=supabase_private
+      - LINGUALENS_SUPABASE_STORAGE_URL=${LINGUALENS_SUPABASE_STORAGE_URL:-}
+      - LINGUALENS_SUPABASE_STORAGE_SERVICE_ROLE_KEY=${LINGUALENS_SUPABASE_STORAGE_SERVICE_ROLE_KEY:-}
+      - LINGUALENS_SUPABASE_STORAGE_BUCKET=${LINGUALENS_SUPABASE_STORAGE_BUCKET:-}
+      - LINGUALENS_SUPABASE_STORAGE_TUS_ENDPOINT=${LINGUALENS_SUPABASE_STORAGE_TUS_ENDPOINT:-}
+      - LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS=${LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS:-}
     depends_on:
       postgres:
         condition: service_healthy

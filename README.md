@@ -286,10 +286,14 @@ the v2 history runs at API startup, confirms the API can create a child through
 `/api/v2`, and verifies the runtime role is `NOSUPERUSER`/`NOBYPASSRLS`.
 
 Capture processing is run from durable `processing_runs` records. The capture
-worker requires private Supabase Storage configuration for real objects and
-`ffprobe`/`ffmpeg` for quality checks; missing media tools produce an explicit
-unavailable quality state. Local Compose includes a capture-worker image with
-those tools and runs a polling worker with `python -m app.assessment_v2.worker_runtime`.
+worker requires private Supabase Storage configuration for real objects,
+`LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS` for tenant-scoped PostgreSQL RLS
+polling, and `ffprobe`/`ffmpeg` for quality checks; missing media tools produce
+an explicit unavailable quality state. Local Compose includes a capture-worker
+image with those tools and runs a polling worker with
+`python -m app.assessment_v2.worker_runtime` when the `capture-pilot` profile is
+enabled. Upload-intent responses expose only a short-lived signed provider URL;
+bucket names, object keys, and TUS metadata remain server-side.
 Capture V2 treats the database-backed `processing_runs` table as its durable
 queue; the legacy Redis queue remains separate and is not part of this worker's
 contract. The workflow remains research/education decision support; it does not

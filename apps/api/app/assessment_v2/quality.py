@@ -83,7 +83,7 @@ class SubprocessMediaProbe:
                 [
                     "ffmpeg",
                     "-v",
-                    "error",
+                    "info",
                     "-i",
                     str(media_path),
                     "-af",
@@ -110,7 +110,7 @@ class SubprocessMediaProbe:
                 [
                     "ffmpeg",
                     "-v",
-                    "error",
+                    "info",
                     "-i",
                     str(media_path),
                     "-af",

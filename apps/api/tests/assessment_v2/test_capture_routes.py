@@ -137,6 +137,7 @@ class _CaptureRouteService:
             upload_length_bytes=456,
             content_type="audio/webm",
             upsert=False,
+            url="https://project-ref.supabase.co/storage/v1/object/upload/sign/capture-private/token",
         )
 
     def complete_upload(self, recording_id: str, correlation_id: str) -> RecordingIntentSnapshot:
@@ -220,7 +221,7 @@ def test_capture_route_selection_start_intent_and_safe_progress_contract(
         json={
             "content_type": "audio/webm",
             "size_bytes": 456,
-            "checksum": "sha256:0123456789abcdef0123456789abcdef",
+                "checksum": "sha256:" + "0" * 64,
         },
     )
     created = client.post(
@@ -229,7 +230,7 @@ def test_capture_route_selection_start_intent_and_safe_progress_contract(
         json={
             "content_type": "audio/webm",
             "size_bytes": 456,
-            "checksum": "sha256:0123456789abcdef0123456789abcdef",
+                "checksum": "sha256:" + "0" * 64,
         },
     )
     capture = client.get(f"/api/v2/assessments/{assessment_id}/capture")
@@ -275,7 +276,12 @@ def test_capture_upload_quality_download_delete_complete_and_run_routes_are_safe
     processing_run = client.get(f"/api/v2/processing-runs/{run_id}")
 
     assert upload.status_code == 200
-    assert upload.json()["upload"]["object_key"] == "capture/0123456789abcdef0123456789abcdef"
+    assert "bucket" not in upload.json()["upload"]
+    assert "object_key" not in upload.json()["upload"]
+    assert "upload_metadata" not in upload.json()["upload"]
+    assert "Upload-Metadata" not in upload.text
+    assert "capture/0123456789abcdef0123456789abcdef" not in upload.text
+    assert upload.json()["upload"]["url"].startswith("https://project-ref.supabase.co/")
     assert completed_upload.status_code == 200
     assert completed_upload.json()["recording"]["upload_state"] == "uploaded"
     assert completed_upload.json()["processing_run"]["stage"] == "upload_verification"

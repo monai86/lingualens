@@ -87,8 +87,13 @@ features, diagnoses, or numeric ASD risk. Compose builds the capture-worker from
 the root `Dockerfile`, which includes `ffprobe` and `ffmpeg`; the service health
 check verifies both binaries. Capture V2 uses the database-backed
 `processing_runs` table as its durable queue and does not use the legacy Redis
-job-queue contract. Configure private Supabase Storage and a worker database
-connection before any nonmock deployment. A missing media tool is reported as
+job-queue contract. Configure private Supabase Storage, a worker database
+connection, and an explicit comma-separated `LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS`
+allowlist before enabling the `capture-pilot` Compose profile; the allowlist is
+required because the worker must not enumerate tenants through an unscoped RLS
+query. The public upload-intent response contains only a short-lived signed
+provider URL and upload constraints, never bucket/object locators or TUS
+metadata. A missing media tool is reported as
 quality `unavailable`, while retryable processing failures are capped at three
 attempts.
 

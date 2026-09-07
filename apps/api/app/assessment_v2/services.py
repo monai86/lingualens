@@ -98,7 +98,17 @@ class AssessmentRepository(Protocol):
         correlation_id: str,
     ) -> RecordingSnapshot | None: ...
 
+    def expire_recording_upload_if_needed(
+        self,
+        scope: AccessScope,
+        recording_id: str,
+        expected_version: int,
+        correlation_id: str,
+    ) -> RecordingSnapshot | None: ...
+
     def complete_cleanup_for_recording(self, scope: AccessScope, recording_id: str) -> None: ...
+
+    def commit_transaction(self) -> None: ...
 
     def mark_recording_uploading_if_capture_active(
         self, scope: AccessScope, command: MarkRecordingUploading, correlation_id: str
@@ -168,6 +178,7 @@ _POLICY_MESSAGES: dict[str, tuple[int, str]] = {
     "upload_verification_failed": (409, "The upload could not be verified."),
     "capture_incomplete": (409, "Required capture activities are incomplete."),
     "required_activity_not_usable": (409, "A required recording is not usable."),
+    "evidence_locked": (409, "Finalized evidence cannot be deleted."),
     "idempotency_conflict": (409, "The idempotency key was already used for a different request."),
     "consent_revoked": (409, "Active clinical-assessment consent is required."),
     "processing_run_not_found": (404, "Processing run was not found."),
@@ -184,10 +195,12 @@ class AssessmentService:
         user: CurrentUser,
         *,
         storage: CaptureStorageAdapter | None = None,
+        authorized_role: str | None = None,
     ) -> None:
         self.repository = repository
         self.user = user
         self.storage = storage
+        self.authorized_role = authorized_role or user.role
         self.now: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
 
     def create_child(self, command: CreateChild, correlation_id: str) -> ChildSnapshot:
@@ -220,7 +233,7 @@ class AssessmentService:
         child = self.get_child(child_id)
 
         assigned_clinician_id = command.assigned_clinician_id or self.user.user_id
-        if self.user.role not in _OVERSIGHT_ROLES and assigned_clinician_id != self.user.user_id:
+        if self.authorized_role not in _OVERSIGHT_ROLES and assigned_clinician_id != self.user.user_id:
             raise self._policy_error("clinician_assignment_not_permitted")
 
         if not self._repository_call(
@@ -348,6 +361,16 @@ class AssessmentService:
         }:
             raise self._policy_error("upload_verification_failed")
         if self._recording_expired(recording):
+            expire_recording = getattr(self.repository, "expire_recording_upload_if_needed", None)
+            if expire_recording is not None:
+                self._repository_call(
+                    lambda: expire_recording(
+                        self.scope,
+                        recording.id,
+                        recording.version,
+                        correlation_id,
+                    )
+                )
             raise self._policy_error("upload_intent_expired")
         storage = self._storage_or_error()
         grant = self._storage_call(
@@ -488,6 +511,13 @@ class AssessmentService:
         )
         if tombstone is None:
             return True
+        # The metadata tombstone and cleanup intent must survive a later
+        # Storage failure.  Commit this boundary before crossing into the
+        # external provider; the request transaction may still be rolled back
+        # without resurrecting the recording.
+        commit_transaction = getattr(self.repository, "commit_transaction", None)
+        if commit_transaction is not None:
+            commit_transaction()
         self._storage_call(lambda: self._storage_or_error().delete_object(tombstone.object_key))
         self._repository_call(
             lambda: self.repository.complete_cleanup_for_recording(self.scope, tombstone.id)
@@ -524,13 +554,13 @@ class AssessmentService:
         return AccessScope(
             user_id=self.user.user_id,
             organization_id=self.user.organization_id,
-            role=self.user.role,
+            role=self.authorized_role,
         )
 
     def _require_clinical_role(self) -> None:
         if not self.user.membership_active:
             raise self._policy_error("inactive_membership")
-        if self.user.role not in _CLINICAL_ROLES:
+        if self.authorized_role not in _CLINICAL_ROLES:
             raise self._policy_error("role_not_permitted")
 
     def _age_in_months(self, child: ChildSnapshot) -> int:

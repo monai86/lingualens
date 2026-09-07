@@ -188,6 +188,50 @@ def test_synchronize_principal_does_not_provision_unknown_membership(session: Se
     assert repo.has_active_membership(unknown) is False
 
 
+def test_persisted_membership_role_is_available_for_authorization_scope(session: Session) -> None:
+    therapist = scope("therapist_01", role="org_admin")
+    synchronize(repo := AssessmentRepository(session), scope("therapist_01", role="therapist"))
+    membership = session.scalar(
+        select(OrganizationMembershipRecord).where(
+            OrganizationMembershipRecord.organization_id == therapist.organization_id,
+            OrganizationMembershipRecord.user_id == therapist.user_id,
+        )
+    )
+    assert membership is not None
+    membership.role = "therapist"
+    membership.active = True
+    session.flush()
+
+    assert repo.active_membership_role(therapist) == "therapist"
+
+
+def test_dependency_does_not_allow_stale_admin_claim_to_bypass_care_team_scope(session: Session) -> None:
+    repo = AssessmentRepository(session)
+    owner = scope("owner_01")
+    stale_admin = scope("stale_admin_01", role="therapist")
+    synchronize(repo, owner)
+    synchronize(repo, stale_admin)
+    child = create_child(repo, owner, "LL-STALE-ROLE")
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": f"/api/v2/children/{child.id}",
+            "headers": [],
+            "query_string": b"",
+            "scheme": "http",
+        }
+    )
+
+    stale_admin_claim = scope(stale_admin.user_id, role="org_admin")
+    service = get_assessment_service(request, user(stale_admin_claim), repo, object())
+
+    with pytest.raises(ClinicalPolicyError) as error:
+        service.get_child(child.id)
+
+    assert error.value.code == "child_not_found"
+
+
 def test_assessment_service_dependency_rejects_unknown_membership(session: Session) -> None:
     repo = AssessmentRepository(session)
     unknown = scope("unknown_dependency_principal")

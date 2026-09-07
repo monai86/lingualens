@@ -87,6 +87,7 @@ class SignedUploadGrant:
     upload_length_bytes: int
     content_type: str
     upsert: bool
+    url: str
 
 
 @dataclass(frozen=True)
@@ -290,6 +291,22 @@ def _is_private_signed_url_for_project(url: str, storage_url: str) -> bool:
     }
 
 
+def _is_private_signed_upload_url_for_project(url: str, storage_url: str) -> bool:
+    parsed = urlparse(url)
+    return (
+        parsed.scheme == "https"
+        and bool(parsed.netloc)
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.fragment == ""
+        and bool(parsed.query)
+        and "/object/upload/sign/" in parsed.path
+        and "/object/public/" not in parsed.path
+        and (parsed.hostname or "").casefold()
+        in {host.casefold() for host in _allowed_supabase_storage_hosts(storage_url)}
+    )
+
+
 def _normalize_size(value: object) -> int | None:
     if isinstance(value, bool):
         return None
@@ -466,7 +483,15 @@ class SupabasePrivateStorageAdapter:
                 options=_create_signed_upload_options(),
             )
         )
-        token = _call_provider(lambda: _required_text(_unwrap_provider_response(response), "token"))
+        response_payload = _unwrap_provider_response(response)
+        token = _call_provider(lambda: _required_text(response_payload, "token"))
+        signed_url = _call_provider(
+            lambda: _required_text(response_payload, "signed_url", "signedUrl")
+        )
+        if not _call_provider(
+            lambda: _is_private_signed_upload_url_for_project(signed_url, settings.supabase_storage_url)
+        ):
+            raise StorageUnavailableError()
         upload_metadata = {
             "bucketName": settings.supabase_storage_bucket,
             "objectName": object_key,
@@ -485,12 +510,13 @@ class SupabasePrivateStorageAdapter:
             upload_metadata=upload_metadata,
             bucket=settings.supabase_storage_bucket,
             object_key=object_key,
-                expires_at=expires_at,
-                expires_in_seconds=settings.supabase_storage_signed_upload_ttl_seconds,
-                chunk_size_bytes=settings.supabase_storage_tus_chunk_size_bytes,
-                upload_length_bytes=declared_size_bytes,
-                content_type=content_type,
+            expires_at=expires_at,
+            expires_in_seconds=settings.supabase_storage_signed_upload_ttl_seconds,
+            chunk_size_bytes=settings.supabase_storage_tus_chunk_size_bytes,
+            upload_length_bytes=declared_size_bytes,
+            content_type=content_type,
             upsert=False,
+            url=signed_url,
         )
 
     def create_signed_download_grant(self, object_key: str) -> SignedDownloadGrant:
