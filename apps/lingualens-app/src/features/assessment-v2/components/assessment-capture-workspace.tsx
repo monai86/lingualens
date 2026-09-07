@@ -153,6 +153,26 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
     }
   }
 
+  async function resumeAssessment(assessment: AssessmentV2Assessment) {
+    if (busy) return;
+
+    setBusy(true);
+    setError(null);
+    try {
+      const resumedCapture = await client.getCapture(assessment.id);
+      setPurpose(assessment.purpose);
+      setCapture(resumedCapture);
+      setActiveActivityIndex(firstPendingActivityIndex(resumedCapture));
+      setCompletedAssessment(null);
+      resetRecordingState();
+      setStatus(resumedCapture.state === "capturing" ? "capture" : "ready");
+    } catch {
+      setError("ไม่สามารถเปิด assessment เดิมได้ กรุณาลองใหม่");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function beginCapture() {
     if (!capture || busy) return;
     setBusy(true);
@@ -383,7 +403,19 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
           <h2 id="assessment-history-heading" className="font-semibold">ประวัติการประเมิน</h2>
           {assessments.length === 0 ? <p className="mt-2 text-sm text-[color:var(--color-text-muted)]">ยังไม่มีการประเมินก่อนหน้านี้</p> : (
             <ul className="mt-3 space-y-2 text-sm">
-              {assessments.map((assessment) => <li key={assessment.id} className="flex justify-between gap-3"><span>{purposeLabel(assessment.purpose)}</span><span className="text-[color:var(--color-text-muted)]">{stateLabel(assessment.state)}</span></li>)}
+              {assessments.map((assessment) => (
+                <li key={assessment.id} className="flex flex-wrap items-center justify-between gap-3">
+                  <span>{purposeLabel(assessment.purpose)}</span>
+                  <span className="flex items-center gap-3 text-[color:var(--color-text-muted)]">
+                    {stateLabel(assessment.state)}
+                    {isResumableAssessment(assessment.state) ? (
+                      <button type="button" disabled={busy} onClick={() => void resumeAssessment(assessment)} className="rounded-lg border border-[color:var(--color-border-strong)] px-3 py-1.5 text-xs font-semibold text-[color:var(--color-text-strong)] disabled:opacity-50">
+                        ดำเนินการต่อ
+                      </button>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
             </ul>
           )}
         </section>
@@ -569,6 +601,10 @@ function stateLabel(value: AssessmentV2Assessment["state"]): string {
     cancelled: "ยกเลิก",
   };
   return labels[value];
+}
+
+function isResumableAssessment(state: AssessmentV2Assessment["state"]): boolean {
+  return state === "ready_for_capture" || state === "capturing";
 }
 
 function activityLabel(value: string): string {

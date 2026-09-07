@@ -443,3 +443,80 @@ test("only completes an assessment after the required recording is usable", asyn
   expect(await screen.findByRole("heading", { name: "ส่งข้อมูลครบแล้ว" })).toBeInTheDocument();
   expect(client.completeCapture).toHaveBeenCalledWith("assessment_opaque_01");
 });
+
+test("resumes a previous ready assessment without creating a duplicate", async () => {
+  const child = {
+    id: "child_opaque_01",
+    display_code: "LL-0007",
+    birth_year: 2021,
+    birth_month: 6,
+    language_context: { primary: "th", additional: [] },
+    version: 1,
+  };
+  const previousAssessment = {
+    id: "assessment_previous_01",
+    child_id: child.id,
+    purpose: "developmental_follow_up" as const,
+    state: "ready_for_capture" as const,
+    age_months: 36,
+    language_context: child.language_context,
+    assigned_clinician_id: "therapist_opaque_01",
+    version: 2,
+  };
+  const previousCapture = {
+    assessment_id: previousAssessment.id,
+    state: "ready_for_capture" as const,
+    protocol: {
+      protocol_version_key: "thai_guided_language_sample:v0",
+      selected_at: "2026-09-07T08:00:00Z",
+      version: 1,
+    },
+    activities: [{
+      activity_code: "free_play",
+      required: true,
+      target_duration_seconds: 180,
+      minimum_duration_seconds: 120,
+    }],
+    recordings: [],
+    progress: {
+      required_activities_total: 1,
+      required_activities_verified: 0,
+      required_activities_usable: 0,
+    },
+  };
+  const client = {
+    listChildren: vi.fn().mockResolvedValue([child]),
+    getChild: vi.fn().mockResolvedValue(child),
+    listConsents: vi.fn().mockResolvedValue([{
+      id: "consent_opaque_01",
+      child_id: child.id,
+      purpose: "clinical_assessment",
+      scope_version: "clinical-v1",
+      status: "active",
+      granted_at: "2026-09-07T08:00:00Z",
+      withdrawn_at: null,
+      version: 1,
+    }]),
+    listAssessments: vi.fn().mockResolvedValue([previousAssessment]),
+    createConsent: vi.fn(),
+    createAssessment: vi.fn(),
+    selectProtocol: vi.fn(),
+    startCapture: vi.fn(),
+    createRecording: vi.fn(),
+    createUploadIntent: vi.fn(),
+    completeUpload: vi.fn(),
+    getCapture: vi.fn().mockResolvedValue(previousCapture),
+    getRecordingQuality: vi.fn(),
+    completeCapture: vi.fn(),
+  };
+
+  render(<AssessmentCaptureWorkspace client={client} />);
+  fireEvent.click(await screen.findByRole("button", { name: "เลือก LL-0007" }));
+
+  fireEvent.click(await screen.findByRole("button", { name: "ดำเนินการต่อ" }));
+
+  expect(await screen.findByRole("heading", { name: "พร้อมบันทึกเสียง" })).toBeInTheDocument();
+  expect(client.getCapture).toHaveBeenCalledWith("assessment_previous_01");
+  expect(client.createAssessment).not.toHaveBeenCalled();
+  expect(client.selectProtocol).not.toHaveBeenCalled();
+});
