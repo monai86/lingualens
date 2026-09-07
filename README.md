@@ -259,6 +259,14 @@ audio quality states. Feature-analysis slices are not mounted yet. The v2
 database starts empty: no v1 records, audio, storage keys, or JSON data are
 imported or rewritten.
 
+The maintained web app now exposes `/assessments` as the first additive v2
+therapist entry point. It covers child selection, consent confirmation,
+protocol activities, browser audio capture, private upload handoff, quality
+polling, and resuming an existing `ready_for_capture` or `capturing`
+assessment. Existing `/api/v1` session screens remain unchanged. Set
+`NEXT_PUBLIC_ASSESSMENT_API_BASE_URL` only when the v2 API is hosted at a
+different origin; otherwise it is derived from `NEXT_PUBLIC_API_BASE_URL`.
+
 The two boundaries are intentionally separate:
 
 ```text

@@ -28,13 +28,17 @@
 
 `apps/api` เป็น backend ที่ frontend หลักเรียกใช้ผ่าน `/api/v1`; `/api/v2`
 เป็น assessment-centric foundation ที่เปิดแบบ additive และยังไม่แทนที่ v1.
+หน้า `/assessments` ใน frontend เป็น v2 entrypoint แรกสำหรับ Capture V2;
+หน้า session เดิมยังคงใช้ `/api/v1`.
 
 ### Assessment v2 foundation boundary
 
 - `/api/v1` และ client เดิมยังเป็น therapist product ที่ใช้งานอยู่
 - `/api/v2` มี child, consent, assessment lifecycle และ Capture V2 สำหรับ
   protocol selection, private upload intent, durable processing, checksum
-  verification และ non-diagnostic quality states; worker ใช้ `processing_runs`
+  verification และ non-diagnostic quality states; frontend `/assessments`
+  รองรับ consent gate, guided recording, upload handoff, quality polling และ
+  resume ของ assessment ที่ยังไม่จบ; worker ใช้ `processing_runs`
   เป็น durable database queue และไม่ใช้ legacy Redis queue; evidence/profile
   slices ยังไม่เปิด
 - `LINGUALENS_DATABASE_URL`/v1 Alembic และ

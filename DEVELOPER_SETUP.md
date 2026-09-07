@@ -43,8 +43,10 @@ as the Therapist App v2 backend or add new product routes there.
 
 The existing therapist product remains on `/api/v1`. The additive `/api/v2`
 foundation uses a fresh database and a separate Alembic history. It starts with
-no imported v1 records and currently covers only children, consent records, and
-assessment lifecycle state.
+no imported v1 records and now covers the first Capture V2 workflow slice:
+children, consent records, assessment lifecycle, protocol selection, private
+recording upload intents, durable processing runs, checksum verification, and
+non-diagnostic quality states.
 
 For the local Compose database:
 
@@ -60,6 +62,16 @@ The v1 and v2 URLs are separate:
 ```text
 LINGUALENS_DATABASE_URL=postgresql+psycopg://.../therapist_app_v2
 LINGUALENS_ASSESSMENT_DATABASE_URL=postgresql+psycopg://.../lingualens_assessment_v2
+```
+
+The web app's `/assessments` route uses `/api/v2`; all existing session screens
+continue using `/api/v1`. For local development the v2 base is derived
+automatically, or can be set explicitly:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 \
+NEXT_PUBLIC_ASSESSMENT_API_BASE_URL=http://localhost:8000/api/v2 \
+npm run dev
 ```
 
 Supabase Auth supplies the verified identity; FastAPI owns clinical policy and

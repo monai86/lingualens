@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- Added the first therapist web Capture V2 entry point at `/assessments`:
+  consent-gated child selection, protocol activities, browser audio capture,
+  SHA-256 upload handoff, quality polling, non-diagnostic quality states, and
+  resume for in-progress assessments. Existing `/api/v1` session screens are
+  unchanged.
 - Added Capture V2 under `/api/v2`: immutable protocol selection, consent-gated
   activity recordings, private Supabase TUS upload intents, durable upload and
   quality processing runs, server-owned checksum verification, bounded
