@@ -13,6 +13,8 @@ import {
 export type { RuntimeSettings } from "@/services/api/runtime-settings-schema";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || "http://localhost:8000/api/v1";
+const API_V2_BASE = process.env.NEXT_PUBLIC_ASSESSMENT_API_BASE_URL?.trim()
+  || API_BASE.replace(/\/api\/v1\/?$/, "/api/v2");
 const DEFAULT_USER_ID = process.env.NEXT_PUBLIC_DEMO_USER_ID ?? "therapist-demo";
 let runtimeSettingsCache: RuntimeSettings | null = null;
 
@@ -39,6 +41,24 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     cache: "no-store",
     ...init,
     headers
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, await response.text());
+  }
+  return response.json() as Promise<T>;
+}
+
+export async function apiV2Request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  await applyRuntimeAuthHeaders(headers);
+  if (init.body && !(init.body instanceof FormData) && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+
+  const response = await fetch(`${API_V2_BASE}${path}`, {
+    cache: "no-store",
+    ...init,
+    headers,
   });
   if (!response.ok) {
     throw new ApiError(response.status, await response.text());
@@ -213,4 +233,4 @@ export function resetApiRuntimeSettingsCacheForTests(): void {
   runtimeSettingsCache = null;
 }
 
-export { API_BASE, DEFAULT_USER_ID };
+export { API_BASE, API_V2_BASE, DEFAULT_USER_ID };

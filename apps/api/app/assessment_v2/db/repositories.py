@@ -284,6 +284,19 @@ class AssessmentRepository:
             self.session.flush()
             return self._consent_snapshot(consent)
 
+    def list_consents(self, scope: AccessScope, child_id: str) -> list[ConsentSnapshot]:
+        if not self._can_access_child(scope, child_id):
+            return []
+        records = self.session.scalars(
+            select(ConsentRecord)
+            .where(
+                ConsentRecord.organization_id == scope.organization_id,
+                ConsentRecord.child_id == child_id,
+            )
+            .order_by(ConsentRecord.purpose, desc(ConsentRecord.version))
+        ).all()
+        return [self._consent_snapshot(record) for record in records]
+
     def has_active_consent(self, scope: AccessScope, child_id: str, purpose: ConsentPurpose) -> bool:
         if not self._can_access_child(scope, child_id):
             return False

@@ -54,6 +54,8 @@ class AssessmentRepository(Protocol):
         self, scope: AccessScope, child_id: str, command: RecordConsent, correlation_id: str
     ): ...
 
+    def list_consents(self, scope: AccessScope, child_id: str) -> list[ConsentSnapshot]: ...
+
     def has_active_consent(self, scope: AccessScope, child_id: str, purpose: ConsentPurpose) -> bool: ...
 
     def can_assign_clinician(self, scope: AccessScope, child_id: str, clinician_id: str) -> bool: ...
@@ -225,6 +227,11 @@ class AssessmentService:
         return self._repository_call(
             lambda: self.repository.add_consent(self.scope, child_id, command, correlation_id)
         )
+
+    def list_consents(self, child_id: str) -> list[ConsentSnapshot]:
+        self._require_clinical_role()
+        self.get_child(child_id)
+        return self._repository_call(lambda: self.repository.list_consents(self.scope, child_id))
 
     def create_assessment(
         self, child_id: str, command: StartAssessment, correlation_id: str

@@ -236,3 +236,31 @@ def test_real_dependency_stack_upload_intent_returns_safe_metadata(
     assert "capture/" not in response.text
     assert "declared_checksum" not in body["recording"]
     assert "sha256:0123456789abcdef0123456789abcdef" not in response.text
+
+
+def test_real_dependency_stack_lists_child_consents_for_workflow_gate(
+    real_capture_client: TestClient,
+) -> None:
+    response = real_capture_client.get("/api/v2/children/route_child_01/consents")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert {
+        "id": body[0]["id"],
+        "child_id": body[0]["child_id"],
+        "purpose": body[0]["purpose"],
+        "scope_version": body[0]["scope_version"],
+        "status": body[0]["status"],
+        "withdrawn_at": body[0]["withdrawn_at"],
+        "version": body[0]["version"],
+    } == {
+        "id": "route_consent_01",
+        "child_id": "route_child_01",
+        "purpose": "clinical_assessment",
+        "scope_version": "clinical-v1",
+        "status": "active",
+        "withdrawn_at": None,
+        "version": 1,
+    }
+    assert body[0]["granted_at"]

@@ -153,15 +153,22 @@ export function CaseList({
           <PageHeader
             title="Cases"
             description="Track case workflow progress, consent state, and the next therapist-reviewed action without leaving the current workspace."
-            actions={canCreateCase ? (
-              <ActionButton
-                type="button"
-                icon={<Plus size={18} aria-hidden="true" />}
-                onClick={() => setShowCreateForm((visible) => !visible)}
-              >
-                {showCreateForm ? "Close form" : "Create case"}
-              </ActionButton>
-            ) : undefined}
+            actions={
+              <>
+                <ActionButton href="/assessments" tone="secondary">
+                  เริ่มการประเมินพัฒนาการ
+                </ActionButton>
+                {canCreateCase ? (
+                  <ActionButton
+                    type="button"
+                    icon={<Plus size={18} aria-hidden="true" />}
+                    onClick={() => setShowCreateForm((visible) => !visible)}
+                  >
+                    {showCreateForm ? "Close form" : "Create case"}
+                  </ActionButton>
+                ) : null}
+              </>
+            }
           />
 
           {showCreateForm ? <CreateCaseForm onCancel={() => setShowCreateForm(false)} /> : null}

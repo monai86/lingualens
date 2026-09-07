@@ -136,6 +136,12 @@ describe("responsive Cases workspace", () => {
     }
   });
 
+  it("offers the developmental assessment workflow as a separate therapist entry point", () => {
+    render(<CaseList model={{ cases: [cases[0]] }} canFilterByClinician />);
+
+    expect(screen.getByRole("link", { name: "เริ่มการประเมินพัฒนาการ" })).toHaveAttribute("href", "/assessments");
+  });
+
   it("preselects the consented case when the deep link carries case_id", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       if (String(input).endsWith("/cases")) return jsonResponse(cases);

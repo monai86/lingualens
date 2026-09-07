@@ -254,6 +254,18 @@ def create_consent(
     return _consent_response(value)
 
 
+@router.get(
+    "/children/{child_id}/consents",
+    response_model=list[ConsentResponse],
+    responses=_V2_ERROR_RESPONSES,
+)
+def list_consents(
+    child_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> list[ConsentResponse]:
+    return [_consent_response(value) for value in service.list_consents(child_id)]
+
+
 @router.post(
     "/children/{child_id}/assessments",
     response_model=AssessmentResponse,
