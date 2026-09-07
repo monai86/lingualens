@@ -520,3 +520,93 @@ test("resumes a previous ready assessment without creating a duplicate", async (
   expect(client.createAssessment).not.toHaveBeenCalled();
   expect(client.selectProtocol).not.toHaveBeenCalled();
 });
+
+test("resumes a capturing assessment with verified quality without creating a duplicate", async () => {
+  const child = {
+    id: "child_opaque_01",
+    display_code: "LL-0007",
+    birth_year: 2021,
+    birth_month: 6,
+    language_context: { primary: "th", additional: [] },
+    version: 1,
+  };
+  const previousAssessment = {
+    id: "assessment_previous_01",
+    child_id: child.id,
+    purpose: "developmental_follow_up" as const,
+    state: "capturing" as const,
+    age_months: 36,
+    language_context: child.language_context,
+    assigned_clinician_id: "therapist_opaque_01",
+    version: 3,
+  };
+  const previousCapture = {
+    assessment_id: previousAssessment.id,
+    state: "capturing" as const,
+    protocol: {
+      protocol_version_key: "thai_guided_language_sample:v0",
+      selected_at: "2026-09-07T08:00:00Z",
+      version: 1,
+    },
+    activities: [{
+      activity_code: "free_play",
+      required: true,
+      target_duration_seconds: 180,
+      minimum_duration_seconds: 120,
+    }],
+    recordings: [{
+      id: "recording_opaque_01",
+      activity_code: "free_play",
+      content_type: "audio/webm",
+      size_bytes: 5,
+      upload_state: "verified" as const,
+      expires_at: "2026-09-07T09:00:00Z",
+      verified_at: "2026-09-07T08:02:00Z",
+      version: 4,
+    }],
+    progress: {
+      required_activities_total: 1,
+      required_activities_verified: 1,
+      required_activities_usable: 1,
+    },
+  };
+  const client = {
+    listChildren: vi.fn().mockResolvedValue([child]),
+    getChild: vi.fn().mockResolvedValue(child),
+    listConsents: vi.fn().mockResolvedValue([{
+      id: "consent_opaque_01",
+      child_id: child.id,
+      purpose: "clinical_assessment" as const,
+      scope_version: "clinical-v1",
+      status: "active" as const,
+      granted_at: "2026-09-07T08:00:00Z",
+      withdrawn_at: null,
+      version: 1,
+    }]),
+    listAssessments: vi.fn().mockResolvedValue([previousAssessment]),
+    createConsent: vi.fn(),
+    createAssessment: vi.fn(),
+    selectProtocol: vi.fn(),
+    startCapture: vi.fn(),
+    createRecording: vi.fn(),
+    createUploadIntent: vi.fn(),
+    completeUpload: vi.fn(),
+    getCapture: vi.fn().mockResolvedValue(previousCapture),
+    getRecordingQuality: vi.fn().mockResolvedValue({
+      status: "usable" as const,
+      evaluated_at: "2026-09-07T08:03:00Z",
+      version: 1,
+    }),
+    completeCapture: vi.fn(),
+  };
+
+  render(<AssessmentCaptureWorkspace client={client} />);
+  fireEvent.click(await screen.findByRole("button", { name: "เลือก LL-0007" }));
+  fireEvent.click(await screen.findByRole("button", { name: "ดำเนินการต่อ" }));
+
+  expect(await screen.findByRole("heading", { name: "บันทึกกิจกรรม" })).toBeInTheDocument();
+  expect(await screen.findByText("คุณภาพตัวอย่างผ่านเกณฑ์เบื้องต้น")).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "ส่ง assessment เข้า processing" })).toBeEnabled();
+  expect(client.getRecordingQuality).toHaveBeenCalledWith("recording_opaque_01");
+  expect(client.createAssessment).not.toHaveBeenCalled();
+});

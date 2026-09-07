@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { BrowserAudioRecorder, type RecordingMetadata } from "@/components/browser-audio-recorder";
 import {
@@ -76,7 +76,7 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function loadChildren() {
+  const loadChildren = useCallback(async () => {
     setStatus("loading");
     setError(null);
     try {
@@ -86,11 +86,11 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
       setStatus("error");
       setError("ไม่สามารถโหลดรายการเด็กได้");
     }
-  }
+  }, [client]);
 
   useEffect(() => {
     void loadChildren();
-  }, [client]);
+  }, [loadChildren]);
 
   async function chooseChild(child: AssessmentV2Child) {
     setBusy(true);
@@ -160,11 +160,13 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
     setError(null);
     try {
       const resumedCapture = await client.getCapture(assessment.id);
+      const resumedActivityIndex = resumeActivityIndex(resumedCapture);
       setPurpose(assessment.purpose);
       setCapture(resumedCapture);
-      setActiveActivityIndex(firstPendingActivityIndex(resumedCapture));
+      setActiveActivityIndex(resumedActivityIndex);
       setCompletedAssessment(null);
       resetRecordingState();
+      restoreResumedRecordingState(resumedCapture, resumedActivityIndex);
       setStatus(resumedCapture.state === "capturing" ? "capture" : "ready");
     } catch {
       setError("ไม่สามารถเปิด assessment เดิมได้ กรุณาลองใหม่");
@@ -199,6 +201,29 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
     setQuality(null);
     setQualityStatus("idle");
     setQualityError(null);
+  }
+
+  function restoreResumedRecordingState(resumedCapture: AssessmentV2Capture, activityIndex: number) {
+    if (resumedCapture.state !== "capturing") return;
+
+    const activity = resumedCapture.activities[activityIndex];
+    const recording = activity
+      ? resumedCapture.recordings.find((item) => item.activity_code === activity.activity_code)
+      : null;
+    if (!recording) return;
+
+    if (recording.upload_state === "uploaded" || recording.upload_state === "verified") {
+      setUploadStatus("uploaded");
+      setQualityStatus("checking");
+      return;
+    }
+
+    setUploadStatus("error");
+    setUploadError(
+      recording.upload_state === "pending" || recording.upload_state === "uploading"
+        ? "พบตัวอย่างเสียงเดิมที่ยังอัปโหลดไม่เสร็จ ไฟล์เดิมไม่อยู่ในหน้านี้ กรุณาบันทึกตัวอย่างใหม่"
+        : "ตัวอย่างเสียงเดิมไม่พร้อมใช้งานแล้ว กรุณาบันทึกตัวอย่างใหม่",
+    );
   }
 
   function handleRecordingReady(blob: Blob, metadata: RecordingMetadata) {
@@ -552,6 +577,14 @@ function firstPendingActivityIndex(capture: AssessmentV2Capture): number {
     && (recording.upload_state === "uploaded" || recording.upload_state === "verified")
   )));
   return index === -1 ? capture.activities.length : index;
+}
+
+function resumeActivityIndex(capture: AssessmentV2Capture): number {
+  const index = capture.activities.findIndex((activity) => {
+    const recording = capture.recordings.find((item) => item.activity_code === activity.activity_code);
+    return !recording || recording.upload_state !== "verified";
+  });
+  return index === -1 ? Math.max(capture.activities.length - 1, 0) : index;
 }
 
 function replaceRecording(recordings: AssessmentV2Recording[], replacement: AssessmentV2Recording): AssessmentV2Recording[] {
