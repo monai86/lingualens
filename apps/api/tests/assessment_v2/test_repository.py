@@ -266,8 +266,10 @@ def test_tenant_and_care_team_isolation_and_admin_access(session: Session) -> No
 
     assert repo.get_child(alpha_therapist, beta_child.id) is None
     assert repo.get_child(outsider, alpha_child.id) is None
-    assert repo.get_child(admin, alpha_child.id) == alpha_child
+    assert repo.get_child(admin, alpha_child.id) is None
     assert repo.get_child(admin, beta_child.id) is None
+    assign_clinician(session, admin, alpha_child.id)
+    assert repo.get_child(admin, alpha_child.id) == alpha_child
 
 
 def test_assignee_must_be_an_active_member_of_the_child_care_team(session: Session) -> None:

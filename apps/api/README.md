@@ -28,14 +28,14 @@ Run locally:
 
 ```bash
 cd apps/api
-uvicorn app.main:app --reload --port 8000
+PYTHONPATH=.:../..:../../src uvicorn app.main:app --reload --port 8000
 ```
 
 Run tests:
 
 ```bash
 cd apps/api
-PYTHONPATH=. pytest -q
+PYTHONPATH=.:../..:../../src pytest -q
 ```
 
 Repository-root invocation is also supported:

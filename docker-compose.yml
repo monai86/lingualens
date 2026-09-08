@@ -4,11 +4,11 @@ services:
     working_dir: /workspace/apps/api
     volumes:
       - .:/workspace
-    command: sh -c "pip install -r ../../requirements.txt -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     environment:
-      - PYTHONPATH=/workspace/apps/api
+      - PYTHONPATH=/workspace/apps/api:/workspace
       - THERAPIST_APP_V2_DEBUG_FEATURE_OVERRIDE=false
       - LINGUALENS_ASSESSMENT_DATABASE_URL=postgresql+psycopg://lingualens_assessment_app:local-assessment-only@postgres:5432/lingualens_assessment_v2
       - LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP=true
@@ -28,7 +28,7 @@ services:
       - .:/workspace
     command: sh -c "pip install -r ../../requirements.txt -r requirements.txt && python -c 'from app.tasks.worker import run_worker; print(run_worker())'"
     environment:
-      - PYTHONPATH=/workspace/apps/api
+      - PYTHONPATH=/workspace/apps/api:/workspace
       - THERAPIST_APP_V2_DEBUG_FEATURE_OVERRIDE=false
 
   capture-worker:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,11 +26,23 @@ from app.assessment_v2.db.models import (
 )
 from app.assessment_v2.dependencies import get_assessment_session, get_capture_storage
 from app.assessment_v2.domain.models import (
+    AccessScope,
     AssessmentPurpose,
     AssessmentState,
+    AttestTranscript,
     ConsentPurpose,
+    CreateTranscriptRevision,
     RecordingUploadState,
+    TranscriptSource,
 )
+from app.assessment_v2.db.repositories import AssessmentRepository
+from app.assessment_v2.evidence import (
+    EvidenceProvenance,
+    EvidenceSource,
+    EvidenceState,
+    MeasuredFeature,
+)
+from app.assessment_v2.evidence_adapter import AdaptedEvidence
 from app.assessment_v2.protocols import PROTOCOL_CATALOG
 from app.assessment_v2.storage import SignedUploadGrant
 from app.core.security import CurrentUser, get_current_user
@@ -210,7 +223,9 @@ def real_capture_client() -> Iterator[TestClient]:
         app.dependency_overrides[get_current_user] = lambda: principal
         app.dependency_overrides[get_assessment_session] = override_session
         app.dependency_overrides[get_capture_storage] = _Storage
-        yield TestClient(app)
+        client = TestClient(app)
+        client.assessment_session = session  # type: ignore[attr-defined]
+        yield client
     finally:
         app.dependency_overrides.clear()
         session.close()
@@ -264,3 +279,192 @@ def test_real_dependency_stack_lists_child_consents_for_workflow_gate(
         "version": 1,
     }
     assert body[0]["granted_at"]
+
+
+def test_real_dependency_stack_persists_and_attests_reviewed_transcript(
+    real_capture_client: TestClient,
+) -> None:
+    session = real_capture_client.assessment_session  # type: ignore[attr-defined]
+    assessment = session.get(AssessmentRecord, "route_assessment_01")
+    assert assessment is not None
+    assessment.state = AssessmentState.PROCESSING.value
+    session.flush()
+
+    content = "@UTF8\n@Begin\n*CHI: hello .\n@End\n"
+    created = real_capture_client.post(
+        "/api/v2/assessments/route_assessment_01/transcript-revisions",
+        json={"source": "manual", "content": content},
+    )
+
+    assert created.status_code == 201
+    created_body = created.json()
+    assert created_body["review_state"] == "draft"
+    assert created_body["content"] == content
+    assert created_body["content_sha256"] == sha256(content.encode("utf-8")).hexdigest()
+
+    current = real_capture_client.get(
+        "/api/v2/assessments/route_assessment_01/transcript"
+    )
+    assert current.status_code == 200
+    assert current.json()["id"] == created_body["id"]
+
+    attested = real_capture_client.post(
+        f"/api/v2/transcript-revisions/{created_body['id']}/attest",
+        json={"expected_version": 1},
+    )
+    assert attested.status_code == 200
+    assert attested.json()["review_state"] == "attested"
+    assert attested.json()["version"] == 2
+
+    stale = real_capture_client.post(
+        f"/api/v2/transcript-revisions/{created_body['id']}/attest",
+        json={"expected_version": 1},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "transcript_not_reviewable"
+
+
+def test_real_dependency_stack_reads_persisted_evidence_profile(
+    real_capture_client: TestClient,
+) -> None:
+    session = real_capture_client.assessment_session  # type: ignore[attr-defined]
+    assessment = session.get(AssessmentRecord, "route_assessment_01")
+    assert assessment is not None
+    assessment.state = AssessmentState.PROCESSING.value
+    session.flush()
+
+    repo = AssessmentRepository(session)
+    scope = AccessScope(
+        user_id="route_therapist_01",
+        organization_id="route_org_01",
+        role="therapist",
+    )
+    content = "@UTF8\n@Begin\n*CHI: hello .\n@End\n"
+    transcript = repo.create_transcript_revision(
+        scope,
+        CreateTranscriptRevision(
+            assessment_id="route_assessment_01",
+            content=content,
+            source=TranscriptSource.MANUAL,
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    repo.attest_transcript(
+        scope,
+        AttestTranscript(transcript_revision_id=transcript.id, expected_version=1),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    provenance = EvidenceProvenance(
+        input_ref="transcript_input_opaque_01",
+        input_sha256=transcript.content_sha256,
+        protocol_version_key="thai_guided_language_sample:v0",
+        extractor="reviewed-transcript-adapter",
+        pipeline_version="reviewed-transcript-descriptors-v1",
+        feature_schema_version="descriptive-transcript-features-v1",
+        analyzed_at=datetime(2026, 9, 7, 8, 2, tzinfo=UTC),
+    )
+    repo.create_evidence_run(
+        scope,
+        "route_assessment_01",
+        transcript.id,
+        AdaptedEvidence(
+            state=EvidenceState.COMPLETED,
+            features=(
+                MeasuredFeature(
+                    key="child_token_count",
+                    value=12,
+                    unit="tokens",
+                    source=EvidenceSource.REVIEWED_TRANSCRIPT,
+                    state=EvidenceState.COMPLETED,
+                    limitation="Descriptive measurement only.",
+                    provenance=provenance,
+                ),
+            ),
+            limitations=("No compatible reference band was applied.",),
+            provenance=provenance,
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    response = real_capture_client.get("/api/v2/assessments/route_assessment_01/evidence")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "completed"
+    assert body["features"][0]["key"] == "child_token_count"
+    assert body["features"][0]["value"] == 12
+    assert body["domains"]
+    assert body["not_diagnostic"] is True
+    assert "content" not in body
+    assert "diagnosis" not in body
+    assert "asd_probability" not in body
+
+
+def test_real_dependency_stack_runs_reviewed_transcript_worker_after_attestation(
+    real_capture_client: TestClient,
+) -> None:
+    session = real_capture_client.assessment_session  # type: ignore[attr-defined]
+    assessment = session.get(AssessmentRecord, "route_assessment_01")
+    assert assessment is not None
+    assessment.state = AssessmentState.PROCESSING.value
+    session.flush()
+
+    content = (
+        "@UTF8\n@Begin\n"
+        "*INV: do you see the red car ?\n"
+        "*CHI: red car .\n"
+        "*INV: what color ?\n"
+        "*CHI: red .\n"
+        "*INV: say more .\n"
+        "*CHI: red car .\n"
+        "@End\n"
+    )
+    created = real_capture_client.post(
+        "/api/v2/assessments/route_assessment_01/transcript-revisions",
+        json={"source": "asr_draft", "content": content},
+    )
+    assert created.status_code == 201
+    revision = created.json()
+
+    attested = real_capture_client.post(
+        f"/api/v2/transcript-revisions/{revision['id']}/attest",
+        json={"expected_version": revision["version"]},
+    )
+    assert attested.status_code == 200
+
+    evidence = real_capture_client.post(
+        "/api/v2/assessments/route_assessment_01/evidence-runs"
+    )
+
+    assert evidence.status_code == 201
+    body = evidence.json()
+    assert body["state"] == "completed"
+    feature_values = {feature["key"]: feature["value"] for feature in body["features"]}
+    assert feature_values["child_utterance_count"] == 3
+    assert feature_values["child_token_count"] == 5
+    assert body["not_diagnostic"] is True
+    assert body["decision_support_only"] is True
+    assert content not in evidence.text
+
+
+def test_real_dependency_stack_blocks_worker_for_unattested_transcript(
+    real_capture_client: TestClient,
+) -> None:
+    session = real_capture_client.assessment_session  # type: ignore[attr-defined]
+    assessment = session.get(AssessmentRecord, "route_assessment_01")
+    assert assessment is not None
+    assessment.state = AssessmentState.PROCESSING.value
+    session.flush()
+
+    created = real_capture_client.post(
+        "/api/v2/assessments/route_assessment_01/transcript-revisions",
+        json={"source": "manual", "content": "@Begin\n*CHI: hello .\n@End\n"},
+    )
+    assert created.status_code == 201
+
+    evidence = real_capture_client.post(
+        "/api/v2/assessments/route_assessment_01/evidence-runs"
+    )
+
+    assert evidence.status_code == 409
+    assert evidence.json()["error"]["code"] == "transcript_not_reviewable"

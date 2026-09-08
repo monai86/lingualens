@@ -14,7 +14,7 @@ export type { RuntimeSettings } from "@/services/api/runtime-settings-schema";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || "http://localhost:8000/api/v1";
 const API_V2_BASE = process.env.NEXT_PUBLIC_ASSESSMENT_API_BASE_URL?.trim()
-  || API_BASE.replace(/\/api\/v1\/?$/, "/api/v2");
+  || deriveAssessmentApiBase(API_BASE);
 const DEFAULT_USER_ID = process.env.NEXT_PUBLIC_DEMO_USER_ID ?? "therapist-demo";
 let runtimeSettingsCache: RuntimeSettings | null = null;
 
@@ -231,6 +231,13 @@ function isSupabaseRuntimeContext(): boolean {
 
 export function resetApiRuntimeSettingsCacheForTests(): void {
   runtimeSettingsCache = null;
+}
+
+export function deriveAssessmentApiBase(apiBase: string): string {
+  const normalized = apiBase.trim().replace(/\/+$/, "");
+  if (/\/api\/v1$/i.test(normalized)) return normalized.replace(/\/api\/v1$/i, "/api/v2");
+  if (/\/api$/i.test(normalized)) return `${normalized}/v2`;
+  return `${normalized}/api/v2`;
 }
 
 export { API_BASE, API_V2_BASE, DEFAULT_USER_ID };

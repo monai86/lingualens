@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from uuid import uuid4
 
 from sqlalchemy import and_, desc, func, or_, select, update
@@ -18,6 +20,9 @@ from app.assessment_v2.db.models import (
     CareTeamAssignmentRecord,
     ChildRecord,
     ConsentRecord,
+    EvidenceDomainProfileRecord,
+    EvidenceFeatureRecord,
+    EvidenceRunRecord,
     OrganizationMembershipRecord,
     OrganizationRecord,
     ProcessingRunRecord,
@@ -25,10 +30,12 @@ from app.assessment_v2.db.models import (
     ProtocolVersionRecord,
     RecordingQualityResultRecord,
     RecordingRecord,
+    TranscriptRevisionRecord,
     UserProfileRecord,
 )
 from app.assessment_v2.domain.models import (
     AccessScope,
+    AttestTranscript,
     AssessmentSnapshot,
     AssessmentState,
     CaptureSnapshot,
@@ -41,6 +48,7 @@ from app.assessment_v2.domain.models import (
     CreateRecording,
     CreateAssessment,
     CreateChild,
+    CreateTranscriptRevision,
     MarkRecordingUploading,
     ProcessingRunSnapshot,
     ProcessingRunStage,
@@ -55,9 +63,25 @@ from app.assessment_v2.domain.models import (
     SelectProtocol,
     StartCapture,
     TransitionAssessment,
+    TranscriptRevisionSnapshot,
+    TranscriptReviewState,
+    TranscriptSource,
     VerifyRecordingUpload,
 )
 from app.assessment_v2.domain.transitions import InvalidAssessmentTransition, transition_assessment
+from app.assessment_v2.evidence import (
+    DevelopmentalDomain,
+    DevelopmentalEvidenceProfile,
+    DomainProfileStatus,
+    EvidenceSource,
+    DomainProfile,
+    EvidenceProvenance,
+    EvidenceRunSnapshot,
+    EvidenceState,
+    MeasuredFeature,
+    build_developmental_profile,
+)
+from app.assessment_v2.evidence_adapter import AdaptedEvidence
 from app.core.security import CurrentUser
 
 
@@ -67,6 +91,7 @@ _SYSTEM_PROCESSING_KEY_PREFIX = "__system__:"
 _AUDIT_CHANGED_FIELDS = frozenset(
     {
         "activity_code",
+        "attested_at",
         "age_months",
         "assigned_clinician_id",
         "birth_month",
@@ -80,13 +105,17 @@ _AUDIT_CHANGED_FIELDS = frozenset(
         "protocol_version_key",
         "purpose",
         "quality_status",
+        "review_state",
+        "revision",
         "scope_version",
         "size_bytes",
+        "source",
         "state",
         "status",
         "upload_state",
         "verified_at",
         "version",
+        "evidence_state",
     }
 )
 
@@ -117,6 +146,20 @@ def _context_from_storage(value: str) -> dict[str, object]:
     if not isinstance(parsed, dict):
         raise RepositoryError("invalid_language_context")
     return parsed
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+def _merge_texts(*groups: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(text for group in groups for text in group if text))
+
+
+def _string_values(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, str) and item)
 
 
 class AssessmentRepository:
@@ -235,17 +278,15 @@ class AssessmentRepository:
     def list_children(self, scope: AccessScope) -> list[ChildSnapshot]:
         if not self._has_active_membership(scope):
             return []
-        query = select(ChildRecord).where(ChildRecord.organization_id == scope.organization_id)
-        if scope.role != "org_admin":
-            query = query.join(
-                CareTeamAssignmentRecord,
-                and_(
-                    CareTeamAssignmentRecord.child_id == ChildRecord.child_id,
-                    CareTeamAssignmentRecord.organization_id == scope.organization_id,
-                    CareTeamAssignmentRecord.user_id == scope.user_id,
-                    CareTeamAssignmentRecord.active.is_(True),
-                ),
-            )
+        query = select(ChildRecord).where(ChildRecord.organization_id == scope.organization_id).join(
+            CareTeamAssignmentRecord,
+            and_(
+                CareTeamAssignmentRecord.child_id == ChildRecord.child_id,
+                CareTeamAssignmentRecord.organization_id == scope.organization_id,
+                CareTeamAssignmentRecord.user_id == scope.user_id,
+                CareTeamAssignmentRecord.active.is_(True),
+            ),
+        )
         return [self._child_snapshot(child) for child in self.session.scalars(query).all()]
 
     def add_consent(
@@ -385,6 +426,356 @@ class AssessmentRepository:
             .order_by(AssessmentRecord.created_at)
         ).all()
         return [self._assessment_snapshot(record) for record in records]
+
+    def get_current_transcript(
+        self, scope: AccessScope, assessment_id: str
+    ) -> TranscriptRevisionSnapshot | None:
+        assessment = self._assessment_record(scope, assessment_id)
+        if assessment is None:
+            return None
+        self._require_current_capture_consent(scope, assessment.child_id)
+        record = self.session.scalar(
+            select(TranscriptRevisionRecord)
+            .where(
+                TranscriptRevisionRecord.organization_id == scope.organization_id,
+                TranscriptRevisionRecord.assessment_id == assessment_id,
+            )
+            .order_by(desc(TranscriptRevisionRecord.revision))
+            .limit(1)
+        )
+        return self._transcript_snapshot(record) if record is not None else None
+
+    def get_current_evidence(
+        self, scope: AccessScope, assessment_id: str
+    ) -> EvidenceRunSnapshot | None:
+        assessment = self._assessment_record(scope, assessment_id)
+        if assessment is None:
+            return None
+        self._require_current_capture_consent(scope, assessment.child_id)
+        run = self.session.scalar(
+            select(EvidenceRunRecord)
+            .where(
+                EvidenceRunRecord.organization_id == scope.organization_id,
+                EvidenceRunRecord.assessment_id == assessment_id,
+            )
+            .order_by(
+                desc(EvidenceRunRecord.created_at),
+                desc(EvidenceRunRecord.evidence_run_id),
+            )
+            .limit(1)
+        )
+        return self._evidence_snapshot(run) if run is not None else None
+
+    def create_evidence_run(
+        self,
+        scope: AccessScope,
+        assessment_id: str,
+        transcript_revision_id: str,
+        adapted: AdaptedEvidence,
+        correlation_id: str,
+    ) -> EvidenceRunSnapshot:
+        provenance = adapted.provenance
+        if provenance is None:
+            raise RepositoryError("evidence_provenance_required")
+
+        with self.session.begin_nested():
+            assessment = self._locked_assessment(scope, assessment_id)
+            # Consent withdrawal serializes on the child row. Acquire that
+            # same lock before checking consent so a withdrawal cannot commit
+            # between the check and a protected evidence mutation.
+            self._locked_child(scope, assessment.child_id)
+            self._require_current_capture_consent(scope, assessment.child_id)
+            transcript = self.session.scalar(
+                select(TranscriptRevisionRecord)
+                .where(
+                    TranscriptRevisionRecord.organization_id == scope.organization_id,
+                    TranscriptRevisionRecord.transcript_revision_id == transcript_revision_id,
+                )
+                .with_for_update()
+            )
+            if transcript is None or transcript.assessment_id != assessment_id:
+                raise RepositoryError("transcript_not_found")
+            current_transcript_id = self.session.scalar(
+                select(TranscriptRevisionRecord.transcript_revision_id)
+                .where(
+                    TranscriptRevisionRecord.organization_id == scope.organization_id,
+                    TranscriptRevisionRecord.assessment_id == assessment_id,
+                )
+                .order_by(desc(TranscriptRevisionRecord.revision))
+                .limit(1)
+            )
+            if current_transcript_id != transcript_revision_id:
+                raise RepositoryError("transcript_not_reviewable")
+            if transcript.review_state != TranscriptReviewState.ATTESTED.value:
+                raise RepositoryError("transcript_not_reviewable")
+            if transcript.content_sha256 != provenance.input_sha256:
+                raise RepositoryError("stale_evidence_input")
+
+            selection = self.session.scalar(
+                select(AssessmentProtocolSelectionRecord).where(
+                    AssessmentProtocolSelectionRecord.organization_id == scope.organization_id,
+                    AssessmentProtocolSelectionRecord.assessment_id == assessment_id,
+                )
+            )
+            if selection is None or selection.protocol_version_key != provenance.protocol_version_key:
+                raise RepositoryError("evidence_protocol_mismatch")
+            if any(feature.provenance != provenance for feature in adapted.features):
+                raise RepositoryError("evidence_provenance_mismatch")
+            if adapted.state is EvidenceState.COMPLETED and not adapted.features:
+                raise RepositoryError("evidence_no_measurements")
+
+            existing = self.session.scalar(
+                select(EvidenceRunRecord)
+                .where(
+                    EvidenceRunRecord.organization_id == scope.organization_id,
+                    EvidenceRunRecord.assessment_id == assessment_id,
+                    EvidenceRunRecord.transcript_revision_id == transcript_revision_id,
+                    EvidenceRunRecord.pipeline_version == provenance.pipeline_version,
+                    EvidenceRunRecord.feature_schema_version
+                    == provenance.feature_schema_version,
+                )
+                .with_for_update()
+            )
+            if existing is not None:
+                return self._evidence_snapshot(existing)
+
+            generated_at = _as_utc(provenance.analyzed_at)
+            profile = build_developmental_profile(
+                assessment_id=assessment_id,
+                features=adapted.features,
+                generated_at=generated_at,
+            )
+            profile = replace(
+                profile,
+                state=adapted.state,
+                limitations=_merge_texts(profile.limitations, adapted.limitations),
+            )
+            now = _utc_now()
+            run = EvidenceRunRecord(
+                evidence_run_id=uuid4().hex,
+                organization_id=scope.organization_id,
+                assessment_id=assessment_id,
+                transcript_revision_id=transcript_revision_id,
+                state=adapted.state.value,
+                input_ref=provenance.input_ref,
+                input_sha256=provenance.input_sha256,
+                protocol_version_key=provenance.protocol_version_key,
+                extractor=provenance.extractor,
+                pipeline_version=provenance.pipeline_version,
+                feature_schema_version=provenance.feature_schema_version,
+                limitations_json=list(profile.limitations),
+                generated_at=generated_at,
+                version=1,
+                created_at=now,
+                updated_at=now,
+            )
+            self.session.add(run)
+            self.session.flush()
+            self.session.add_all(
+                EvidenceFeatureRecord(
+                    evidence_feature_id=uuid4().hex,
+                    organization_id=scope.organization_id,
+                    evidence_run_id=run.evidence_run_id,
+                    feature_key=feature.key,
+                    value_json=feature.value,
+                    unit=feature.unit,
+                    source=feature.source.value,
+                    state=feature.state.value,
+                    limitation=feature.limitation,
+                    version=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+                for feature in profile.features
+            )
+            self.session.add_all(
+                EvidenceDomainProfileRecord(
+                    domain_profile_id=uuid4().hex,
+                    organization_id=scope.organization_id,
+                    evidence_run_id=run.evidence_run_id,
+                    domain=domain.domain.value,
+                    status=domain.status.value,
+                    summary=domain.summary,
+                    feature_keys_json=list(domain.feature_keys),
+                    supporting_features_json=list(domain.supporting_features),
+                    conflicting_features_json=list(domain.conflicting_features),
+                    limitations_json=list(domain.limitations),
+                    version=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+                for domain in profile.domains
+            )
+            self._append_audit(
+                scope,
+                "evidence.run_created",
+                "evidence_run",
+                run.evidence_run_id,
+                correlation_id,
+                ["state", "version"],
+                target_version=run.version,
+            )
+            self.session.flush()
+            return self._evidence_snapshot(run)
+
+    def create_transcript_revision(
+        self,
+        scope: AccessScope,
+        command: CreateTranscriptRevision,
+        correlation_id: str,
+    ) -> TranscriptRevisionSnapshot:
+        with self.session.begin_nested():
+            assessment = self._locked_assessment(scope, command.assessment_id)
+            # Consent withdrawal serializes on the child row. Acquire that
+            # same lock before checking consent and mutating transcript state.
+            self._locked_child(scope, assessment.child_id)
+            self._require_current_capture_consent(scope, assessment.child_id)
+            if assessment.state not in {
+                AssessmentState.PROCESSING.value,
+                AssessmentState.REVIEW_REQUIRED.value,
+            }:
+                raise RepositoryError("transcript_not_reviewable")
+
+            latest = self.session.scalar(
+                select(TranscriptRevisionRecord)
+                .where(
+                    TranscriptRevisionRecord.organization_id == scope.organization_id,
+                    TranscriptRevisionRecord.assessment_id == command.assessment_id,
+                )
+                .order_by(desc(TranscriptRevisionRecord.revision))
+                .with_for_update()
+                .limit(1)
+            )
+            if latest is None:
+                if command.expected_revision is not None or command.expected_version is not None:
+                    raise RepositoryError("stale_transcript_version")
+            elif (
+                command.expected_revision != latest.revision
+                or command.expected_version != latest.version
+            ):
+                raise RepositoryError("stale_transcript_version")
+
+            self._mark_evidence_stale_for_assessment(
+                scope,
+                assessment.assessment_id,
+                correlation_id,
+            )
+            if assessment.state == AssessmentState.PROCESSING.value:
+                # The first clinician-visible transcript draft moves the
+                # assessment into the explicit review queue. Later revisions
+                # remain within that queue and do not create extra assessment
+                # transitions.
+                self._transition_locked_assessment(
+                    scope,
+                    assessment,
+                    AssessmentState.REVIEW_REQUIRED,
+                    assessment.version,
+                    correlation_id,
+                )
+            if latest is not None:
+                latest.review_state = TranscriptReviewState.SUPERSEDED.value
+                latest.version += 1
+                latest.updated_at = _utc_now()
+                self._append_audit(
+                    scope,
+                    "transcript.revision_superseded",
+                    "transcript_revision",
+                    latest.transcript_revision_id,
+                    correlation_id,
+                    ["review_state", "version"],
+                    target_version=latest.version,
+                )
+            now = _utc_now()
+            record = TranscriptRevisionRecord(
+                transcript_revision_id=uuid4().hex,
+                organization_id=scope.organization_id,
+                assessment_id=command.assessment_id,
+                revision=(latest.revision + 1 if latest is not None else 1),
+                source=command.source.value,
+                review_state=TranscriptReviewState.DRAFT.value,
+                content=command.content,
+                content_sha256=sha256(command.content.encode("utf-8")).hexdigest(),
+                created_by_user_id=scope.user_id,
+                attested_by_user_id=None,
+                attested_at=None,
+                version=1,
+                created_at=now,
+                updated_at=now,
+            )
+            self.session.add(record)
+            self._append_audit(
+                scope,
+                "transcript.revision_created",
+                "transcript_revision",
+                record.transcript_revision_id,
+                correlation_id,
+                ["revision", "source", "review_state", "version"],
+                target_version=record.version,
+            )
+            self.session.flush()
+            return self._transcript_snapshot(record)
+
+    def attest_transcript(
+        self,
+        scope: AccessScope,
+        command: AttestTranscript,
+        correlation_id: str,
+    ) -> TranscriptRevisionSnapshot:
+        with self.session.begin_nested():
+            record_ref = self.session.scalar(
+                select(TranscriptRevisionRecord)
+                .where(
+                    TranscriptRevisionRecord.organization_id == scope.organization_id,
+                    TranscriptRevisionRecord.transcript_revision_id == command.transcript_revision_id,
+                )
+            )
+            if record_ref is None:
+                raise RepositoryError("transcript_not_found")
+            assessment = self._locked_assessment(scope, record_ref.assessment_id)
+            self._locked_child(scope, assessment.child_id)
+            self._require_current_capture_consent(scope, assessment.child_id)
+            record = self.session.scalar(
+                select(TranscriptRevisionRecord)
+                .where(
+                    TranscriptRevisionRecord.organization_id == scope.organization_id,
+                    TranscriptRevisionRecord.transcript_revision_id == command.transcript_revision_id,
+                )
+                .with_for_update()
+            )
+            if record is None:
+                raise RepositoryError("transcript_not_found")
+            current = self.session.scalar(
+                select(TranscriptRevisionRecord.transcript_revision_id)
+                .where(
+                    TranscriptRevisionRecord.organization_id == scope.organization_id,
+                    TranscriptRevisionRecord.assessment_id == record.assessment_id,
+                )
+                .order_by(desc(TranscriptRevisionRecord.revision))
+                .limit(1)
+            )
+            if current != record.transcript_revision_id:
+                raise RepositoryError("transcript_not_reviewable")
+            if record.review_state != TranscriptReviewState.DRAFT.value:
+                raise RepositoryError("transcript_not_reviewable")
+            if record.version != command.expected_version:
+                raise RepositoryError("stale_transcript_version")
+            now = _utc_now()
+            record.review_state = TranscriptReviewState.ATTESTED.value
+            record.attested_by_user_id = scope.user_id
+            record.attested_at = now
+            record.version += 1
+            record.updated_at = now
+            self._append_audit(
+                scope,
+                "transcript.attested",
+                "transcript_revision",
+                record.transcript_revision_id,
+                correlation_id,
+                ["review_state", "attested_at", "version"],
+                target_version=record.version,
+            )
+            self.session.flush()
+            return self._transcript_snapshot(record)
 
     def transition_assessment(
         self, scope: AccessScope, command: TransitionAssessment, correlation_id: str
@@ -1433,6 +1824,35 @@ class AssessmentRepository:
             raise RepositoryError("assessment_not_found")
         return assessment
 
+    def _mark_evidence_stale_for_assessment(
+        self,
+        scope: AccessScope,
+        assessment_id: str,
+        correlation_id: str,
+    ) -> None:
+        runs = self.session.scalars(
+            select(EvidenceRunRecord)
+            .where(
+                EvidenceRunRecord.organization_id == scope.organization_id,
+                EvidenceRunRecord.assessment_id == assessment_id,
+                EvidenceRunRecord.state != EvidenceState.STALE.value,
+            )
+            .with_for_update()
+        ).all()
+        for run in runs:
+            run.state = EvidenceState.STALE.value
+            run.version += 1
+            run.updated_at = _utc_now()
+            self._append_audit(
+                scope,
+                "evidence.run_staled",
+                "evidence_run",
+                run.evidence_run_id,
+                correlation_id,
+                ["state", "version"],
+                target_version=run.version,
+            )
+
     def _require_current_capture_consent(self, scope: AccessScope, child_id: str) -> None:
         latest = self.session.scalar(
             select(ConsentRecord)
@@ -1903,8 +2323,6 @@ class AssessmentRepository:
         )
         if child_exists is None:
             return False
-        if scope.role == "org_admin":
-            return True
         return (
             self.session.scalar(
                 select(CareTeamAssignmentRecord.assignment_id).where(
@@ -2081,6 +2499,103 @@ class AssessmentRepository:
             version=assessment.version,
             age_months=assessment.age_months,
             language_context=_context_from_storage(assessment.language_context),
+        )
+
+    @staticmethod
+    def _transcript_snapshot(record: TranscriptRevisionRecord) -> TranscriptRevisionSnapshot:
+        return TranscriptRevisionSnapshot(
+            id=record.transcript_revision_id,
+            organization_id=record.organization_id,
+            assessment_id=record.assessment_id,
+            revision=record.revision,
+            source=TranscriptSource(record.source),
+            review_state=TranscriptReviewState(record.review_state),
+            content=record.content,
+            content_sha256=record.content_sha256,
+            created_by_user_id=record.created_by_user_id,
+            created_at=record.created_at,
+            attested_by_user_id=record.attested_by_user_id,
+            attested_at=record.attested_at,
+            version=record.version,
+        )
+
+    def _evidence_snapshot(self, run: EvidenceRunRecord) -> EvidenceRunSnapshot:
+        provenance = EvidenceProvenance(
+            input_ref=run.input_ref,
+            input_sha256=run.input_sha256,
+            protocol_version_key=run.protocol_version_key,
+            extractor=run.extractor,
+            pipeline_version=run.pipeline_version,
+            feature_schema_version=run.feature_schema_version,
+            analyzed_at=_as_utc(run.generated_at),
+        )
+        feature_records = self.session.scalars(
+            select(EvidenceFeatureRecord)
+            .where(
+                EvidenceFeatureRecord.organization_id == run.organization_id,
+                EvidenceFeatureRecord.evidence_run_id == run.evidence_run_id,
+            )
+            .order_by(EvidenceFeatureRecord.feature_key)
+        ).all()
+        features = tuple(
+            MeasuredFeature(
+                key=record.feature_key,
+                value=record.value_json,
+                unit=record.unit,
+                source=EvidenceSource(record.source),
+                state=EvidenceState(record.state),
+                limitation=record.limitation,
+                provenance=provenance,
+            )
+            for record in feature_records
+        )
+        domain_records = self.session.scalars(
+            select(EvidenceDomainProfileRecord)
+            .where(
+                EvidenceDomainProfileRecord.organization_id == run.organization_id,
+                EvidenceDomainProfileRecord.evidence_run_id == run.evidence_run_id,
+            )
+        ).all()
+        domain_order = {domain.value: index for index, domain in enumerate(DevelopmentalDomain)}
+        domains = tuple(
+            DomainProfile(
+                domain=DevelopmentalDomain(record.domain),
+                status=DomainProfileStatus(record.status),
+                summary=record.summary,
+                feature_keys=tuple(_string_values(record.feature_keys_json)),
+                supporting_features=tuple(_string_values(record.supporting_features_json)),
+                conflicting_features=tuple(_string_values(record.conflicting_features_json)),
+                limitations=tuple(_string_values(record.limitations_json)),
+            )
+            for record in sorted(
+                domain_records,
+                key=lambda value: domain_order.get(value.domain, len(domain_order)),
+            )
+        )
+        state = EvidenceState(run.state)
+        limitations = tuple(_string_values(run.limitations_json))
+        if state is EvidenceState.STALE:
+            limitations = _merge_texts(
+                limitations,
+                ("Derived evidence is stale because its reviewed input changed.",),
+            )
+        profile = DevelopmentalEvidenceProfile(
+            assessment_id=run.assessment_id,
+            state=state,
+            generated_at=_as_utc(run.generated_at),
+            features=features,
+            domains=domains,
+            limitations=limitations,
+        )
+        return EvidenceRunSnapshot(
+            id=run.evidence_run_id,
+            organization_id=run.organization_id,
+            assessment_id=run.assessment_id,
+            transcript_revision_id=run.transcript_revision_id,
+            state=state,
+            provenance=provenance,
+            profile=profile,
+            version=run.version,
         )
 
     @staticmethod

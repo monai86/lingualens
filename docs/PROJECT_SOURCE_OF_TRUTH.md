@@ -28,8 +28,8 @@
 
 `apps/api` เป็น backend ที่ frontend หลักเรียกใช้ผ่าน `/api/v1`; `/api/v2`
 เป็น assessment-centric foundation ที่เปิดแบบ additive และยังไม่แทนที่ v1.
-หน้า `/assessments` ใน frontend เป็น v2 entrypoint แรกสำหรับ Capture V2;
-หน้า session เดิมยังคงใช้ `/api/v1`.
+หน้า `/assessments` ใน frontend เป็น v2 entrypoint สำหรับ Capture V2 และมี
+evidence workspace ต่อท้าย assessment; หน้า session เดิมยังคงใช้ `/api/v1`.
 
 ### Assessment v2 foundation boundary
 
@@ -39,10 +39,20 @@
   verification และ non-diagnostic quality states; frontend `/assessments`
   รองรับ consent gate, guided recording, upload handoff, quality polling และ
   resume ของ assessment ที่ยังไม่จบ; worker ใช้ `processing_runs`
-  เป็น durable database queue และไม่ใช้ legacy Redis queue; evidence/profile
-  slices ยังไม่เปิด
+  เป็น durable database queue และไม่ใช้ legacy Redis queue; เพิ่ม reviewed
+  transcript revisions แบบ append-only, transcript attestation, transcript
+  review page ที่ `/assessments/{assessmentId}/transcript`, evidence read model
+  ที่ `/api/v2/assessments/{assessment_id}/evidence` และ explicit
+  reviewed-transcript extraction worker ที่
+  `POST /api/v2/assessments/{assessment_id}/evidence-runs` แล้ว; background queue,
+  timestamp-level review และ reference-band comparison ยังไม่เปิด
+- evidence profile เก็บ provenance, ฟีเจอร์ที่วัดได้, developmental domains,
+  ข้อจำกัด และสถานะ stale เมื่อ transcript revision ใหม่เกิดขึ้น; ใช้เพื่อ
+  decision support เชิงพรรณนาเท่านั้น ไม่ใช่การวินิจฉัย
 - `LINGUALENS_DATABASE_URL`/v1 Alembic และ
-  `LINGUALENS_ASSESSMENT_DATABASE_URL`/v2 Alembic เป็นคนละฐานและคนละ history
+  `LINGUALENS_ASSESSMENT_DATABASE_URL`/v2 Alembic เป็นคนละฐานและคนละ history;
+  v2 transcript/evidence อยู่ใน migration `0005_transcript_revisions` และ
+  `0006_evidence_profiles`
 - ฐาน v2 เริ่มว่าง ไม่มีการ import หรือ rewrite records/audio/storage จาก v1
 - Supabase Auth ยืนยันตัวตน, FastAPI บังคับ policy, PostgreSQL RLS เป็น
   defense in depth
@@ -101,7 +111,9 @@ persistence layer หลักของ lingualens.
    privacy, feature/AI/ML review, membership, care-team assignment และ Phase 1
    tenant/RLS schema foundation แล้ว แต่ยังไม่ถือว่า production-hardened จนกว่า
    จะ verify กับ managed Postgres/Supabase และ production auth จริง
-6. Browser ห้ามสร้าง ML result หรือ report-final state แทน backend
+6. Browser ห้ามสร้าง ML/evidence result หรือ report-final state แทน backend
+   และ evidence worker รับเฉพาะ transcript revision ที่ attest แล้วผ่าน
+   versioned provenance adapter ก่อน persistence
 7. Signed-off reports ต้องมี backend-generated signed snapshot, SHA-256 report
    hash, signer, version และ export timestamp เพื่อ audit/export ย้อนหลังได้;
    การแก้ report หลัง sign-off ต้องสร้าง draft revision ใหม่ที่อ้างถึง report
@@ -110,10 +122,10 @@ persistence layer หลักของ lingualens.
    organization opt-in เท่านั้น; ทุก AI draft request ต้องเก็บ provider/model/
    input-hash provenance และยังต้อง editable/rejectable ก่อน sign-off
 9. เมื่อ transcript เปลี่ยน backend ต้องคง derived records เดิมไว้เพื่อ audit
-   แต่ทำเครื่องหมาย findings และ report draft ที่มีอยู่เป็น `stale`; stale
-   findings ห้ามใช้เป็น current input และ stale report ห้ามแก้, sign off หรือ
-   export จนกว่าจะ regenerate จาก transcript version ปัจจุบัน ส่วน signed
-   snapshot เดิมต้อง immutable
+   แต่ทำเครื่องหมาย evidence runs, findings และ report draft ที่มีอยู่เป็น
+   `stale`; stale outputs ห้ามใช้เป็น current input และ stale report ห้ามแก้,
+   sign off หรือ export จนกว่าจะ regenerate จาก transcript version ปัจจุบัน
+   ส่วน signed snapshot เดิมต้อง immutable
 10. API rate limiting ต้องเปิดได้ด้วย server-side configuration และ 429 response
    ต้องเป็นข้อความทั่วไป ไม่มี child identifier, transcript, audio key หรือ
    clinical content
@@ -238,7 +250,7 @@ cues แบบ fail-closed และไม่ใส่ผลลงรายง�
 ```bash
 # Active API
 cd apps/api
-PYTHONPATH=. uvicorn app.main:app --reload --port 8000
+PYTHONPATH=.:../..:../../src uvicorn app.main:app --reload --port 8000
 
 # Active therapist frontend
 cd apps/lingualens-app

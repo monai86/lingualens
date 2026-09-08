@@ -4,7 +4,7 @@ from alembic import op
 
 
 revision = "0004_capture_cleanup_stage"
-down_revision = "0003_capture_protocols_recordings"
+down_revision = "0003_capture_protocols"
 branch_labels = None
 depends_on = None
 

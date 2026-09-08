@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 import subprocess
-import sys
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -86,19 +84,28 @@ def _seed_probe_membership() -> None:
         f"@127.0.0.1:{DATABASE_PORT}/lingualens_assessment_v2"
     ) as connection:
         connection.execute(
-            "INSERT INTO organizations (organization_id, display_label, active) "
-            "VALUES (%s, %s, true) ON CONFLICT (organization_id) DO NOTHING",
+            "SELECT set_config('app.current_organization_id', %s, true)",
+            ("compose-check-org",),
+        )
+        connection.execute(
+            "INSERT INTO organizations "
+            "(organization_id, display_label, active, created_at, updated_at) "
+            "VALUES (%s, %s, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+            "ON CONFLICT (organization_id) DO NOTHING",
             ("compose-check-org", "Synthetic Compose Check Organization"),
         )
         connection.execute(
-            "INSERT INTO user_profiles (user_id, display_label) VALUES (%s, %s) "
+            "INSERT INTO user_profiles "
+            "(user_id, display_label, created_at, updated_at) "
+            "VALUES (%s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
             "ON CONFLICT (user_id) DO NOTHING",
             ("compose-check-therapist", "Synthetic Compose Check Therapist"),
         )
         connection.execute(
             "INSERT INTO organization_memberships "
-            "(membership_id, organization_id, user_id, role, active) "
-            "VALUES (%s, %s, %s, %s, true) ON CONFLICT (organization_id, user_id) DO NOTHING",
+            "(membership_id, organization_id, user_id, role, active, created_at, updated_at) "
+            "VALUES (%s, %s, %s, %s, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) "
+            "ON CONFLICT (organization_id, user_id) DO NOTHING",
             (
                 "compose-check-membership",
                 "compose-check-org",
@@ -136,50 +143,18 @@ def _probe_v2() -> None:
         raise RuntimeError(f"Compose v2 API probe returned an unexpected response: {payload!r}")
 
 
-def _start_host_api() -> subprocess.Popen[str]:
-    environment = os.environ.copy()
-    environment.update(
-        {
-            "PYTHONPATH": str(ROOT / "apps" / "api"),
-            "LINGUALENS_MOCK_MODE": "true",
-            "LINGUALENS_ASSESSMENT_DATABASE_URL": (
-                "postgresql+psycopg://lingualens_assessment_app:local-assessment-only"
-                f"@127.0.0.1:{DATABASE_PORT}/lingualens_assessment_v2"
-            ),
-            "LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP": "true",
-        }
-    )
-    return subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(API_PORT)],
-        cwd=ROOT / "apps" / "api",
-        env=environment,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-
-
 def main() -> int:
-    api_process: subprocess.Popen[str] | None = None
     try:
         _run("down", "--volumes", "--remove-orphans", check=False)
-        _run("up", "-d", "--force-recreate", "postgres")
+        _run("up", "-d", "--force-recreate", "postgres", "api")
         _wait_for_postgres()
-        _assert_runtime_role()
-        api_process = _start_host_api()
         _wait_for_api()
+        _assert_runtime_role()
         _seed_probe_membership()
         _probe_v2()
         print("assessment-v2 Compose runtime check passed")
         return 0
     finally:
-        if api_process is not None:
-            api_process.terminate()
-            try:
-                api_process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                api_process.kill()
-                api_process.wait()
         _run("down", "--volumes", "--remove-orphans", check=False)
 
 

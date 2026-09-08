@@ -22,8 +22,13 @@
   separately migrated database boundary, consent-gated assessment lifecycle,
   tenant/care-team policy, atomic consent gating, safe error envelopes, and
   PostgreSQL RLS checks using a non-superuser Compose runtime role.
-  Existing `/api/v1` clients and data remain unchanged; feature analysis remains
-  deferred to a later slice.
+- Added the reviewed-transcript and evidence boundary under `/api/v2`: append-only
+  transcript revisions, therapist attestation, the `/assessments/{id}/transcript`
+  review page, an explicit provenance-bound reviewed-transcript extraction worker,
+  feature/domain persistence, stale invalidation after transcript changes, and a
+  therapist evidence workspace. The read model is descriptive decision support;
+  background extraction queues, reference-band comparison, ASD/developmental
+  diagnosis, and numeric risk output remain out of scope.
 - Added Visual Fundamental Pitch Contour Overlay (`self._show_pitch_overlay`) in Desktop GUI with real-time F0 curve rendering, voiced autocorrelation sampling, 250 Hz child pitch threshold guideline, and dynamic toolbar toggle (**📈 F0 Curve: ON/OFF**).
 - Added Batch Audio Ingestion Queue & Modal Runner in Desktop GUI (**📦 Batch Ingest Files...**), supporting multi-file automated ingestion into dedicated case sessions with real-time status tracking.
 - Added Longitudinal Assessment Trajectory Tracker (`subtab_longitudinal`, `tree_longitudinal`) providing cross-session developmental progress monitoring, MLU-w growth delta, vocabulary TTR trajectory, and historical session comparison.

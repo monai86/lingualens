@@ -32,6 +32,10 @@ _V2_TABLES = (
     "recordings",
     "processing_runs",
     "recording_quality_results",
+    "transcript_revisions",
+    "evidence_runs",
+    "evidence_feature_values",
+    "evidence_domain_profiles",
 )
 _TENANT_TABLES = (
     "organization_memberships",
@@ -44,12 +48,22 @@ _TENANT_TABLES = (
     "recordings",
     "processing_runs",
     "recording_quality_results",
+    "transcript_revisions",
+    "evidence_runs",
+    "evidence_feature_values",
+    "evidence_domain_profiles",
 )
 _CAPTURE_TENANT_TABLES = (
     "assessment_protocol_selections",
     "recordings",
     "processing_runs",
     "recording_quality_results",
+)
+_EVIDENCE_TENANT_TABLES = (
+    "transcript_revisions",
+    "evidence_runs",
+    "evidence_feature_values",
+    "evidence_domain_profiles",
 )
 
 
@@ -153,12 +167,29 @@ def rls_database() -> Iterator[tuple[str, str, str, str]]:
                     "now": datetime.now(timezone.utc),
                 },
             )
+        connection.execute(
+            text(
+                "INSERT INTO care_team_assignments "
+                "(assignment_id, organization_id, child_id, user_id, role, active, created_at, updated_at) "
+                "VALUES (:assignment_id, 'org_alpha', :child_id, :user_id, 'assigned_clinician', true, :now, :now)"
+            ),
+            {
+                "assignment_id": uuid4().hex,
+                "child_id": alpha_child,
+                "user_id": limited_user,
+                "now": datetime.now(timezone.utc),
+            },
+        )
 
     try:
         limited_url = _limited_url(owner_url)
-        yield str(owner_url), limited_url, alpha_child, beta_child
+        yield owner_url.render_as_string(hide_password=False), limited_url, alpha_child, beta_child
     finally:
         with owner_engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM care_team_assignments WHERE child_id IN (:alpha, :beta)"),
+                {"alpha": alpha_child, "beta": beta_child},
+            )
             connection.execute(
                 text("DELETE FROM children WHERE child_id IN (:alpha, :beta)"),
                 {"alpha": alpha_child, "beta": beta_child},
@@ -235,6 +266,37 @@ def test_capture_tenant_policies_are_organization_scoped(
             ).mappings().all()
 
         for table_name in _CAPTURE_TENANT_TABLES:
+            table_policies = [row for row in rows if row["tablename"] == table_name]
+            assert table_policies
+            assert any(
+                "organization_id" in (row["qual"] or "")
+                and "current_setting" in (row["qual"] or "")
+                and "organization_id" in (row["with_check"] or "")
+                and "current_setting" in (row["with_check"] or "")
+                for row in table_policies
+            )
+    finally:
+        engine.dispose()
+
+
+def test_evidence_tenant_policies_are_organization_scoped(
+    rls_database: tuple[str, str, str, str],
+) -> None:
+    """Verify reviewed transcript and evidence policies fail closed by tenant."""
+
+    owner_url, _, _, _ = rls_database
+    engine = create_engine(owner_url)
+    table_literals = ", ".join(f"'{table_name}'" for table_name in _EVIDENCE_TENANT_TABLES)
+    try:
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    "SELECT tablename, qual, with_check FROM pg_policies "
+                    "WHERE schemaname = 'public' AND tablename IN (" + table_literals + ")"
+                )
+            ).mappings().all()
+
+        for table_name in _EVIDENCE_TENANT_TABLES:
             table_policies = [row for row in rows if row["tablename"] == table_name]
             assert table_policies
             assert any(

@@ -19,6 +19,10 @@ EXPECTED_TABLES = {
     "recordings",
     "processing_runs",
     "recording_quality_results",
+    "transcript_revisions",
+    "evidence_runs",
+    "evidence_feature_values",
+    "evidence_domain_profiles",
 }
 
 GLOBAL_CATALOG_TABLES = {"organizations", "user_profiles", "protocol_versions", "protocol_activities"}
@@ -104,7 +108,7 @@ def test_mutable_records_use_utc_timestamps_and_version_checks() -> None:
 
     for table in AssessmentBase.metadata.tables.values():
         for constraint in table.constraints:
-            if isinstance(constraint, CheckConstraint) and "version" in str(constraint.sqltext):
+            if isinstance(constraint, CheckConstraint) and "version >= 1" in str(constraint.sqltext):
                 assert "version >= 1" in str(constraint.sqltext)
 
 

@@ -47,7 +47,7 @@ cd apps/lingualens-app && npm ci
 ```bash
 # Terminal 1
 cd apps/api
-PYTHONPATH=. uvicorn app.main:app --reload --port 8000
+PYTHONPATH=.:../..:../../src uvicorn app.main:app --reload --port 8000
 
 # Terminal 2
 cd apps/lingualens-app
@@ -67,10 +67,20 @@ Assessment v2 checks are additive to the current `/api/v1` product:
 ```bash
 PYTHONPATH=apps/api:src pytest apps/api/tests/assessment_v2 -m "not assessment_postgres" -q
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
-docker compose up -d postgres
-PYTHONPATH=apps/api:src python scripts/check_assessment_v2_postgres.py
-PYTHONPATH=apps/api:src python scripts/check_assessment_v2_compose.py
+LINGUALENS_NATIVE_ADMIN_DATABASE_URL=postgresql+psycopg://<local-admin>:<password>@127.0.0.1:5432/postgres \
+  PYTHONPATH=apps/api:src python scripts/check_assessment_v2_native.py
 PYTHONPATH=apps/api:src python -m app.assessment_v2.worker_runtime
+```
+
+The native PostgreSQL/FastAPI check is the primary local runtime gate and does
+not require Docker. It creates a uniquely named temporary database, starts a
+local FastAPI process, probes `/api/v2`, runs the PostgreSQL RLS suite, and
+removes only its temporary database and role. Docker Compose remains an
+optional container-packaging smoke test:
+
+```bash
+docker compose up -d postgres
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_compose.py
 ```
 
 The v2 database and Alembic history are separate from `LINGUALENS_DATABASE_URL`
@@ -79,6 +89,19 @@ v1 records or storage objects are imported. Supabase Auth establishes identity,
 FastAPI owns policy, and PostgreSQL RLS is defense in depth. Clients continue
 to use `/api/v1` until a later migration plan. Rollback means unmounting `/api/v2`
 and leaving v2 startup migrations disabled; v1 data is not changed.
+
+Migration `0005_transcript_revisions` adds the append-only reviewed-transcript
+boundary, and `0006_evidence_profiles` adds tenant-scoped evidence runs,
+measured features, and developmental domain profiles. Only an attested transcript
+revision may be used by the evidence persistence seam. The therapist review
+page is `/assessments/{assessmentId}/transcript`; saving creates an append-only
+revision and the explicit attestation action is required before extraction. The
+worker endpoint is `POST /api/v2/assessments/{assessment_id}/evidence-runs` and
+passes deterministic descriptive measurements through the v2 provenance
+adapter. The read route is `GET /api/v2/assessments/{assessment_id}/evidence`;
+it returns provenance, descriptive features, domain summaries, and limitations
+without transcript text. There is no background queue or diagnostic/probability
+claim in this slice.
 
 The Capture V2 worker polls durable `processing_runs`, verifies upload bytes with
 a server-computed SHA-256, and then runs bounded `ffprobe`/`ffmpeg` quality
@@ -101,7 +124,7 @@ Targeted checks:
 
 ```bash
 PYTHONPATH=apps/api:src pytest tests/test_name.py -q
-cd apps/api && PYTHONPATH=. pytest tests/test_workflow.py -q
+cd apps/api && PYTHONPATH=.:../..:../../src pytest tests/test_workflow.py -q
 cd apps/lingualens-app && npm test
 cd apps/lingualens-app && npm run typecheck && npm run build
 cd apps/lingualens-app && npx playwright install chromium && npm run e2e:smoke

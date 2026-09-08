@@ -17,6 +17,7 @@ from sqlalchemy import (
     Integer,
     JSON,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -30,6 +31,14 @@ from app.assessment_v2.domain.models import (
     ProcessingRunState,
     RecordingQualityStatus,
     RecordingUploadState,
+    TranscriptReviewState,
+    TranscriptSource,
+)
+from app.assessment_v2.evidence import (
+    DevelopmentalDomain,
+    DomainProfileStatus,
+    EvidenceSource,
+    EvidenceState,
 )
 
 
@@ -47,6 +56,18 @@ _UPLOAD_STATE_VALUES = ", ".join(f"'{state.value}'" for state in RecordingUpload
 _PROCESSING_STAGE_VALUES = ", ".join(f"'{stage.value}'" for stage in ProcessingRunStage)
 _PROCESSING_STATE_VALUES = ", ".join(f"'{state.value}'" for state in ProcessingRunState)
 _QUALITY_STATUS_VALUES = ", ".join(f"'{status.value}'" for status in RecordingQualityStatus)
+_TRANSCRIPT_SOURCE_VALUES = ", ".join(f"'{source.value}'" for source in TranscriptSource)
+_TRANSCRIPT_REVIEW_STATE_VALUES = ", ".join(
+    f"'{state.value}'" for state in TranscriptReviewState
+)
+_EVIDENCE_STATE_VALUES = ", ".join(f"'{state.value}'" for state in EvidenceState)
+_EVIDENCE_SOURCE_VALUES = ", ".join(f"'{source.value}'" for source in EvidenceSource)
+_DEVELOPMENTAL_DOMAIN_VALUES = ", ".join(
+    f"'{domain.value}'" for domain in DevelopmentalDomain
+)
+_DOMAIN_PROFILE_STATUS_VALUES = ", ".join(
+    f"'{status.value}'" for status in DomainProfileStatus
+)
 
 
 class OrganizationRecord(AssessmentBase):
@@ -541,6 +562,304 @@ class RecordingQualityResultRecord(AssessmentBase):
     )
     provenance: Mapped[str] = mapped_column(String(256), nullable=False)
     evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class TranscriptRevisionRecord(AssessmentBase):
+    __tablename__ = "transcript_revisions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "transcript_revision_id",
+            name="uq_transcript_revisions_organization_revision_id",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "assessment_id",
+            "revision",
+            name="uq_transcript_revisions_organization_assessment_revision",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "assessment_id"],
+            ["assessments.organization_id", "assessments.assessment_id"],
+            name="fk_transcript_revisions_assessment_tenant",
+        ),
+        CheckConstraint(
+            f"source IN ({_TRANSCRIPT_SOURCE_VALUES})",
+            name="ck_transcript_revisions_source",
+        ),
+        CheckConstraint(
+            f"review_state IN ({_TRANSCRIPT_REVIEW_STATE_VALUES})",
+            name="ck_transcript_revisions_review_state",
+        ),
+        CheckConstraint("length(content) > 0", name="ck_transcript_revisions_content"),
+        CheckConstraint(
+            "length(content_sha256) = 64",
+            name="ck_transcript_revisions_content_sha256",
+        ),
+        CheckConstraint("revision >= 1", name="ck_transcript_revisions_revision"),
+        CheckConstraint("version >= 1", name="ck_transcript_revisions_version"),
+        Index(
+            "ix_transcript_revisions_organization_assessment_revision",
+            "organization_id",
+            "assessment_id",
+            "revision",
+        ),
+    )
+
+    transcript_revision_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.organization_id", name="fk_transcript_revisions_organization"),
+        nullable=False,
+        index=True,
+    )
+    assessment_id: Mapped[str] = mapped_column(
+        ForeignKey("assessments.assessment_id", name="fk_transcript_revisions_assessment"),
+        nullable=False,
+        index=True,
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    review_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    attested_by_user_id: Mapped[str | None] = mapped_column(String(128))
+    attested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class EvidenceRunRecord(AssessmentBase):
+    __tablename__ = "evidence_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "evidence_run_id",
+            name="uq_evidence_runs_organization_run",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "assessment_id",
+            "transcript_revision_id",
+            "pipeline_version",
+            "feature_schema_version",
+            name="uq_evidence_runs_identity",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "assessment_id"],
+            ["assessments.organization_id", "assessments.assessment_id"],
+            name="fk_evidence_runs_assessment_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "transcript_revision_id"],
+            [
+                "transcript_revisions.organization_id",
+                "transcript_revisions.transcript_revision_id",
+            ],
+            name="fk_evidence_runs_transcript_tenant",
+        ),
+        CheckConstraint(
+            f"state IN ({_EVIDENCE_STATE_VALUES})",
+            name="ck_evidence_runs_state",
+        ),
+        CheckConstraint(
+            "length(input_ref) > 0",
+            name="ck_evidence_runs_input_ref",
+        ),
+        CheckConstraint(
+            "length(input_sha256) = 64",
+            name="ck_evidence_runs_input_sha256",
+        ),
+        CheckConstraint(
+            "length(protocol_version_key) > 0",
+            name="ck_evidence_runs_protocol",
+        ),
+        CheckConstraint(
+            "length(extractor) > 0",
+            name="ck_evidence_runs_extractor",
+        ),
+        CheckConstraint(
+            "length(pipeline_version) > 0",
+            name="ck_evidence_runs_pipeline",
+        ),
+        CheckConstraint(
+            "length(feature_schema_version) > 0",
+            name="ck_evidence_runs_schema",
+        ),
+        CheckConstraint("version >= 1", name="ck_evidence_runs_version"),
+        Index(
+            "ix_evidence_runs_organization_assessment_created",
+            "organization_id",
+            "assessment_id",
+            "created_at",
+        ),
+    )
+
+    evidence_run_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.organization_id", name="fk_evidence_runs_organization"),
+        nullable=False,
+        index=True,
+    )
+    assessment_id: Mapped[str] = mapped_column(
+        ForeignKey("assessments.assessment_id", name="fk_evidence_runs_assessment"),
+        nullable=False,
+        index=True,
+    )
+    transcript_revision_id: Mapped[str] = mapped_column(
+        ForeignKey(
+            "transcript_revisions.transcript_revision_id",
+            name="fk_evidence_runs_transcript_revision",
+        ),
+        nullable=False,
+        index=True,
+    )
+    state: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    input_ref: Mapped[str] = mapped_column(String(256), nullable=False)
+    input_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    protocol_version_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    extractor: Mapped[str] = mapped_column(String(128), nullable=False)
+    pipeline_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    feature_schema_version: Mapped[str] = mapped_column(String(128), nullable=False)
+    limitations_json: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default=text("'[]'"), nullable=False
+    )
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class EvidenceFeatureRecord(AssessmentBase):
+    __tablename__ = "evidence_feature_values"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "evidence_feature_id",
+            name="uq_evidence_features_organization_feature",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "evidence_run_id",
+            "feature_key",
+            name="uq_evidence_features_run_key",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "evidence_run_id"],
+            ["evidence_runs.organization_id", "evidence_runs.evidence_run_id"],
+            name="fk_evidence_features_run_tenant",
+        ),
+        CheckConstraint(
+            f"source IN ({_EVIDENCE_SOURCE_VALUES})",
+            name="ck_evidence_features_source",
+        ),
+        CheckConstraint(
+            f"state IN ({_EVIDENCE_STATE_VALUES})",
+            name="ck_evidence_features_state",
+        ),
+        CheckConstraint(
+            "(state = 'completed' AND value_json IS NOT NULL) OR "
+            "(state <> 'completed' AND value_json IS NULL AND length(limitation) > 0)",
+            name="ck_evidence_features_value_state",
+        ),
+        CheckConstraint("length(feature_key) > 0", name="ck_evidence_features_key"),
+        CheckConstraint("length(unit) > 0", name="ck_evidence_features_unit"),
+        CheckConstraint("version >= 1", name="ck_evidence_features_version"),
+        Index(
+            "ix_evidence_features_organization_run",
+            "organization_id",
+            "evidence_run_id",
+        ),
+    )
+
+    evidence_feature_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.organization_id", name="fk_evidence_features_organization"),
+        nullable=False,
+        index=True,
+    )
+    evidence_run_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_runs.evidence_run_id", name="fk_evidence_features_run"),
+        nullable=False,
+        index=True,
+    )
+    feature_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    value_json: Mapped[object | None] = mapped_column(JSON)
+    unit: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False)
+    limitation: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class EvidenceDomainProfileRecord(AssessmentBase):
+    __tablename__ = "evidence_domain_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "domain_profile_id",
+            name="uq_evidence_domains_organization_profile",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "evidence_run_id",
+            "domain",
+            name="uq_evidence_domains_run_domain",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "evidence_run_id"],
+            ["evidence_runs.organization_id", "evidence_runs.evidence_run_id"],
+            name="fk_evidence_domains_run_tenant",
+        ),
+        CheckConstraint(
+            f"domain IN ({_DEVELOPMENTAL_DOMAIN_VALUES})",
+            name="ck_evidence_domains_domain",
+        ),
+        CheckConstraint(
+            f"status IN ({_DOMAIN_PROFILE_STATUS_VALUES})",
+            name="ck_evidence_domains_status",
+        ),
+        CheckConstraint("length(summary) > 0", name="ck_evidence_domains_summary"),
+        CheckConstraint("version >= 1", name="ck_evidence_domains_version"),
+        Index(
+            "ix_evidence_domains_organization_run",
+            "organization_id",
+            "evidence_run_id",
+        ),
+    )
+
+    domain_profile_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.organization_id", name="fk_evidence_domains_organization"),
+        nullable=False,
+        index=True,
+    )
+    evidence_run_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_runs.evidence_run_id", name="fk_evidence_domains_run"),
+        nullable=False,
+        index=True,
+    )
+    domain: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    feature_keys_json: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default=text("'[]'"), nullable=False
+    )
+    supporting_features_json: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default=text("'[]'"), nullable=False
+    )
+    conflicting_features_json: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default=text("'[]'"), nullable=False
+    )
+    limitations_json: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default=text("'[]'"), nullable=False
+    )
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

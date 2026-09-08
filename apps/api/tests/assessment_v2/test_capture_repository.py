@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from importlib import import_module
 
 import pytest
@@ -13,12 +14,16 @@ from app.assessment_v2.db.base import AssessmentBase
 from app.assessment_v2.db.models import (
     AssessmentRecord,
     AuditEventRecord,
+    EvidenceDomainProfileRecord,
+    EvidenceFeatureRecord,
+    EvidenceRunRecord,
     OrganizationMembershipRecord,
     ProcessingRunRecord,
     ProtocolActivityRecord,
     ProtocolVersionRecord,
     RecordingQualityResultRecord,
     RecordingRecord,
+    TranscriptRevisionRecord,
 )
 from app.assessment_v2.db.repositories import AssessmentRepository, RepositoryError
 from app.assessment_v2.domain.models import (
@@ -31,12 +36,22 @@ from app.assessment_v2.domain.models import (
     CreateChild,
     ProcessingRunState,
     RecordConsent,
+    AttestTranscript,
+    CreateTranscriptRevision,
 )
 from app.core.security import CurrentUser
 from app.assessment_v2.services import AssessmentService, ClinicalPolicyError
 from app.assessment_v2.storage import StorageDeletionResult, StorageUnavailableError
 from app.assessment_v2.quality import MediaQuality, QualityDecision
 from app.assessment_v2.worker import CaptureProcessingWorker
+from app.assessment_v2.evidence import (
+    DevelopmentalDomain,
+    EvidenceProvenance,
+    EvidenceSource,
+    EvidenceState,
+    MeasuredFeature,
+)
+from app.assessment_v2.evidence_adapter import AdaptedEvidence
 
 
 @pytest.fixture
@@ -853,3 +868,244 @@ def test_worker_cancels_queued_capture_processing_after_consent_withdrawal(
     )
     assert run is not None
     assert run.state == "cancelled"
+
+
+def test_transcript_revisions_are_append_only_and_attestation_is_versioned(
+    session: Session,
+) -> None:
+    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    stored_assessment = session.scalar(
+        select(AssessmentRecord).where(AssessmentRecord.assessment_id == assessment.id)
+    )
+    assert stored_assessment is not None
+    stored_assessment.state = domain.AssessmentState.PROCESSING.value
+    session.flush()
+    first_content = "@UTF8\n@Begin\n*CHI: hello .\n@End\n"
+    second_content = "@UTF8\n@Begin\n*CHI: hello world .\n@End\n"
+
+    first = repo.create_transcript_revision(
+        scope,
+        CreateTranscriptRevision(
+            assessment_id=assessment.id,
+            content=first_content,
+            source=domain.TranscriptSource.MANUAL,
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    second = repo.create_transcript_revision(
+        scope,
+        CreateTranscriptRevision(
+            assessment_id=assessment.id,
+            content=second_content,
+            source=domain.TranscriptSource.MANUAL,
+            expected_revision=first.revision,
+            expected_version=first.version,
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    assert first.revision == 1
+    assert first.review_state is domain.TranscriptReviewState.DRAFT
+    assert first.content_sha256 == sha256(first_content.encode("utf-8")).hexdigest()
+    stored_assessment = session.scalar(
+        select(AssessmentRecord).where(AssessmentRecord.assessment_id == assessment.id)
+    )
+    assert stored_assessment is not None
+    assert stored_assessment.state == domain.AssessmentState.REVIEW_REQUIRED.value
+    assert second.revision == 2
+    assert second.review_state is domain.TranscriptReviewState.DRAFT
+    stored_first = session.scalar(
+        select(TranscriptRevisionRecord).where(
+            TranscriptRevisionRecord.transcript_revision_id == first.id
+        )
+    )
+    assert stored_first is not None
+    assert stored_first.review_state == domain.TranscriptReviewState.SUPERSEDED.value
+    assert stored_first.version == 2
+    assert session.scalar(
+        select(AuditEventRecord).where(
+            AuditEventRecord.target_id == first.id,
+            AuditEventRecord.action == "transcript.revision_superseded",
+        )
+    ) is not None
+
+    with pytest.raises(RepositoryError, match="stale_transcript_version"):
+        repo.create_transcript_revision(
+            scope,
+            CreateTranscriptRevision(
+                assessment_id=assessment.id,
+                content="@UTF8\n@Begin\n*CHI: stale .\n@End\n",
+                source=domain.TranscriptSource.MANUAL,
+                expected_revision=first.revision,
+                expected_version=first.version,
+            ),
+            correlation_id="0123456789abcdef0123456789abcdef",
+        )
+
+    attested = repo.attest_transcript(
+        scope,
+        AttestTranscript(transcript_revision_id=second.id, expected_version=second.version),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    assert attested.review_state is domain.TranscriptReviewState.ATTESTED
+    assert attested.attested_by_user_id == scope.user_id
+    assert attested.attested_at is not None
+
+
+def _adapted_evidence(input_sha256: str) -> AdaptedEvidence:
+    provenance = EvidenceProvenance(
+        input_ref="transcript_input_opaque_01",
+        input_sha256=input_sha256,
+        protocol_version_key="thai_guided_language_sample:v0",
+        extractor="reviewed-transcript-adapter",
+        pipeline_version="reviewed-transcript-descriptors-v1",
+        feature_schema_version="descriptive-transcript-features-v1",
+        analyzed_at=datetime(2026, 9, 7, 8, 2, tzinfo=timezone.utc),
+    )
+    return AdaptedEvidence(
+        state=EvidenceState.COMPLETED,
+        features=(
+            MeasuredFeature(
+                key="child_token_count",
+                value=12,
+                unit="tokens",
+                source=EvidenceSource.REVIEWED_TRANSCRIPT,
+                state=EvidenceState.COMPLETED,
+                limitation="Descriptive measurement only.",
+                provenance=provenance,
+            ),
+        ),
+        limitations=("No compatible reference band was applied.",),
+        provenance=provenance,
+    )
+
+
+def test_evidence_run_requires_attested_transcript_and_persists_profile(
+    session: Session,
+) -> None:
+    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    stored_assessment = session.scalar(
+        select(AssessmentRecord).where(AssessmentRecord.assessment_id == assessment.id)
+    )
+    assert stored_assessment is not None
+    stored_assessment.state = domain.AssessmentState.PROCESSING.value
+    session.flush()
+    content = "@UTF8\n@Begin\n*CHI: hello .\n@End\n"
+    transcript = repo.create_transcript_revision(
+        scope,
+        CreateTranscriptRevision(
+            assessment_id=assessment.id,
+            content=content,
+            source=domain.TranscriptSource.MANUAL,
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    adapted = _adapted_evidence(transcript.content_sha256)
+
+    with pytest.raises(RepositoryError) as raised:
+        repo.create_evidence_run(
+            scope,
+            assessment.id,
+            transcript.id,
+            adapted,
+            correlation_id="0123456789abcdef0123456789abcdef",
+        )
+    assert raised.value.code == "transcript_not_reviewable"
+
+    repo.attest_transcript(
+        scope,
+        AttestTranscript(transcript_revision_id=transcript.id, expected_version=1),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    run = repo.create_evidence_run(
+        scope,
+        assessment.id,
+        transcript.id,
+        adapted,
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    repeated = repo.create_evidence_run(
+        scope,
+        assessment.id,
+        transcript.id,
+        adapted,
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    assert run.id == repeated.id
+    assert run.state is EvidenceState.COMPLETED
+    assert run.profile.not_diagnostic is True
+    assert len(run.profile.features) == 1
+    assert len(run.profile.domains) == len(tuple(DevelopmentalDomain))
+    stored_run = session.scalar(
+        select(EvidenceRunRecord).where(EvidenceRunRecord.evidence_run_id == run.id)
+    )
+    stored_feature = session.scalar(
+        select(EvidenceFeatureRecord).where(EvidenceFeatureRecord.evidence_run_id == run.id)
+    )
+    stored_domain = session.scalar(
+        select(EvidenceDomainProfileRecord).where(EvidenceDomainProfileRecord.evidence_run_id == run.id)
+    )
+    assert stored_run is not None
+    assert stored_run.input_sha256 == transcript.content_sha256
+    assert stored_feature is not None
+    assert stored_feature.value_json == 12
+    assert stored_domain is not None
+    assert stored_domain.status == "descriptive_only"
+
+
+def test_new_transcript_revision_stales_dependent_evidence_run(session: Session) -> None:
+    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    stored_assessment = session.scalar(
+        select(AssessmentRecord).where(AssessmentRecord.assessment_id == assessment.id)
+    )
+    assert stored_assessment is not None
+    stored_assessment.state = domain.AssessmentState.PROCESSING.value
+    session.flush()
+    first_content = "@UTF8\n@Begin\n*CHI: hello .\n@End\n"
+    first_transcript = repo.create_transcript_revision(
+        scope,
+        CreateTranscriptRevision(
+            assessment_id=assessment.id,
+            content=first_content,
+            source=domain.TranscriptSource.MANUAL,
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    repo.attest_transcript(
+        scope,
+        AttestTranscript(transcript_revision_id=first_transcript.id, expected_version=1),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    run = repo.create_evidence_run(
+        scope,
+        assessment.id,
+        first_transcript.id,
+        _adapted_evidence(first_transcript.content_sha256),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    second = repo.create_transcript_revision(
+        scope,
+        CreateTranscriptRevision(
+            assessment_id=assessment.id,
+            content="@UTF8\n@Begin\n*CHI: hello world .\n@End\n",
+            source=domain.TranscriptSource.MANUAL,
+            expected_revision=first_transcript.revision,
+            expected_version=2,
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    stored_run = session.scalar(
+        select(EvidenceRunRecord).where(EvidenceRunRecord.evidence_run_id == run.id)
+    )
+    current = repo.get_current_evidence(scope, assessment.id)
+    assert second.review_state is domain.TranscriptReviewState.DRAFT
+    assert stored_run is not None
+    assert stored_run.state == EvidenceState.STALE.value
+    assert stored_run.version == 2
+    assert current is not None
+    assert current.state is EvidenceState.STALE
+    assert any("stale" in limitation.lower() for limitation in current.profile.limitations)

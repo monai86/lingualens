@@ -13,7 +13,9 @@ from app.assessment_v2.domain.models import (
     AssessmentState,
     ChildSnapshot,
     ConsentPurpose,
+    ConsentStatus,
     CreateChild,
+    AttestTranscript,
     RecordConsent,
     StartAssessment,
     TransitionAssessment,
@@ -258,3 +260,89 @@ def test_policy_error_details_are_fresh_and_safe() -> None:
     assert second.details == {}
     assert first.details is not second.details
     assert "child" not in str(first)
+
+
+def test_org_admin_cannot_attest_a_transcript() -> None:
+    repository = FakeRepository(child_value=child())
+    service = service_for(repository, therapist(role="org_admin", user_id="admin_01"))
+
+    with pytest.raises(ClinicalPolicyError) as error:
+        service.attest_transcript(
+            "transcript_revision_opaque_01",
+            AttestTranscript("transcript_revision_opaque_01", expected_version=1),
+            "req-transcript-admin",
+        )
+
+    assert error.value.code == "role_not_permitted"
+
+
+def test_org_admin_cannot_create_children_or_consent_records() -> None:
+    repository = FakeRepository(child_value=child())
+    service = service_for(repository, therapist(role="org_admin", user_id="admin_01"))
+
+    with pytest.raises(ClinicalPolicyError) as child_error:
+        service.create_child(
+            CreateChild("LL-ADMIN-01", 2021, 6, {"primary": "th", "additional": []}),
+            "req-admin-child",
+        )
+    assert child_error.value.code == "role_not_permitted"
+
+    with pytest.raises(ClinicalPolicyError) as consent_error:
+        service.grant_consent(
+            "child_01",
+            RecordConsent(
+                purpose=ConsentPurpose.CLINICAL_ASSESSMENT,
+                scope_version="clinical-v1",
+                status=ConsentStatus.ACTIVE,
+            ),
+            "req-admin-consent",
+        )
+    assert consent_error.value.code == "role_not_permitted"
+
+
+def test_org_admin_cannot_create_an_assessment() -> None:
+    repository = FakeRepository(child_value=child(), active_consent=True)
+    service = service_for(repository, therapist(role="org_admin", user_id="admin_01"))
+
+    with pytest.raises(ClinicalPolicyError) as error:
+        service.create_assessment(
+            "child_01",
+            StartAssessment(AssessmentPurpose.INITIAL),
+            "req-admin-assessment",
+        )
+
+    assert error.value.code == "role_not_permitted"
+
+
+def test_org_admin_cannot_mutate_capture_or_receive_signed_audio_access() -> None:
+    service = service_for(FakeRepository(child_value=child()), therapist(role="org_admin", user_id="admin_01"))
+    operations = (
+        lambda: service.transition_assessment("assessment_01", None, "req-admin-transition"),
+        lambda: service.select_protocol("assessment_01", "req-admin-protocol"),
+        lambda: service.start_capture("assessment_01", "req-admin-start"),
+        lambda: service.create_recording(None, "req-admin-recording"),
+        lambda: service.create_upload_intent("recording_opaque_01", "req-admin-upload"),
+        lambda: service.complete_upload("recording_opaque_01", "req-admin-complete-upload"),
+        lambda: service.delete_recording("recording_opaque_01", "req-admin-delete"),
+        lambda: service.complete_capture("assessment_01", "req-admin-complete"),
+        lambda: service.download_intent("recording_opaque_01"),
+    )
+
+    for operation in operations:
+        with pytest.raises(ClinicalPolicyError) as error:
+            operation()
+        assert error.value.code == "role_not_permitted"
+
+
+def test_clinical_supervisor_cannot_attest_a_transcript() -> None:
+    repository = FakeRepository(child_value=child())
+    service = service_for(repository, therapist(role="clinical_supervisor", user_id="supervisor_01"))
+
+    with pytest.raises(ClinicalPolicyError) as error:
+        service.attest_transcript(
+            "transcript_revision_opaque_01",
+            AttestTranscript("transcript_revision_opaque_01", expected_version=1),
+            "req-transcript-supervisor",
+        )
+
+    assert error.value.code == "role_not_permitted"

@@ -205,7 +205,7 @@ docs live under `apps/lingualens-app/.claude/CLAUDE.md`, and the app imports
 
 ```bash
 cd apps/api
-PYTHONPATH=. uvicorn app.main:app --reload --port 8000
+PYTHONPATH=.:../..:../../src uvicorn app.main:app --reload --port 8000
 
 cd ../../apps/lingualens-app
 npm ci
@@ -255,9 +255,12 @@ The new assessment-centric workflow is exposed additively at `/api/v2` and
 supports child, consent, assessment lifecycle, and the Capture V2 slice:
 protocol selection, consent-gated activities, private signed uploads, durable
 processing runs, worker-owned checksum verification, and basic non-diagnostic
-audio quality states. Feature-analysis slices are not mounted yet. The v2
-database starts empty: no v1 records, audio, storage keys, or JSON data are
-imported or rewritten.
+audio quality states. The reviewed-transcript boundary, therapist review page,
+persisted evidence read model, and explicit reviewed-transcript extraction
+worker are now mounted additively; background extraction queues and
+reference-band comparison are not mounted yet. The v2 database starts
+empty: no v1 records, audio, storage keys, or JSON data are imported or
+rewritten.
 
 The maintained web app now exposes `/assessments` as the first additive v2
 therapist entry point. It covers child selection, consent confirmation,
@@ -265,7 +268,21 @@ protocol activities, browser audio capture, private upload handoff, quality
 polling, and resuming an existing `ready_for_capture` or `capturing`
 assessment. Existing `/api/v1` session screens remain unchanged. Set
 `NEXT_PUBLIC_ASSESSMENT_API_BASE_URL` only when the v2 API is hosted at a
-different origin; otherwise it is derived from `NEXT_PUBLIC_API_BASE_URL`.
+different origin; otherwise it is derived from `NEXT_PUBLIC_API_BASE_URL`. After
+capture, therapists can open `/assessments/{assessmentId}/transcript` to review,
+save, and attest the transcript, then run the explicit evidence worker and open
+`/assessments/{assessmentId}/evidence` to read the backend-owned descriptive
+evidence profile, its developmental domains, measured features, provenance, and
+limitations.
+
+Transcript review and evidence are separate backend boundaries. Transcript
+revisions are append-only and require therapist attestation before an evidence
+run can be persisted. A new transcript revision keeps prior evidence for audit
+but marks the dependent current run `stale`; the web workspace shows that state
+and does not calculate a replacement result in the browser. The current read
+model is descriptive decision support only: it does not diagnose ASD or a
+developmental condition, expose a probability, or claim Thai clinical
+reference-band validity.
 
 The two boundaries are intentionally separate:
 
@@ -279,19 +296,22 @@ care-team, consent, and workflow policy, and PostgreSQL RLS provides defense in
 depth. The v2 service is research decision support only: it does not diagnose
 ASD or any developmental condition and does not expose an ASD probability.
 
-For local setup, create the separate database beside the existing v1 database
-with `docker compose up -d postgres`, then run the migration checks:
+For local setup without Docker, install PostgreSQL 16 natively and provide an
+admin connection to the local `postgres` database. The native check creates a
+unique temporary v2 database, starts FastAPI directly, probes `/api/v2`, runs
+the PostgreSQL RLS suite, and removes only its temporary database and role:
 
 ```bash
 PYTHONPATH=apps/api:src python scripts/check_api_migrations.py
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
-PYTHONPATH=apps/api:src python scripts/check_assessment_v2_postgres.py
-PYTHONPATH=apps/api:src python scripts/check_assessment_v2_compose.py
+LINGUALENS_NATIVE_ADMIN_DATABASE_URL=postgresql+psycopg://<local-admin>:<password>@127.0.0.1:5432/postgres \
+  PYTHONPATH=apps/api:src python scripts/check_assessment_v2_native.py
 ```
 
-The Compose runtime check creates a disposable PostgreSQL stack, verifies that
-the v2 history runs at API startup, confirms the API can create a child through
-`/api/v2`, and verifies the runtime role is `NOSUPERUSER`/`NOBYPASSRLS`.
+Docker Compose is optional and remains available as a container-packaging smoke
+test. It verifies that the v2 history runs in the API service, confirms the API
+can create a child through `/api/v2`, and verifies the runtime role is
+`NOSUPERUSER`/`NOBYPASSRLS`.
 
 Capture processing is run from durable `processing_runs` records. The capture
 worker requires private Supabase Storage configuration for real objects,

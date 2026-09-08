@@ -104,11 +104,13 @@ app
 
 ## Important deployment constraint
 
-Render currently uses `apps/api` as its service root, while the scientific
-packages live at repository root under `packages/`. Directly importing the new
-analysis execution seam from a FastAPI route is therefore not deployment-safe
-until the packaging/PYTHONPATH boundary is deliberately resolved and verified
-on Render
+The current API imports the analysis-only contract from repository-root
+`packages/` and the compatibility parser from `src/`. The canonical staging
+configuration therefore uses repository root as the Render service root and
+declares `PYTHONPATH=apps/api:.:src`; local startup uses the equivalent
+`PYTHONPATH=.:../..:../../src` from `apps/api`. This boundary is exercised by
+the API import check and the native FastAPI/PostgreSQL smoke check. Docker
+Compose remains an optional container-packaging check.
 
 Do not add a `sys.path` hack or duplicate the scientific code inside
 `apps/api`. When product wiring is actually required, choose one small explicit
@@ -251,7 +253,7 @@ LINGUALENS_PYTHON=/absolute/path/to/python3.12 bash scripts/check_project.sh
 
 # Active API
 cd apps/api
-PYTHONPATH=. uvicorn app.main:app --reload --port 8000
+PYTHONPATH=.:../..:../../src uvicorn app.main:app --reload --port 8000
 
 # Active frontend
 cd apps/lingualens-app

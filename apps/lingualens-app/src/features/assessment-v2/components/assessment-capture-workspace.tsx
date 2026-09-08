@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 
 import { BrowserAudioRecorder, type RecordingMetadata } from "@/components/browser-audio-recorder";
 import {
@@ -433,7 +434,14 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
                   <span>{purposeLabel(assessment.purpose)}</span>
                   <span className="flex items-center gap-3 text-[color:var(--color-text-muted)]">
                     {stateLabel(assessment.state)}
-                    {isResumableAssessment(assessment.state) ? (
+                    {isTranscriptReviewAssessment(assessment.state) ? (
+                      <Link
+                        href={`/assessments/${encodeURIComponent(assessment.id)}/transcript`}
+                        className="rounded-lg border border-[color:var(--color-border-strong)] px-3 py-1.5 text-xs font-semibold text-[color:var(--color-text-strong)]"
+                      >
+                        เปิด transcript review
+                      </Link>
+                    ) : isResumableAssessment(assessment.state) ? (
                       <button type="button" disabled={busy} onClick={() => void resumeAssessment(assessment)} className="rounded-lg border border-[color:var(--color-border-strong)] px-3 py-1.5 text-xs font-semibold text-[color:var(--color-text-strong)] disabled:opacity-50">
                         ดำเนินการต่อ
                       </button>
@@ -487,6 +495,12 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
           <p className="font-semibold">Assessment อยู่ระหว่าง processing</p>
           <p className="mt-1 text-sm">ผลลัพธ์จะต้องผ่านการตรวจสอบและตีความโดยนักบำบัด ไม่ใช่การวินิจฉัยอัตโนมัติ</p>
           <p className="mt-3 text-sm">สถานะปัจจุบัน: {stateLabel(completedAssessment.state)}</p>
+          <Link
+            href={`/assessments/${encodeURIComponent(completedAssessment.id)}/transcript`}
+            className="mt-4 inline-flex rounded-lg border border-[color:var(--color-border-strong)] px-4 py-2 text-sm font-semibold text-[color:var(--color-text-strong)]"
+          >
+            เปิดหน้า transcript review
+          </Link>
         </div>
       </section>
     );
@@ -638,6 +652,10 @@ function stateLabel(value: AssessmentV2Assessment["state"]): string {
 
 function isResumableAssessment(state: AssessmentV2Assessment["state"]): boolean {
   return state === "ready_for_capture" || state === "capturing";
+}
+
+function isTranscriptReviewAssessment(state: AssessmentV2Assessment["state"]): boolean {
+  return state === "processing" || state === "review_required" || state === "ready_for_clinician";
 }
 
 function activityLabel(value: string): string {

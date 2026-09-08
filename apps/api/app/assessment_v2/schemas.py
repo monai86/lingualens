@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.assessment_v2.domain.models import (
     AssessmentPurpose,
@@ -17,6 +17,14 @@ from app.assessment_v2.domain.models import (
     ProcessingRunState,
     RecordingQualityStatus,
     RecordingUploadState,
+    TranscriptReviewState,
+    TranscriptSource,
+)
+from app.assessment_v2.evidence import (
+    DevelopmentalDomain,
+    DomainProfileStatus,
+    EvidenceSource,
+    EvidenceState,
 )
 from app.assessment_v2.storage import CAPTURE_ALLOWED_MIME_TYPES
 from app.core.config import MAX_CAPTURE_UPLOAD_SIZE_BYTES
@@ -96,6 +104,89 @@ class ConsentResponse(_StrictModel):
     status: ConsentStatus
     granted_at: datetime
     withdrawn_at: datetime | None
+    version: int = Field(strict=True, ge=1)
+
+
+class TranscriptRevisionCreateRequest(_StrictModel):
+    # Transcript content is hashed and reviewed as an exact artifact. Do not
+    # inherit the API-wide whitespace normalization for this field.
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
+
+    source: TranscriptSource
+    content: str = Field(min_length=1, max_length=2_000_000)
+    expected_revision: int | None = Field(default=None, strict=True, ge=1)
+    expected_version: int | None = Field(default=None, strict=True, ge=1)
+
+    @model_validator(mode="after")
+    def validate_expected_current_pair(self) -> "TranscriptRevisionCreateRequest":
+        if (self.expected_revision is None) != (self.expected_version is None):
+            raise ValueError("expected_revision and expected_version must be provided together")
+        return self
+
+
+class TranscriptAttestRequest(_StrictModel):
+    expected_version: int = Field(strict=True, ge=1)
+
+
+class TranscriptRevisionResponse(_StrictModel):
+    # Preserve trailing newlines and other intentional formatting in the
+    # reviewed transcript returned to the client.
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
+
+    id: str = Field(min_length=1, max_length=64)
+    assessment_id: str = Field(min_length=1, max_length=64)
+    revision: int = Field(strict=True, ge=1)
+    source: TranscriptSource
+    review_state: TranscriptReviewState
+    content: str = Field(min_length=1, max_length=2_000_000)
+    content_sha256: str = Field(strict=True, min_length=64, max_length=64)
+    created_at: datetime
+    attested_at: datetime | None
+    version: int = Field(strict=True, ge=1)
+
+
+class EvidenceProvenanceResponse(_StrictModel):
+    input_ref: str = Field(min_length=1, max_length=256)
+    input_sha256: str = Field(strict=True, min_length=64, max_length=64)
+    protocol_version_key: str = Field(min_length=1, max_length=128)
+    extractor: str = Field(min_length=1, max_length=128)
+    pipeline_version: str = Field(min_length=1, max_length=128)
+    feature_schema_version: str = Field(min_length=1, max_length=128)
+    analyzed_at: datetime
+
+
+class MeasuredFeatureResponse(_StrictModel):
+    key: str = Field(min_length=1, max_length=128)
+    value: bool | int | float | str | None
+    unit: str = Field(min_length=1, max_length=64)
+    source: EvidenceSource
+    state: EvidenceState
+    limitation: str | None = Field(default=None, min_length=1, max_length=2000)
+    provenance: EvidenceProvenanceResponse
+
+
+class DomainProfileResponse(_StrictModel):
+    domain: DevelopmentalDomain
+    status: DomainProfileStatus
+    summary: str = Field(min_length=1, max_length=2000)
+    feature_keys: list[str] = Field(max_length=128)
+    supporting_features: list[str] = Field(max_length=128)
+    conflicting_features: list[str] = Field(max_length=128)
+    limitations: list[str] = Field(max_length=128)
+
+
+class EvidenceProfileResponse(_StrictModel):
+    evidence_run_id: str = Field(min_length=1, max_length=64)
+    assessment_id: str = Field(min_length=1, max_length=64)
+    transcript_revision_id: str = Field(min_length=1, max_length=64)
+    state: EvidenceState
+    generated_at: datetime
+    provenance: EvidenceProvenanceResponse
+    features: list[MeasuredFeatureResponse]
+    domains: list[DomainProfileResponse]
+    limitations: list[str] = Field(max_length=128)
+    not_diagnostic: Literal[True] = True
+    decision_support_only: Literal[True] = True
     version: int = Field(strict=True, ge=1)
 
 

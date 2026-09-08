@@ -1,8 +1,22 @@
 from pathlib import Path
+from importlib import import_module
 import sqlite3
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
+
+
+def test_assessment_migration_revision_ids_fit_postgres_alembic_version_column() -> None:
+    versions_dir = Path(__file__).resolve().parents[2] / "app" / "assessment_v2" / "db" / "migrations" / "versions"
+    revisions = {}
+    for path in sorted(versions_dir.glob("*.py")):
+        if path.name == "__init__.py":
+            continue
+        module = import_module(f"app.assessment_v2.db.migrations.versions.{path.stem}")
+        revisions[path.name] = module.revision
+
+    assert revisions
+    assert max(map(len, revisions.values())) <= 32, revisions
 
 
 def test_fresh_assessment_database_upgrades_and_downgrades() -> None:

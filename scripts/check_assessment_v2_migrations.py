@@ -29,8 +29,12 @@ EXPECTED_TABLES = {
     "recordings",
     "processing_runs",
     "recording_quality_results",
+    "transcript_revisions",
+    "evidence_runs",
+    "evidence_feature_values",
+    "evidence_domain_profiles",
 }
-HEAD_REVISION = "0004_capture_cleanup_stage"
+HEAD_REVISION = "0006_evidence_profiles"
 PROTOCOL_VERSION_KEY = "thai_guided_language_sample:v0"
 EXPECTED_PURPOSES = "initial,developmental_follow_up,post_intervention_follow_up,additional_evidence"
 

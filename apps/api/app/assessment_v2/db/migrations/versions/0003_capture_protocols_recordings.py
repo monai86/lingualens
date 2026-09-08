@@ -6,7 +6,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0003_capture_protocols_recordings"
+revision = "0003_capture_protocols"
 down_revision = "0002_assessment_tenant_integrity"
 branch_labels = None
 depends_on = None

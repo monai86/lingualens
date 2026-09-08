@@ -9,6 +9,7 @@ from typing import Protocol, TypeVar
 from app.assessment_v2.db.repositories import RepositoryError
 from app.assessment_v2.domain.models import (
     AccessScope,
+    AttestTranscript,
     AssessmentSnapshot,
     AssessmentState,
     CaptureSnapshot,
@@ -19,6 +20,7 @@ from app.assessment_v2.domain.models import (
     CreateRecording,
     CreateAssessment,
     CreateChild,
+    CreateTranscriptRevision,
     MarkRecordingUploading,
     RecordConsent,
     ProcessingRunSnapshot,
@@ -30,8 +32,12 @@ from app.assessment_v2.domain.models import (
     StartCapture,
     StartAssessment,
     TransitionAssessment,
+    TranscriptRevisionSnapshot,
     VerifyRecordingUpload,
 )
+from app.assessment_v2.evidence import EvidenceRunSnapshot
+from app.assessment_v2.evidence_adapter import AdaptedEvidence, adapt_analysis_result
+from app.assessment_v2.reviewed_transcript_worker import extract_reviewed_transcript
 from app.assessment_v2.protocols import ProtocolUnavailableError, select_protocol
 from app.assessment_v2.storage import (
     CaptureStorageAdapter,
@@ -71,6 +77,31 @@ class AssessmentRepository(Protocol):
     def get_assessment(self, scope: AccessScope, assessment_id: str) -> AssessmentSnapshot | None: ...
 
     def list_assessments(self, scope: AccessScope, child_id: str) -> list[AssessmentSnapshot]: ...
+
+    def get_current_transcript(
+        self, scope: AccessScope, assessment_id: str
+    ) -> TranscriptRevisionSnapshot | None: ...
+
+    def create_transcript_revision(
+        self, scope: AccessScope, command: CreateTranscriptRevision, correlation_id: str
+    ) -> TranscriptRevisionSnapshot: ...
+
+    def attest_transcript(
+        self, scope: AccessScope, command: AttestTranscript, correlation_id: str
+    ) -> TranscriptRevisionSnapshot: ...
+
+    def get_current_evidence(
+        self, scope: AccessScope, assessment_id: str
+    ) -> EvidenceRunSnapshot | None: ...
+
+    def create_evidence_run(
+        self,
+        scope: AccessScope,
+        assessment_id: str,
+        transcript_revision_id: str,
+        adapted: AdaptedEvidence,
+        correlation_id: str,
+    ) -> EvidenceRunSnapshot: ...
 
     def transition_assessment(
         self, scope: AccessScope, command: TransitionAssessment, correlation_id: str
@@ -157,7 +188,11 @@ class ClinicalPolicyError(Exception):
 
 
 _CLINICAL_ROLES = frozenset({"therapist", "clinical_supervisor", "org_admin"})
-_OVERSIGHT_ROLES = frozenset({"clinical_supervisor", "org_admin"})
+_CLINICAL_MUTATION_ROLES = frozenset({"therapist", "clinical_supervisor"})
+_OVERSIGHT_ROLES = frozenset({"clinical_supervisor"})
+_TRANSCRIPT_EDITOR_ROLES = frozenset({"therapist", "clinical_supervisor"})
+_EVIDENCE_RUN_ROLES = frozenset({"therapist", "clinical_supervisor"})
+_TRANSCRIPT_ATTESTATION_ROLES = frozenset({"therapist"})
 _MAX_ASSESSMENT_AGE_MONTHS = 216
 _POLICY_MESSAGES: dict[str, tuple[int, str]] = {
     "inactive_membership": (403, "Active organization membership is required."),
@@ -184,6 +219,15 @@ _POLICY_MESSAGES: dict[str, tuple[int, str]] = {
     "idempotency_conflict": (409, "The idempotency key was already used for a different request."),
     "consent_revoked": (409, "Active clinical-assessment consent is required."),
     "processing_run_not_found": (404, "Processing run was not found."),
+    "transcript_not_found": (404, "Transcript was not found."),
+    "transcript_not_reviewable": (409, "The transcript is not ready for this review action."),
+    "stale_transcript_version": (409, "The transcript version is stale."),
+    "evidence_not_found": (404, "Evidence is not available for this assessment."),
+    "evidence_provenance_required": (409, "Evidence provenance is required."),
+    "evidence_protocol_mismatch": (409, "Evidence does not match the assessment protocol."),
+    "evidence_provenance_mismatch": (409, "Evidence provenance is inconsistent."),
+    "evidence_no_measurements": (409, "The completed evidence run contains no measurements."),
+    "stale_evidence_input": (409, "The evidence input is stale."),
     "storage_unavailable": (503, "Private storage is temporarily unavailable."),
 }
 
@@ -206,7 +250,7 @@ class AssessmentService:
         self.now: Callable[[], datetime] = lambda: datetime.now(timezone.utc)
 
     def create_child(self, command: CreateChild, correlation_id: str) -> ChildSnapshot:
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         return self._repository_call(
             lambda: self.repository.create_child(self.scope, command, correlation_id)
         )
@@ -223,7 +267,7 @@ class AssessmentService:
         return self._repository_call(lambda: self.repository.list_children(self.scope))
 
     def grant_consent(self, child_id: str, command: RecordConsent, correlation_id: str):
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         return self._repository_call(
             lambda: self.repository.add_consent(self.scope, child_id, command, correlation_id)
         )
@@ -236,7 +280,7 @@ class AssessmentService:
     def create_assessment(
         self, child_id: str, command: StartAssessment, correlation_id: str
     ) -> AssessmentSnapshot:
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         child = self.get_child(child_id)
 
         assigned_clinician_id = command.assigned_clinician_id or self.user.user_id
@@ -278,10 +322,119 @@ class AssessmentService:
         self.get_child(child_id)
         return self._repository_call(lambda: self.repository.list_assessments(self.scope, child_id))
 
+    def get_current_transcript(self, assessment_id: str) -> TranscriptRevisionSnapshot:
+        self._require_clinical_role()
+        self.get_assessment(assessment_id)
+        transcript = self._repository_call(
+            lambda: self.repository.get_current_transcript(self.scope, assessment_id)
+        )
+        if transcript is None:
+            raise self._policy_error("transcript_not_found")
+        return transcript
+
+    def create_transcript_revision(
+        self,
+        assessment_id: str,
+        command: CreateTranscriptRevision,
+        correlation_id: str,
+    ) -> TranscriptRevisionSnapshot:
+        self._require_authorized_role(_TRANSCRIPT_EDITOR_ROLES)
+        assessment = self.get_assessment(assessment_id)
+        if command.assessment_id != assessment.id:
+            raise self._policy_error("transcript_not_reviewable")
+        return self._repository_call(
+            lambda: self.repository.create_transcript_revision(
+                self.scope, command, correlation_id
+            )
+        )
+
+    def attest_transcript(
+        self,
+        transcript_revision_id: str,
+        command: AttestTranscript,
+        correlation_id: str,
+    ) -> TranscriptRevisionSnapshot:
+        self._require_authorized_role(_TRANSCRIPT_ATTESTATION_ROLES)
+        if command.transcript_revision_id != transcript_revision_id:
+            raise self._policy_error("transcript_not_reviewable")
+        return self._repository_call(
+            lambda: self.repository.attest_transcript(self.scope, command, correlation_id)
+        )
+
+    def get_current_evidence(self, assessment_id: str) -> EvidenceRunSnapshot:
+        self._require_clinical_role()
+        self.get_assessment(assessment_id)
+        evidence = self._repository_call(
+            lambda: self.repository.get_current_evidence(self.scope, assessment_id)
+        )
+        if evidence is None:
+            raise self._policy_error("evidence_not_found")
+        return evidence
+
+    def create_evidence_run(
+        self,
+        assessment_id: str,
+        transcript_revision_id: str,
+        adapted: AdaptedEvidence,
+        correlation_id: str,
+    ) -> EvidenceRunSnapshot:
+        self._require_authorized_role(_EVIDENCE_RUN_ROLES)
+        self.get_assessment(assessment_id)
+        return self._repository_call(
+            lambda: self.repository.create_evidence_run(
+                self.scope,
+                assessment_id,
+                transcript_revision_id,
+                adapted,
+                correlation_id,
+            )
+        )
+
+    def create_current_evidence_run(
+        self, assessment_id: str, correlation_id: str
+    ) -> EvidenceRunSnapshot:
+        """Run the versioned reviewed-transcript worker for current evidence."""
+
+        self._require_authorized_role(_EVIDENCE_RUN_ROLES)
+        assessment = self.get_assessment(assessment_id)
+        transcript = self._repository_call(
+            lambda: self.repository.get_current_transcript(self.scope, assessment_id)
+        )
+        if transcript is None:
+            raise self._policy_error("transcript_not_found")
+        if transcript.review_state.value != "attested":
+            raise self._policy_error("transcript_not_reviewable")
+
+        capture = self._repository_call(
+            lambda: self.repository.get_capture(self.scope, assessment_id)
+        )
+        if capture is None or capture.protocol_selection is None:
+            raise self._policy_error("evidence_protocol_mismatch")
+
+        analysis = extract_reviewed_transcript(
+            transcript,
+            protocol_version_key=capture.protocol_selection.protocol_version_key,
+        )
+        adapted = adapt_analysis_result(
+            analysis,
+            input_sha256=transcript.content_sha256,
+            protocol_version_key=capture.protocol_selection.protocol_version_key,
+            expected_feature_schema_version="descriptive-transcript-features-v1",
+        )
+        return self._repository_call(
+            lambda: self.repository.create_evidence_run(
+                self.scope,
+                assessment.id,
+                transcript.id,
+                adapted,
+                correlation_id,
+            )
+        )
+
     def transition_assessment(
         self, assessment_id: str, command: TransitionAssessment, correlation_id: str
     ) -> AssessmentSnapshot:
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         current = self.get_assessment(assessment_id)
         if command.expected_version != current.version:
             raise self._policy_error("stale_assessment_version")
@@ -297,7 +450,7 @@ class AssessmentService:
     def select_protocol(self, assessment_id: str, correlation_id: str) -> CaptureSnapshot:
         """Derive the capture protocol from persisted assessment context only."""
 
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         assessment = self.get_assessment(assessment_id)
         primary_language = assessment.language_context.get("primary")
         additional_languages = assessment.language_context.get("additional")
@@ -336,7 +489,7 @@ class AssessmentService:
         return capture
 
     def start_capture(self, assessment_id: str, correlation_id: str) -> AssessmentSnapshot:
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         return self._repository_call(
             lambda: self.repository.start_capture_if_consented(
                 self.scope,
@@ -348,7 +501,7 @@ class AssessmentService:
     def create_recording(
         self, command: CreateRecording, correlation_id: str
     ) -> RecordingIntentSnapshot:
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         return self._repository_call(
             lambda: self.repository.create_recording_if_capture_active(
                 self.scope,
@@ -360,7 +513,7 @@ class AssessmentService:
     def create_upload_intent(
         self, recording_id: str, correlation_id: str
     ) -> tuple[RecordingSnapshot, SignedUploadGrant]:
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         recording = self._recording_or_error(recording_id)
         if recording.upload_state not in {
             RecordingUploadState.PENDING,
@@ -401,7 +554,7 @@ class AssessmentService:
         return updated, grant
 
     def complete_upload(self, recording_id: str, correlation_id: str) -> RecordingIntentSnapshot:
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         recording = self._recording_or_error(recording_id)
         if recording.upload_state is RecordingUploadState.VERIFIED:
             return self._repository_call(
@@ -487,7 +640,7 @@ class AssessmentService:
     def download_intent(
         self, recording_id: str
     ) -> tuple[RecordingSnapshot, SignedDownloadGrant]:
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         recording = self.get_recording(recording_id)
         grant = self._storage_call(
             lambda: self._storage_or_error().create_signed_download_grant(recording.object_key)
@@ -502,7 +655,7 @@ class AssessmentService:
         The repository intentionally does not distinguish inaccessible records here.
         """
 
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         recording = self._repository_call(
             lambda: self.repository.get_recording_if_consented(self.scope, recording_id)
         )
@@ -532,7 +685,7 @@ class AssessmentService:
         return True
 
     def complete_capture(self, assessment_id: str, correlation_id: str) -> AssessmentSnapshot:
-        self._require_clinical_role()
+        self._require_authorized_role(_CLINICAL_MUTATION_ROLES)
         assessment = self.get_assessment(assessment_id)
         return self._repository_call(
             lambda: self.repository.complete_capture_if_required_usable(
@@ -568,6 +721,11 @@ class AssessmentService:
         if not self.user.membership_active:
             raise self._policy_error("inactive_membership")
         if self.authorized_role not in _CLINICAL_ROLES:
+            raise self._policy_error("role_not_permitted")
+
+    def _require_authorized_role(self, allowed_roles: frozenset[str]) -> None:
+        self._require_clinical_role()
+        if self.authorized_role not in allowed_roles:
             raise self._policy_error("role_not_permitted")
 
     def _age_in_months(self, child: ChildSnapshot) -> int:

@@ -8,8 +8,10 @@ from fastapi import APIRouter, Depends, Header, Request, status
 
 from app.assessment_v2.dependencies import get_assessment_service
 from app.assessment_v2.domain.models import (
+    AttestTranscript,
     CreateChild,
     CreateRecording,
+    CreateTranscriptRevision,
     RecordConsent,
     RecordingQualityStatus,
     StartAssessment,
@@ -30,7 +32,11 @@ from app.assessment_v2.schemas import (
     DeleteRecordingResponse,
     DownloadGrantResponse,
     DownloadIntentResponse,
+    DomainProfileResponse,
     ErrorEnvelope,
+    EvidenceProfileResponse,
+    EvidenceProvenanceResponse,
+    MeasuredFeatureResponse,
     ProcessingRunResponse,
     ProtocolActivityResponse,
     ProtocolSelectionRequest,
@@ -39,6 +45,9 @@ from app.assessment_v2.schemas import (
     RecordingIntentResponse,
     RecordingQualityResponse,
     RecordingResponse,
+    TranscriptAttestRequest,
+    TranscriptRevisionCreateRequest,
+    TranscriptRevisionResponse,
     UploadGrantResponse,
     UploadIntentResponse,
 )
@@ -184,6 +193,61 @@ def _quality_response(value) -> RecordingQualityResponse:
     )
 
 
+def _transcript_response(value) -> TranscriptRevisionResponse:
+    return TranscriptRevisionResponse(
+        id=value.id,
+        assessment_id=value.assessment_id,
+        revision=value.revision,
+        source=value.source,
+        review_state=value.review_state,
+        content=value.content,
+        content_sha256=value.content_sha256,
+        created_at=value.created_at,
+        attested_at=value.attested_at,
+        version=value.version,
+    )
+
+
+def _evidence_response(value) -> EvidenceProfileResponse:
+    profile = value.profile
+    return EvidenceProfileResponse(
+        evidence_run_id=value.id,
+        assessment_id=value.assessment_id,
+        transcript_revision_id=value.transcript_revision_id,
+        state=value.state,
+        generated_at=profile.generated_at,
+        provenance=EvidenceProvenanceResponse(**value.provenance.to_dict()),
+        features=[
+            MeasuredFeatureResponse(
+                key=feature.key,
+                value=feature.value,
+                unit=feature.unit,
+                source=feature.source,
+                state=feature.state,
+                limitation=feature.limitation,
+                provenance=EvidenceProvenanceResponse(**feature.provenance.to_dict()),
+            )
+            for feature in profile.features
+        ],
+        domains=[
+            DomainProfileResponse(
+                domain=domain.domain,
+                status=domain.status,
+                summary=domain.summary,
+                feature_keys=list(domain.feature_keys),
+                supporting_features=list(domain.supporting_features),
+                conflicting_features=list(domain.conflicting_features),
+                limitations=list(domain.limitations),
+            )
+            for domain in profile.domains
+        ],
+        limitations=list(profile.limitations),
+        not_diagnostic=profile.not_diagnostic,
+        decision_support_only=profile.decision_support_only,
+        version=value.version,
+    )
+
+
 @router.post(
     "/children",
     response_model=ChildResponse,
@@ -299,6 +363,94 @@ def list_assessments(
     service: AssessmentService = Depends(get_assessment_service),
 ) -> list[AssessmentResponse]:
     return [_assessment_response(value) for value in service.list_assessments(child_id)]
+
+
+@router.get(
+    "/assessments/{assessment_id}/transcript",
+    response_model=TranscriptRevisionResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def get_current_transcript(
+    assessment_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> TranscriptRevisionResponse:
+    return _transcript_response(service.get_current_transcript(assessment_id))
+
+
+@router.get(
+    "/assessments/{assessment_id}/evidence",
+    response_model=EvidenceProfileResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def get_current_evidence(
+    assessment_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> EvidenceProfileResponse:
+    return _evidence_response(service.get_current_evidence(assessment_id))
+
+
+@router.post(
+    "/assessments/{assessment_id}/evidence-runs",
+    response_model=EvidenceProfileResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=_V2_ERROR_RESPONSES,
+)
+def create_current_evidence(
+    assessment_id: str,
+    request: Request,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> EvidenceProfileResponse:
+    return _evidence_response(
+        service.create_current_evidence_run(assessment_id, _correlation_id(request))
+    )
+
+
+@router.post(
+    "/assessments/{assessment_id}/transcript-revisions",
+    response_model=TranscriptRevisionResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=_V2_ERROR_RESPONSES,
+)
+def create_transcript_revision(
+    assessment_id: str,
+    payload: TranscriptRevisionCreateRequest,
+    request: Request,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> TranscriptRevisionResponse:
+    value = service.create_transcript_revision(
+        assessment_id,
+        CreateTranscriptRevision(
+            assessment_id=assessment_id,
+            content=payload.content,
+            source=payload.source,
+            expected_revision=payload.expected_revision,
+            expected_version=payload.expected_version,
+        ),
+        _correlation_id(request),
+    )
+    return _transcript_response(value)
+
+
+@router.post(
+    "/transcript-revisions/{transcript_revision_id}/attest",
+    response_model=TranscriptRevisionResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def attest_transcript(
+    transcript_revision_id: str,
+    payload: TranscriptAttestRequest,
+    request: Request,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> TranscriptRevisionResponse:
+    value = service.attest_transcript(
+        transcript_revision_id,
+        AttestTranscript(
+            transcript_revision_id=transcript_revision_id,
+            expected_version=payload.expected_version,
+        ),
+        _correlation_id(request),
+    )
+    return _transcript_response(value)
 
 
 @router.get(

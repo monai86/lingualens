@@ -26,6 +26,34 @@ export type AssessmentV2RecordingUploadState =
   | "failed";
 export type AssessmentV2ProcessingState = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 export type AssessmentV2QualityStatus = "usable" | "needs_additional_sample" | "unavailable" | "failed";
+export type AssessmentV2EvidenceState =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "needs_review"
+  | "insufficient_data"
+  | "unavailable"
+  | "failed"
+  | "stale";
+export type AssessmentV2EvidenceSource = "reviewed_transcript" | "audio_quality" | "observation" | "instrument";
+export type AssessmentV2TranscriptSource = "manual" | "asr_draft" | "imported";
+export type AssessmentV2TranscriptReviewState = "draft" | "attested" | "superseded";
+export type AssessmentV2DevelopmentalDomain =
+  | "expressive_language"
+  | "speech_clarity_production"
+  | "conversational_interaction"
+  | "social_communication"
+  | "repetitive_language"
+  | "prosody_temporal_organization"
+  | "evidence_quality_sufficiency";
+export type AssessmentV2DomainProfileStatus =
+  | "descriptive_only"
+  | "within_reference_band"
+  | "outside_reference_band"
+  | "attention_suggested"
+  | "insufficient_data"
+  | "reference_unavailable"
+  | "not_assessed";
 
 export type AssessmentV2Child = {
   id: string;
@@ -85,6 +113,64 @@ export type AssessmentV2Recording = {
 export type AssessmentV2Quality = {
   status: AssessmentV2QualityStatus;
   evaluated_at: string;
+  version: number;
+};
+
+export type AssessmentV2EvidenceProvenance = {
+  input_ref: string;
+  input_sha256: string;
+  protocol_version_key: string;
+  extractor: string;
+  pipeline_version: string;
+  feature_schema_version: string;
+  analyzed_at: string;
+};
+
+export type AssessmentV2MeasuredFeature = {
+  key: string;
+  value: boolean | number | string | null;
+  unit: string;
+  source: AssessmentV2EvidenceSource;
+  state: AssessmentV2EvidenceState;
+  limitation: string | null;
+  provenance: AssessmentV2EvidenceProvenance;
+};
+
+export type AssessmentV2DomainProfile = {
+  domain: AssessmentV2DevelopmentalDomain;
+  status: AssessmentV2DomainProfileStatus;
+  summary: string;
+  feature_keys: string[];
+  supporting_features: string[];
+  conflicting_features: string[];
+  limitations: string[];
+};
+
+export type AssessmentV2EvidenceProfile = {
+  evidence_run_id: string;
+  assessment_id: string;
+  transcript_revision_id: string;
+  state: AssessmentV2EvidenceState;
+  generated_at: string;
+  provenance: AssessmentV2EvidenceProvenance;
+  features: AssessmentV2MeasuredFeature[];
+  domains: AssessmentV2DomainProfile[];
+  limitations: string[];
+  not_diagnostic: true;
+  decision_support_only: true;
+  version: number;
+};
+
+export type AssessmentV2TranscriptRevision = {
+  id: string;
+  assessment_id: string;
+  revision: number;
+  source: AssessmentV2TranscriptSource;
+  review_state: AssessmentV2TranscriptReviewState;
+  content: string;
+  content_sha256: string;
+  created_at: string;
+  attested_at: string | null;
   version: number;
 };
 
@@ -216,6 +302,40 @@ export class AssessmentV2Client {
 
   getRecordingQuality(recordingId: string): Promise<AssessmentV2Quality | null> {
     return this.request(`/recordings/${pathSegment(recordingId)}/quality`);
+  }
+
+  getEvidence(assessmentId: string): Promise<AssessmentV2EvidenceProfile> {
+    return this.request(`/assessments/${pathSegment(assessmentId)}/evidence`);
+  }
+
+  getTranscript(assessmentId: string): Promise<AssessmentV2TranscriptRevision> {
+    return this.request(`/assessments/${pathSegment(assessmentId)}/transcript`);
+  }
+
+  createTranscriptRevision(
+    assessmentId: string,
+    payload: {
+      source: AssessmentV2TranscriptSource;
+      content: string;
+      expected_revision: number | null;
+      expected_version: number | null;
+    },
+  ): Promise<AssessmentV2TranscriptRevision> {
+    return this.request(`/assessments/${pathSegment(assessmentId)}/transcript-revisions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  attestTranscript(transcriptRevisionId: string, expectedVersion: number): Promise<AssessmentV2TranscriptRevision> {
+    return this.request(`/transcript-revisions/${pathSegment(transcriptRevisionId)}/attest`, {
+      method: "POST",
+      body: JSON.stringify({ expected_version: expectedVersion }),
+    });
+  }
+
+  createEvidence(assessmentId: string): Promise<AssessmentV2EvidenceProfile> {
+    return this.request(`/assessments/${pathSegment(assessmentId)}/evidence-runs`, { method: "POST" });
   }
 
   completeCapture(assessmentId: string): Promise<AssessmentV2Assessment> {

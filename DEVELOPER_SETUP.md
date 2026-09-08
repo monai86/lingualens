@@ -32,7 +32,7 @@ pip install -r apps/api/requirements.txt
 ### 3. Run the Active Backend API
 ```bash
 cd apps/api
-PYTHONPATH=. uvicorn app.main:app --reload --port 8000
+PYTHONPATH=.:../..:../../src uvicorn app.main:app --reload --port 8000
 ```
 API Documentation will be available at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
@@ -48,7 +48,20 @@ children, consent records, assessment lifecycle, protocol selection, private
 recording upload intents, durable processing runs, checksum verification, and
 non-diagnostic quality states.
 
-For the local Compose database:
+For the primary local verification path, Docker is optional. Install PostgreSQL
+16 with Postgres.app, Homebrew, or the PostgreSQL distribution for your OS,
+then provide an admin connection to the local `postgres` database. The native
+check creates a uniquely named temporary assessment database, starts a local
+FastAPI process, runs the API probe and PostgreSQL RLS suite, and removes only
+that temporary database and test role when it finishes:
+
+```bash
+export LINGUALENS_NATIVE_ADMIN_DATABASE_URL=postgresql+psycopg://<local-admin>:<password>@127.0.0.1:5432/postgres
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_native.py
+```
+
+The native gate is the primary local acceptance path and does not require
+Docker. For optional Compose verification:
 
 ```bash
 docker compose up -d postgres
@@ -56,6 +69,10 @@ PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_postgres.py
 PYTHONPATH=apps/api:src python scripts/check_assessment_v2_compose.py
 ```
+
+The optional Compose assessment check owns its temporary `postgres` and `api`
+stack; it starts the API container, waits for `/health`, and removes its
+volumes when the check finishes. It is not required for native development.
 
 The v1 and v2 URLs are separate:
 

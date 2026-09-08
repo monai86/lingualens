@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+import re
 
 
 class AssessmentPurpose(StrEnum):
@@ -61,6 +62,26 @@ class RecordingQualityStatus(StrEnum):
     NEEDS_ADDITIONAL_SAMPLE = "needs_additional_sample"
     UNAVAILABLE = "unavailable"
     FAILED = "failed"
+
+
+class TranscriptSource(StrEnum):
+    MANUAL = "manual"
+    ASR_DRAFT = "asr_draft"
+    IMPORTED = "imported"
+
+
+class TranscriptReviewState(StrEnum):
+    DRAFT = "draft"
+    ATTESTED = "attested"
+    SUPERSEDED = "superseded"
+
+
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _require_non_empty(value: str, field_name: str) -> None:
+    if not isinstance(value, str) or not value.strip() or any(char in value for char in "\r\n"):
+        raise ValueError(f"{field_name} must be a non-empty value without newlines")
 
 
 @dataclass(frozen=True, slots=True)
@@ -288,3 +309,87 @@ class VerifyRecordingUpload:
 class CompleteCapture:
     assessment_id: str
     expected_version: int
+
+
+@dataclass(frozen=True, slots=True)
+class TranscriptRevisionSnapshot:
+    id: str
+    organization_id: str
+    assessment_id: str
+    revision: int
+    source: TranscriptSource
+    review_state: TranscriptReviewState
+    content: str
+    content_sha256: str
+    created_by_user_id: str
+    created_at: datetime
+    attested_by_user_id: str | None
+    attested_at: datetime | None
+    version: int
+
+    def __post_init__(self) -> None:
+        for value, field_name in (
+            (self.id, "transcript revision id"),
+            (self.organization_id, "organization id"),
+            (self.assessment_id, "assessment id"),
+            (self.created_by_user_id, "created by user id"),
+        ):
+            _require_non_empty(value, field_name)
+        if not isinstance(self.content, str) or not self.content.strip():
+            raise ValueError("transcript content must be non-empty")
+        if _SHA256.fullmatch(self.content_sha256) is None:
+            raise ValueError("content_sha256 must be a 64-character lowercase SHA-256 digest")
+        if self.revision < 1:
+            raise ValueError("revision must be positive")
+        if self.version < 1:
+            raise ValueError("version must be positive")
+        if (self.attested_by_user_id is None) != (self.attested_at is None):
+            raise ValueError("attestation actor and timestamp must be provided together")
+        if self.review_state is TranscriptReviewState.ATTESTED and self.attested_by_user_id is None:
+            raise ValueError("attested transcript revision requires attestation metadata")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "organization_id": self.organization_id,
+            "assessment_id": self.assessment_id,
+            "revision": self.revision,
+            "source": self.source.value,
+            "review_state": self.review_state.value,
+            "content": self.content,
+            "content_sha256": self.content_sha256,
+            "created_by_user_id": self.created_by_user_id,
+            "created_at": self.created_at.isoformat(),
+            "attested_by_user_id": self.attested_by_user_id,
+            "attested_at": self.attested_at.isoformat() if self.attested_at else None,
+            "version": self.version,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CreateTranscriptRevision:
+    assessment_id: str
+    content: str
+    source: TranscriptSource
+    expected_revision: int | None = None
+    expected_version: int | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.assessment_id, "assessment id")
+        if not isinstance(self.content, str) or not self.content.strip():
+            raise ValueError("transcript content must be non-empty")
+        if (self.expected_revision is None) != (self.expected_version is None):
+            raise ValueError("expected_revision and expected_version must be provided together")
+        if self.expected_revision is not None and self.expected_revision < 1:
+            raise ValueError("expected_revision must be positive")
+        if self.expected_version is not None and self.expected_version < 1:
+            raise ValueError("expected_version must be positive")
+@dataclass(frozen=True, slots=True)
+class AttestTranscript:
+    transcript_revision_id: str
+    expected_version: int
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.transcript_revision_id, "transcript revision id")
+        if self.expected_version < 1:
+            raise ValueError("expected_version must be positive")
