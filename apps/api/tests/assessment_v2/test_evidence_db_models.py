@@ -164,7 +164,7 @@ def test_evidence_migration_creates_and_downgrades_its_three_tables(monkeypatch)
                 }
                 revision = connection.execute("select version_num from alembic_version").fetchone()
             assert {"evidence_runs", "evidence_feature_values", "evidence_domain_profiles"} <= tables
-            assert revision == ("0006_evidence_profiles",)
+            assert revision == ("0007_durable_evidence_jobs",)
 
             downgrade_assessment_database("0005_transcript_revisions")
             with sqlite3.connect(database_path) as connection:

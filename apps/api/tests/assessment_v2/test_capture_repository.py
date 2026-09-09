@@ -259,6 +259,66 @@ def test_worker_does_not_claim_upload_verification_before_upload_completion(sess
     assert stored_run.attempt_count == 0
 
 
+def test_worker_reclaims_an_expired_capture_lease_after_a_crash(session: Session) -> None:
+    repo, scope, _, assessment, domain = _ready_capture_repository(session)
+    created = repo.create_recording_if_capture_active(
+        scope,
+        domain.CreateRecording(
+            assessment_id=assessment.id,
+            activity_code="free_play",
+            content_type="audio/webm",
+            size_bytes=456,
+            checksum="sha256:0123456789abcdef0123456789abcdef",
+            idempotency_key="recording-worker-reclaim-01",
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    uploading = repo.mark_recording_uploading_if_capture_active(
+        scope,
+        domain.MarkRecordingUploading(
+            recording_id=created.recording.id,
+            expected_version=created.recording.version,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=30),
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+    completed_upload = repo.complete_recording_upload_if_capture_active(
+        scope,
+        domain.CompleteRecordingUpload(
+            recording_id=uploading.id,
+            expected_version=uploading.version,
+            observed_content_type="audio/webm",
+            observed_size_bytes=456,
+            completed_at=datetime.now(timezone.utc),
+        ),
+        correlation_id="0123456789abcdef0123456789abcdef",
+    )
+
+    first = repo.claim_next_processing_run()
+    assert first is not None
+    assert first.lease_token
+    stored = session.scalar(
+        select(ProcessingRunRecord).where(
+            ProcessingRunRecord.processing_run_id == completed_upload.processing_run.id
+        )
+    )
+    assert stored is not None
+    assert stored.state == ProcessingRunState.RUNNING.value
+    first_attempt_count = stored.attempt_count
+    stored.lease_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    session.flush()
+
+    reclaimed = repo.claim_next_processing_run()
+
+    assert reclaimed is not None
+    assert reclaimed.run_id == first.run_id
+    assert reclaimed.lease_token != first.lease_token
+    assert stored.attempt_count == first_attempt_count + 1
+    assert stored.state == ProcessingRunState.RUNNING.value
+    assert stored.lease_expires_at is not None
+    assert stored.lease_expires_at > datetime.now(timezone.utc)
+
+
 def test_worker_expires_abandoned_uploads_and_queues_cleanup(session: Session) -> None:
     repo, scope, _, assessment, domain = _ready_capture_repository(session)
     created = repo.create_recording_if_capture_active(
@@ -1106,6 +1166,4 @@ def test_new_transcript_revision_stales_dependent_evidence_run(session: Session)
     assert stored_run is not None
     assert stored_run.state == EvidenceState.STALE.value
     assert stored_run.version == 2
-    assert current is not None
-    assert current.state is EvidenceState.STALE
-    assert any("stale" in limitation.lower() for limitation in current.profile.limitations)
+    assert current is None

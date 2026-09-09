@@ -305,5 +305,11 @@ def test_capture_upload_quality_download_delete_complete_and_run_routes_are_safe
         "stage": "upload_verification",
         "state": "queued",
         "attempt_count": 0,
+        "max_attempts": 3,
+        "available_at": "2026-09-06T00:00:00Z",
         "error_code": None,
+        "result_available": False,
+        "can_retry": False,
+        "can_cancel": False,
+        "version": 1,
     }

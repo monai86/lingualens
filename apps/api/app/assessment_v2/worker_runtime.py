@@ -1,4 +1,4 @@
-"""Process one durable Capture V2 run from the configured assessment database."""
+"""Process one durable Capture V2 or Evidence V2 run from the assessment DB."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from sqlalchemy import select
 from app.assessment_v2.db.models import OrganizationRecord
 from app.assessment_v2.db.repositories import AssessmentRepository
 from app.assessment_v2.db.session import assessment_session_for, get_assessment_session_factory
+from app.assessment_v2.evidence_worker import EvidenceProcessingWorker
 from app.assessment_v2.storage import SupabasePrivateStorageAdapter
 from app.assessment_v2.worker import CaptureProcessingWorker
 from app.core.config import get_settings
@@ -53,6 +54,7 @@ def run_capture_worker_once() -> dict[str, str | None]:
     settings = get_settings().validate_runtime_security()
     session_factory = get_assessment_session_factory(settings.assessment_database_url)
     storage = SupabasePrivateStorageAdapter(settings=settings)
+    first_non_idle: dict[str, str | None] | None = None
     for organization_id in _worker_organization_ids(settings, session_factory):
         worker_user = CurrentUser(
             user_id="capture-worker",
@@ -61,13 +63,38 @@ def run_capture_worker_once() -> dict[str, str | None]:
             organization_id=organization_id,
         )
         with assessment_session_for(worker_user, settings.assessment_database_url) as session:
-            result = CaptureProcessingWorker(
-                AssessmentRepository(session),
+            repository = AssessmentRepository(
+                session,
+                worker_organization_id=organization_id,
+                worker_user_id=worker_user.user_id,
+            )
+            capture_result = CaptureProcessingWorker(
+                repository,
                 storage,
             ).run_once()
-        if result.status != "idle":
-            return {"status": result.status, "run_id": result.run_id}
-    return {"status": "idle", "run_id": None}
+        if capture_result.status != "idle":
+            first_non_idle = first_non_idle or {
+                "status": capture_result.status,
+                "run_id": capture_result.run_id,
+            }
+
+        # Keep the evidence transaction separate from capture work. The
+        # evidence lease must be committed before transcript extraction so a
+        # crash leaves a reclaimable RUNNING job instead of rolling the claim
+        # back with unrelated capture work.
+        with assessment_session_for(worker_user, settings.assessment_database_url) as session:
+            repository = AssessmentRepository(
+                session,
+                worker_organization_id=organization_id,
+                worker_user_id=worker_user.user_id,
+            )
+            evidence_result = EvidenceProcessingWorker(repository).run_once()
+        if evidence_result.status != "idle":
+            first_non_idle = first_non_idle or {
+                "status": evidence_result.status,
+                "run_id": evidence_result.run_id,
+            }
+    return first_non_idle or {"status": "idle", "run_id": None}
 
 
 def run_capture_worker_loop(*, idle_sleep_seconds: float = 1.0, max_cycles: int | None = None) -> None:

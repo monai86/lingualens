@@ -34,10 +34,12 @@ from app.assessment_v2.schemas import (
     DownloadIntentResponse,
     DomainProfileResponse,
     ErrorEnvelope,
+    EvidenceProcessingResponse,
     EvidenceProfileResponse,
     EvidenceProvenanceResponse,
     MeasuredFeatureResponse,
     ProcessingRunResponse,
+    ProcessingRunActionRequest,
     ProtocolActivityResponse,
     ProtocolSelectionRequest,
     ProtocolSelectionResponse,
@@ -130,8 +132,18 @@ def _processing_run_response(value) -> ProcessingRunResponse:
         stage=value.stage,
         state=value.state,
         attempt_count=value.attempt_count,
+        max_attempts=value.max_attempts,
+        available_at=value.available_at,
         error_code=value.error_code,
+        result_available=value.result_available,
+        can_retry=value.can_retry,
+        can_cancel=value.can_cancel,
+        version=value.version,
     )
+
+
+def _evidence_processing_response(value) -> EvidenceProcessingResponse:
+    return EvidenceProcessingResponse(processing_run=_processing_run_response(value))
 
 
 def _capture_response(value) -> CaptureResponse:
@@ -391,17 +403,31 @@ def get_current_evidence(
 
 @router.post(
     "/assessments/{assessment_id}/evidence-runs",
-    response_model=EvidenceProfileResponse,
-    status_code=status.HTTP_201_CREATED,
+    response_model=EvidenceProcessingResponse,
+    status_code=status.HTTP_202_ACCEPTED,
     responses=_V2_ERROR_RESPONSES,
 )
 def create_current_evidence(
     assessment_id: str,
     request: Request,
     service: AssessmentService = Depends(get_assessment_service),
-) -> EvidenceProfileResponse:
-    return _evidence_response(
-        service.create_current_evidence_run(assessment_id, _correlation_id(request))
+) -> EvidenceProcessingResponse:
+    return _evidence_processing_response(
+        service.enqueue_current_evidence_processing(assessment_id, _correlation_id(request))
+    )
+
+
+@router.get(
+    "/assessments/{assessment_id}/evidence-processing-run",
+    response_model=EvidenceProcessingResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def get_current_evidence_processing_run(
+    assessment_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> EvidenceProcessingResponse:
+    return _evidence_processing_response(
+        service.get_current_evidence_processing_run(assessment_id)
     )
 
 
@@ -702,3 +728,43 @@ def get_processing_run(
     service: AssessmentService = Depends(get_assessment_service),
 ) -> ProcessingRunResponse:
     return _processing_run_response(service.get_processing_run(processing_run_id))
+
+
+@router.post(
+    "/processing-runs/{processing_run_id}/retry",
+    response_model=ProcessingRunResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def retry_processing_run(
+    processing_run_id: str,
+    payload: ProcessingRunActionRequest,
+    request: Request,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ProcessingRunResponse:
+    return _processing_run_response(
+        service.retry_processing_run(
+            processing_run_id,
+            payload.expected_version,
+            _correlation_id(request),
+        )
+    )
+
+
+@router.post(
+    "/processing-runs/{processing_run_id}/cancel",
+    response_model=ProcessingRunResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def cancel_processing_run(
+    processing_run_id: str,
+    payload: ProcessingRunActionRequest,
+    request: Request,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ProcessingRunResponse:
+    return _processing_run_response(
+        service.cancel_processing_run(
+            processing_run_id,
+            payload.expected_version,
+            _correlation_id(request),
+        )
+    )

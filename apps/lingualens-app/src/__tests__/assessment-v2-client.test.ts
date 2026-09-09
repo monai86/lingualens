@@ -121,7 +121,21 @@ test("loads and mutates reviewed transcript revisions through FastAPI", async ()
     .mockResolvedValueOnce(new Response(JSON.stringify(transcript), { status: 200 }))
     .mockResolvedValueOnce(new Response(JSON.stringify(transcript), { status: 201 }))
     .mockResolvedValueOnce(new Response(JSON.stringify({ ...transcript, review_state: "attested", version: 2 }), { status: 200 }))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ evidence_run_id: "evidence_run_opaque_01" }), { status: 201 }));
+    .mockResolvedValueOnce(new Response(JSON.stringify({
+      processing_run: {
+        id: "processing_run_opaque_01",
+        stage: "evidence_extraction",
+        state: "queued",
+        attempt_count: 0,
+        max_attempts: 3,
+        available_at: "2026-09-07T08:02:00Z",
+        error_code: null,
+        result_available: false,
+        can_retry: false,
+        can_cancel: true,
+        version: 1,
+      },
+    }), { status: 202 }));
   const client = createAssessmentV2Client();
 
   await expect(client.getTranscript("assessment_opaque_01")).resolves.toEqual(transcript);
@@ -132,7 +146,9 @@ test("loads and mutates reviewed transcript revisions through FastAPI", async ()
     expected_version: 1,
   })).resolves.toEqual(transcript);
   await expect(client.attestTranscript("transcript_revision_opaque_01", 1)).resolves.toMatchObject({ review_state: "attested" });
-  await expect(client.createEvidence("assessment_opaque_01")).resolves.toEqual({ evidence_run_id: "evidence_run_opaque_01" });
+  await expect(client.queueEvidence("assessment_opaque_01")).resolves.toMatchObject({
+    processing_run: { id: "processing_run_opaque_01", state: "queued" },
+  });
 
   expect(fetchSpy).toHaveBeenNthCalledWith(
     2,

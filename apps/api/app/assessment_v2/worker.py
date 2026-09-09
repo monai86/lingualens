@@ -40,6 +40,7 @@ class CaptureWorkItem:
     declared_size_bytes: int
     minimum_duration_seconds: int
     target_duration_seconds: int
+    lease_token: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +51,8 @@ class WorkerResult:
 
 class CaptureWorkerRepository(Protocol):
     def claim_next_processing_run(self) -> CaptureWorkItem | None: ...
+
+    def commit_transaction(self) -> None: ...
 
     def verify_recording_upload_worker(self, item: CaptureWorkItem, checksum: str) -> bool: ...
 
@@ -94,6 +97,9 @@ class CaptureProcessingWorker:
         item = self.repository.claim_next_processing_run()
         if item is None:
             return WorkerResult("idle")
+        commit_transaction = getattr(self.repository, "commit_transaction", None)
+        if callable(commit_transaction):
+            commit_transaction()
         try:
             if item.stage is ProcessingRunStage.UPLOAD_VERIFICATION:
                 return self._verify_upload(item)

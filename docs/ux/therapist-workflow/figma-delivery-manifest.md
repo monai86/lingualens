@@ -56,3 +56,14 @@ Presentation-mode walkthroughs, accessibility inspection, synthetic exports,
 hashes, and version freeze are complete. The current state is intentionally
 visible as `working skeleton` so downstream frontend work cannot mistake it for
 a validated clinical interface specification.
+
+## A1 durable processing-state delta
+
+The local contract now specifies the H10/H11/E07/E09 states for queued,
+running, retry-scheduled, failed, user-cancelled, system-cancelled/stale, and
+succeeded evidence processing, including backend-provided `can_retry` and
+`can_cancel` actions. The Figma file still requires an authenticated edit,
+Presentation-mode walkthrough, accessibility inspection, synthetic export and
+freeze evidence before those states can be marked accepted. This manifest
+therefore remains `working skeleton`; local documentation must not be treated
+as proof that the Figma nodes were updated.

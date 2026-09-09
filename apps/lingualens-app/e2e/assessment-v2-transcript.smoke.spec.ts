@@ -13,6 +13,55 @@ const transcript = {
   attested_at: null,
   version: 1,
 };
+const attestedTranscript = {
+  ...transcript,
+  review_state: "attested",
+  attested_at: "2026-09-07T08:03:00Z",
+  version: 2,
+};
+const processingRun = {
+  id: "processing_run_opaque_01",
+  stage: "evidence_extraction",
+  state: "queued",
+  attempt_count: 0,
+  max_attempts: 3,
+  available_at: "2026-09-07T08:04:00Z",
+  error_code: null,
+  result_available: false,
+  can_retry: false,
+  can_cancel: true,
+  version: 1,
+};
+const evidenceProfile = {
+  evidence_run_id: "evidence_run_opaque_01",
+  assessment_id: assessmentId,
+  transcript_revision_id: transcript.id,
+  state: "completed",
+  generated_at: "2026-09-07T08:05:00Z",
+  provenance: {
+    input_ref: "transcript_input_opaque_01",
+    input_sha256: "a".repeat(64),
+    protocol_version_key: "thai_guided_language_sample:v0",
+    extractor: "reviewed-transcript-adapter",
+    pipeline_version: "reviewed-transcript-descriptors-v1",
+    feature_schema_version: "descriptive-transcript-features-v1",
+    analyzed_at: "2026-09-07T08:05:00Z",
+  },
+  features: [],
+  domains: [{
+    domain: "expressive_language",
+    status: "descriptive_only",
+    summary: "มีข้อมูลเชิงพรรณนาในช่องภาษาแสดงออก",
+    feature_keys: [],
+    supporting_features: [],
+    conflicting_features: [],
+    limitations: [],
+  }],
+  limitations: [],
+  not_diagnostic: true,
+  decision_support_only: true,
+  version: 1,
+};
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -24,7 +73,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("processing assessment can create its first transcript draft and continue review", async ({ page }) => {
+test("processing assessment can review a transcript and follow durable evidence processing", async ({ page }) => {
   await page.route("**/api/v1/settings", async (route) => {
     await route.fulfill({
       status: 200,
@@ -68,7 +117,11 @@ test("processing assessment can create its first transcript draft and continue r
       });
       return;
     }
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(transcript) });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(transcriptExists ? attestedTranscript : transcript),
+    });
   });
   await page.route(`**/api/v2/assessments/${assessmentId}/transcript-revisions`, async (route) => {
     expect(route.request().method()).toBe("POST");
@@ -80,6 +133,46 @@ test("processing assessment can create its first transcript draft and continue r
     transcriptExists = true;
     await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(transcript) });
   });
+  await page.route(`**/api/v2/transcript-revisions/${transcript.id}/attest`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual({ expected_version: 1 });
+    transcriptExists = true;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(attestedTranscript) });
+  });
+
+  let currentRun: typeof processingRun | null = null;
+  let allowSuccess = false;
+  await page.route(`**/api/v2/assessments/${assessmentId}/evidence-processing-run`, async (route) => {
+    if (!currentRun) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "processing_run_not_found" } }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ processing_run: allowSuccess ? { ...processingRun, state: "running", attempt_count: 1, version: 2 } : currentRun }),
+    });
+  });
+  await page.route(`**/api/v2/assessments/${assessmentId}/evidence-runs`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    currentRun = processingRun;
+    await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ processing_run: currentRun }) });
+  });
+  await page.route(`**/api/v2/processing-runs/${processingRun.id}`, async (route) => {
+    expect(route.request().method()).toBe("GET");
+    const result = allowSuccess
+      ? { ...processingRun, state: "succeeded", attempt_count: 1, result_available: true, can_cancel: false, version: 3 }
+      : { ...processingRun, state: "running", attempt_count: 1, version: 2 };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(result) });
+  });
+  await page.route(`**/api/v2/assessments/${assessmentId}/evidence`, async (route) => {
+    expect(route.request().method()).toBe("GET");
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(evidenceProfile) });
+  });
 
   await page.goto(`/assessments/${assessmentId}/transcript`);
   await expect(page.getByRole("heading", { name: "สร้าง transcript ฉบับแรก" })).toBeVisible();
@@ -89,4 +182,23 @@ test("processing assessment can create its first transcript draft and continue r
 
   await expect(page.getByRole("heading", { name: "ทบทวน transcript" })).toBeVisible();
   await expect(page.getByText("สถานะ: รอตรวจสอบ")).toBeVisible();
+  await page.getByRole("checkbox", { name: /ฉันได้ตรวจสอบ/ }).check();
+  await page.getByRole("button", { name: "รับรอง transcript" }).click();
+  await expect(page.getByText("รับรองแล้ว", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "สร้างหลักฐานเชิงพรรณนา" }).click();
+  await expect(page.getByText("บันทึกงานแล้ว กำลังรอประมวลผล")).toBeVisible();
+  await page.waitForTimeout(2_200);
+  await expect(page.getByText("กำลังประมวลผล")).toBeVisible();
+
+  allowSuccess = true;
+  await page.reload();
+  await expect(page.getByText("กำลังประมวลผล")).toBeVisible();
+  await page.waitForTimeout(2_200);
+  await expect(page.getByRole("link", { name: "เปิดผลหลักฐาน" })).toBeVisible();
+  await expect(page.evaluate(() => Object.keys(localStorage))).resolves.toEqual([]);
+
+  await page.getByRole("link", { name: "เปิดผลหลักฐาน" }).click();
+  await expect(page.getByRole("heading", { name: "โปรไฟล์พัฒนาการเชิงพรรณนา" })).toBeVisible();
+  await expect(page.getByText("มีข้อมูลเชิงพรรณนาในช่องภาษาแสดงออก")).toBeVisible();
 });

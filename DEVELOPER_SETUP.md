@@ -45,15 +45,18 @@ The existing therapist product remains on `/api/v1`. The additive `/api/v2`
 foundation uses a fresh database and a separate Alembic history. It starts with
 no imported v1 records and now covers the first Capture V2 workflow slice:
 children, consent records, assessment lifecycle, protocol selection, private
-recording upload intents, durable processing runs, checksum verification, and
-non-diagnostic quality states.
+recording upload intents, durable processing runs, checksum verification,
+reviewed transcript attestation, asynchronous evidence extraction, and
+non-diagnostic quality states. Capture and evidence jobs share the same native
+tenant-scoped worker and PostgreSQL `processing_runs` queue.
 
 For the primary local verification path, Docker is optional. Install PostgreSQL
 16 with Postgres.app, Homebrew, or the PostgreSQL distribution for your OS,
 then provide an admin connection to the local `postgres` database. The native
-check creates a uniquely named temporary assessment database, starts a local
-FastAPI process, runs the API probe and PostgreSQL RLS suite, and removes only
-that temporary database and test role when it finishes:
+check creates a uniquely named temporary assessment database, starts local
+FastAPI and worker processes, exercises transcript attestation plus the
+`202` enqueue → poll → evidence-read path, runs the API/RLS/lease suite, and
+removes only that temporary database and test role when it finishes:
 
 ```bash
 export LINGUALENS_NATIVE_ADMIN_DATABASE_URL=postgresql+psycopg://<local-admin>:<password>@127.0.0.1:5432/postgres
@@ -61,7 +64,7 @@ PYTHONPATH=apps/api:src python scripts/check_assessment_v2_native.py
 ```
 
 The native gate is the primary local acceptance path and does not require
-Docker. For optional Compose verification:
+Docker. It does not require Redis or Celery. For optional Compose verification:
 
 ```bash
 docker compose up -d postgres

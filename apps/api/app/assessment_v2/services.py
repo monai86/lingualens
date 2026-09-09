@@ -36,8 +36,7 @@ from app.assessment_v2.domain.models import (
     VerifyRecordingUpload,
 )
 from app.assessment_v2.evidence import EvidenceRunSnapshot
-from app.assessment_v2.evidence_adapter import AdaptedEvidence, adapt_analysis_result
-from app.assessment_v2.reviewed_transcript_worker import extract_reviewed_transcript
+from app.assessment_v2.evidence_adapter import AdaptedEvidence
 from app.assessment_v2.protocols import ProtocolUnavailableError, select_protocol
 from app.assessment_v2.storage import (
     CaptureStorageAdapter,
@@ -122,6 +121,22 @@ class AssessmentRepository(Protocol):
     def get_processing_run_if_consented(
         self, scope: AccessScope, processing_run_id: str
     ) -> ProcessingRunSnapshot | None: ...
+
+    def get_current_evidence_processing_run(
+        self, scope: AccessScope, assessment_id: str
+    ) -> ProcessingRunSnapshot | None: ...
+
+    def enqueue_current_evidence_processing(
+        self, scope: AccessScope, assessment_id: str, correlation_id: str
+    ) -> ProcessingRunSnapshot: ...
+
+    def retry_evidence_processing_run(
+        self, scope: AccessScope, run_id: str, expected_version: int, correlation_id: str
+    ) -> ProcessingRunSnapshot: ...
+
+    def request_evidence_processing_cancellation(
+        self, scope: AccessScope, run_id: str, expected_version: int, correlation_id: str
+    ) -> ProcessingRunSnapshot: ...
 
     def mark_recording_deleted_if_consented(
         self,
@@ -219,6 +234,9 @@ _POLICY_MESSAGES: dict[str, tuple[int, str]] = {
     "idempotency_conflict": (409, "The idempotency key was already used for a different request."),
     "consent_revoked": (409, "Active clinical-assessment consent is required."),
     "processing_run_not_found": (404, "Processing run was not found."),
+    "processing_run_not_retryable": (409, "This processing run cannot be retried."),
+    "processing_run_not_cancellable": (409, "This processing run cannot be cancelled."),
+    "stale_processing_run_version": (409, "The processing run version is stale."),
     "transcript_not_found": (404, "Transcript was not found."),
     "transcript_not_reviewable": (409, "The transcript is not ready for this review action."),
     "stale_transcript_version": (409, "The transcript version is stale."),
@@ -390,44 +408,52 @@ class AssessmentService:
             )
         )
 
-    def create_current_evidence_run(
+    def enqueue_current_evidence_processing(
         self, assessment_id: str, correlation_id: str
-    ) -> EvidenceRunSnapshot:
-        """Run the versioned reviewed-transcript worker for current evidence."""
+    ) -> ProcessingRunSnapshot:
+        """Create or return the durable job for the current attested transcript."""
 
         self._require_authorized_role(_EVIDENCE_RUN_ROLES)
-        assessment = self.get_assessment(assessment_id)
-        transcript = self._repository_call(
-            lambda: self.repository.get_current_transcript(self.scope, assessment_id)
-        )
-        if transcript is None:
-            raise self._policy_error("transcript_not_found")
-        if transcript.review_state.value != "attested":
-            raise self._policy_error("transcript_not_reviewable")
-
-        capture = self._repository_call(
-            lambda: self.repository.get_capture(self.scope, assessment_id)
-        )
-        if capture is None or capture.protocol_selection is None:
-            raise self._policy_error("evidence_protocol_mismatch")
-
-        analysis = extract_reviewed_transcript(
-            transcript,
-            protocol_version_key=capture.protocol_selection.protocol_version_key,
-        )
-        adapted = adapt_analysis_result(
-            analysis,
-            input_sha256=transcript.content_sha256,
-            protocol_version_key=capture.protocol_selection.protocol_version_key,
-            expected_feature_schema_version="descriptive-transcript-features-v1",
-        )
         return self._repository_call(
-            lambda: self.repository.create_evidence_run(
-                self.scope,
-                assessment.id,
-                transcript.id,
-                adapted,
-                correlation_id,
+            lambda: self.repository.enqueue_current_evidence_processing(
+                self.scope, assessment_id, correlation_id
+            )
+        )
+
+    def create_current_evidence_run(
+        self, assessment_id: str, correlation_id: str
+    ) -> ProcessingRunSnapshot:
+        """Compatibility alias for callers migrating to the durable action."""
+
+        return self.enqueue_current_evidence_processing(assessment_id, correlation_id)
+
+    def get_current_evidence_processing_run(self, assessment_id: str) -> ProcessingRunSnapshot:
+        self._require_clinical_role()
+        self.get_assessment(assessment_id)
+        processing_run = self._repository_call(
+            lambda: self.repository.get_current_evidence_processing_run(self.scope, assessment_id)
+        )
+        if processing_run is None:
+            raise self._policy_error("processing_run_not_found")
+        return processing_run
+
+    def retry_processing_run(
+        self, processing_run_id: str, expected_version: int, correlation_id: str
+    ) -> ProcessingRunSnapshot:
+        self._require_authorized_role(_EVIDENCE_RUN_ROLES)
+        return self._repository_call(
+            lambda: self.repository.retry_evidence_processing_run(
+                self.scope, processing_run_id, expected_version, correlation_id
+            )
+        )
+
+    def cancel_processing_run(
+        self, processing_run_id: str, expected_version: int, correlation_id: str
+    ) -> ProcessingRunSnapshot:
+        self._require_authorized_role(_EVIDENCE_RUN_ROLES)
+        return self._repository_call(
+            lambda: self.repository.request_evidence_processing_cancellation(
+                self.scope, processing_run_id, expected_version, correlation_id
             )
         )
 

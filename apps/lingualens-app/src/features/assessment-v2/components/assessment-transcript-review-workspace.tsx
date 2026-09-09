@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -8,10 +7,18 @@ import {
   type AssessmentV2TranscriptRevision,
   type AssessmentV2TranscriptSource,
 } from "@/services/assessment-v2-client";
+import { AssessmentProcessingStatus } from "@/features/assessment-v2/components/assessment-processing-status";
 
 export type AssessmentTranscriptReviewClient = Pick<
   AssessmentV2Client,
-  "getTranscript" | "createTranscriptRevision" | "attestTranscript" | "createEvidence"
+  | "getTranscript"
+  | "createTranscriptRevision"
+  | "attestTranscript"
+  | "queueEvidence"
+  | "getCurrentEvidenceProcessingRun"
+  | "getProcessingRun"
+  | "retryProcessingRun"
+  | "cancelProcessingRun"
 >;
 
 type AssessmentTranscriptReviewWorkspaceProps = {
@@ -32,7 +39,6 @@ export function AssessmentTranscriptReviewWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [attestationConfirmed, setAttestationConfirmed] = useState(false);
-  const [evidenceReady, setEvidenceReady] = useState(false);
 
   const loadTranscript = useCallback(async () => {
     setLoading(true);
@@ -43,13 +49,11 @@ export function AssessmentTranscriptReviewWorkspace({
       setTranscript(current);
       setDraftContent(current.content);
       setAttestationConfirmed(false);
-      setEvidenceReady(false);
     } catch (error) {
       setTranscript(null);
       setDraftContent("");
       setError(isMissingTranscriptError(error) ? null : "ไม่สามารถโหลด transcript ได้");
       setAttestationConfirmed(false);
-      setEvidenceReady(false);
     } finally {
       setLoading(false);
     }
@@ -74,7 +78,6 @@ export function AssessmentTranscriptReviewWorkspace({
       setTranscript(saved);
       setDraftContent(saved.content);
       setAttestationConfirmed(false);
-      setEvidenceReady(false);
     } catch {
       setActionError("ยังบันทึก transcript ฉบับร่างไม่ได้ กรุณาตรวจสถานะ assessment แล้วลองใหม่");
     } finally {
@@ -94,21 +97,6 @@ export function AssessmentTranscriptReviewWorkspace({
       setAttestationConfirmed(false);
     } catch {
       setActionError("ยังรับรอง transcript ไม่ได้ ฉบับนี้อาจถูกแก้ไขไปแล้ว กรุณาโหลดข้อมูลใหม่");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function createEvidence() {
-    if (!transcript || busy || transcript.review_state !== "attested" || draftContent !== transcript.content) return;
-
-    setBusy(true);
-    setActionError(null);
-    try {
-      await client.createEvidence(assessmentId);
-      setEvidenceReady(true);
-    } catch {
-      setActionError("ยังสร้างหลักฐานไม่ได้ ระบบจะแสดงเฉพาะผลจาก FastAPI และไม่ได้สร้างผลลัพธ์ในเบราว์เซอร์");
     } finally {
       setBusy(false);
     }
@@ -258,23 +246,14 @@ export function AssessmentTranscriptReviewWorkspace({
         <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-5 text-emerald-950" role="status">
           <p className="font-semibold">รับรองแล้ว</p>
           <p className="mt-1 text-sm">ระบบสามารถใช้ revision นี้เป็น input ของ evidence worker ได้</p>
-          <button
-            type="button"
-            disabled={busy || isDirty}
-            onClick={() => void createEvidence()}
-            className="mt-4 rounded-lg bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {busy ? "กำลังสร้างหลักฐาน…" : "สร้างหลักฐานเชิงพรรณนา"}
-          </button>
+          <div className="mt-4">
+            <AssessmentProcessingStatus
+              assessmentId={assessmentId}
+              client={client}
+              canQueue={!isDirty}
+            />
+          </div>
           {isDirty ? <p className="mt-3 text-sm text-amber-800">บันทึกฉบับร่างก่อนสร้างหลักฐาน</p> : null}
-          {evidenceReady ? (
-            <Link
-              href={`/assessments/${encodeURIComponent(assessmentId)}/evidence`}
-              className="ml-3 inline-flex rounded-lg border border-[color:var(--color-border-strong)] px-4 py-2 text-sm font-semibold text-[color:var(--color-text-strong)]"
-            >
-              ไปยัง workspace ผลหลักฐาน
-            </Link>
-          ) : null}
         </section>
       ) : null}
 

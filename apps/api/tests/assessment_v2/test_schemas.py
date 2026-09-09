@@ -266,7 +266,19 @@ def test_capture_responses_expose_only_safe_recording_and_processing_fields() ->
 
     assert {"id", "activity_code", "content_type", "size_bytes", "upload_state", "version"} <= recording_fields
     assert {"assessment_id", "state", "protocol", "activities", "recordings", "progress"} <= capture_fields
-    assert processing_fields == {"id", "stage", "state", "attempt_count", "error_code"}
+    assert processing_fields == {
+        "id",
+        "stage",
+        "state",
+        "attempt_count",
+        "max_attempts",
+        "available_at",
+        "error_code",
+        "result_available",
+        "can_retry",
+        "can_cancel",
+        "version",
+    }
     assert quality_fields == {"status", "evaluated_at", "version"}
     assert {"object_key", "checksum", "filename", "child_name", "organization_id"}.isdisjoint(
         recording_fields | capture_fields | processing_fields | quality_fields
@@ -311,7 +323,13 @@ def test_capture_responses_expose_only_safe_recording_and_processing_fields() ->
         stage=ProcessingRunStage.QUALITY_ANALYSIS,
         state=ProcessingRunState.QUEUED,
         attempt_count=0,
+        max_attempts=3,
+        available_at=datetime(2026, 9, 6, tzinfo=timezone.utc),
         error_code=None,
+        result_available=False,
+        can_retry=False,
+        can_cancel=False,
+        version=1,
     )
     quality = RecordingQualityResponse(
         status=RecordingQualityStatus.USABLE,

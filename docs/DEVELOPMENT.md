@@ -73,10 +73,11 @@ PYTHONPATH=apps/api:src python -m app.assessment_v2.worker_runtime
 ```
 
 The native PostgreSQL/FastAPI check is the primary local runtime gate and does
-not require Docker. It creates a uniquely named temporary database, starts a
-local FastAPI process, probes `/api/v2`, runs the PostgreSQL RLS suite, and
-removes only its temporary database and role. Docker Compose remains an
-optional container-packaging smoke test:
+not require Docker, Redis, or Celery. It creates a uniquely named temporary
+database, starts local FastAPI and worker processes, exercises transcript
+attestation → `202` evidence enqueue → durable worker → evidence read, runs the
+PostgreSQL lease/RLS suite, and removes only its temporary database and role.
+Docker Compose remains an optional container-packaging smoke test:
 
 ```bash
 docker compose up -d postgres
@@ -91,25 +92,29 @@ to use `/api/v1` until a later migration plan. Rollback means unmounting `/api/v
 and leaving v2 startup migrations disabled; v1 data is not changed.
 
 Migration `0005_transcript_revisions` adds the append-only reviewed-transcript
-boundary, and `0006_evidence_profiles` adds tenant-scoped evidence runs,
-measured features, and developmental domain profiles. Only an attested transcript
-revision may be used by the evidence persistence seam. The therapist review
-page is `/assessments/{assessmentId}/transcript`; saving creates an append-only
-revision and the explicit attestation action is required before extraction. The
-worker endpoint is `POST /api/v2/assessments/{assessment_id}/evidence-runs` and
-passes deterministic descriptive measurements through the v2 provenance
+boundary, `0006_evidence_profiles` adds tenant-scoped evidence runs, measured
+features, and developmental domain profiles, and `0007_durable_evidence_jobs`
+adds assessment/transcript targets, leases, retry/cancel metadata, and result
+linkage to `processing_runs`. Only an attested transcript revision may be used
+by the evidence enqueue path. The therapist review page is
+`/assessments/{assessmentId}/transcript`; saving creates an append-only
+revision and explicit attestation is required before enqueue. The enqueue
+endpoint is `POST /api/v2/assessments/{assessment_id}/evidence-runs` and
+returns `202` with the durable run. The web client polls the current-run and
+run-detail endpoints, while `python -m app.assessment_v2.worker_runtime`
+extracts deterministic descriptive measurements through the v2 provenance
 adapter. The read route is `GET /api/v2/assessments/{assessment_id}/evidence`;
 it returns provenance, descriptive features, domain summaries, and limitations
-without transcript text. There is no background queue or diagnostic/probability
-claim in this slice.
+without transcript text. Processing remains operational decision support only;
+it makes no diagnosis or probability claim.
 
 The Capture V2 worker polls durable `processing_runs`, verifies upload bytes with
 a server-computed SHA-256, and then runs bounded `ffprobe`/`ffmpeg` quality
 checks. It never stores raw media in the database and never creates transcripts,
 features, diagnoses, or numeric ASD risk. Compose builds the capture-worker from
 the root `Dockerfile`, which includes `ffprobe` and `ffmpeg`; the service health
-check verifies both binaries. Capture V2 uses the database-backed
-`processing_runs` table as its durable queue and does not use the legacy Redis
+check verifies both binaries. Capture and evidence V2 use the database-backed
+`processing_runs` table as their durable queue and do not use the legacy Redis
 job-queue contract. Configure private Supabase Storage, a worker database
 connection, and an explicit comma-separated `LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS`
 allowlist before enabling the `capture-pilot` Compose profile; the allowlist is

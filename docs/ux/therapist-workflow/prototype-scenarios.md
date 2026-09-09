@@ -93,6 +93,34 @@ Today
 7. Disagree with one attention cue, record a rationale, and verify that the
    original computed cue remains available for audit.
 
+## Durable processing scenario: `P04_Evidence_Queue_Recovery_Desktop`
+
+Use synthetic child code `LL-0007`, synthetic transcript content, and the
+backend-owned processing state only.
+
+1. Complete transcript review and attestation, then select evidence extraction.
+2. Confirm the POST returns `202` with a queued run; do not show a completed
+   profile before the worker writes one.
+3. Reload while queued/running and confirm the current-run endpoint returns the
+   same opaque run ID; the browser does not create a local evidence object.
+4. Cancel a running job and confirm the transcript remains available. If the
+   returned `can_retry` is true because the therapist cancelled it, restart the
+   same run explicitly; do not infer this action from the state in the browser.
+5. Force a safe retryable failure, confirm the successful/partial evidence is
+   preserved, then retry only after the backend exposes `can_retry=true`.
+6. Create a new transcript revision or change the analysis contract and confirm
+   the old run reaches system-cancelled/stale handling; enqueue the current
+   revision as a new identity.
+
+### P04 assertions
+
+- `queued`, `running`, `failed`, `cancelled`, and `succeeded` are operational
+  states only; no state implies ASD, developmental delay, or a diagnosis.
+- A partial or insufficient result remains explicitly limited and is never
+  converted into zero, negative, or normal output.
+- All recovery actions use `expected_version` and a server response; reload and
+  API outage cannot fabricate evidence or completion.
+
 ## Safety and recovery branches
 
 | branch_id | trigger | visible state | required recovery or safe exit | rejoins |
@@ -114,6 +142,8 @@ Today
 - Walk `P02` through withdrawn consent and insufficient audio.
 - Walk `P03` through conflicting evidence, disagreement, and incompatible
   longitudinal data.
+- Walk `P04` through queue/reload, user cancellation/restart, retry, and stale
+  revision handling.
 - Confirm every branch states what was preserved, what is blocked, and what to
   do next.
 - Search all frame copy for prohibited diagnosis/probability wording.

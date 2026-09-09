@@ -5,6 +5,7 @@ import {
   AssessmentTranscriptReviewWorkspace,
   type AssessmentTranscriptReviewClient,
 } from "@/features/assessment-v2/components/assessment-transcript-review-workspace";
+import type { AssessmentV2ProcessingRun } from "@/services/assessment-v2-client";
 
 function transcript(overrides: Partial<Awaited<ReturnType<AssessmentTranscriptReviewClient["getTranscript"]>>> = {}) {
   return {
@@ -19,6 +20,49 @@ function transcript(overrides: Partial<Awaited<ReturnType<AssessmentTranscriptRe
     attested_at: null,
     version: 1,
     ...overrides,
+  };
+}
+
+function missingProcessingRun(): Error & { status: number; body: string } {
+  return Object.assign(new Error("not found"), {
+    status: 404,
+    body: JSON.stringify({ error: { code: "processing_run_not_found" } }),
+  });
+}
+
+function processingRun(overrides: Partial<AssessmentV2ProcessingRun> = {}): AssessmentV2ProcessingRun {
+  return {
+    id: "processing_run_opaque_01",
+    stage: "evidence_extraction",
+    state: "queued",
+    attempt_count: 0,
+    max_attempts: 3,
+    available_at: "2026-09-07T08:02:00Z",
+    error_code: null,
+    result_available: false,
+    can_retry: false,
+    can_cancel: true,
+    version: 1,
+    ...overrides,
+  };
+}
+
+function processingClient(): Pick<
+  AssessmentTranscriptReviewClient,
+  "queueEvidence" | "getCurrentEvidenceProcessingRun" | "getProcessingRun" | "retryProcessingRun" | "cancelProcessingRun"
+> {
+  return {
+    queueEvidence: vi.fn().mockResolvedValue({ processing_run: processingRun() }),
+    getCurrentEvidenceProcessingRun: vi.fn().mockRejectedValue(missingProcessingRun()),
+    getProcessingRun: vi.fn().mockResolvedValue(processingRun()),
+    retryProcessingRun: vi.fn().mockResolvedValue(processingRun()),
+    cancelProcessingRun: vi.fn().mockResolvedValue(processingRun({
+      state: "cancelled",
+      error_code: "cancel_requested",
+      can_cancel: false,
+      can_retry: true,
+      version: 2,
+    })),
   };
 }
 
@@ -38,7 +82,7 @@ test("loads a draft, saves a new revision, and requires explicit attestation", a
     getTranscript: vi.fn().mockResolvedValue(transcript()),
     createTranscriptRevision: vi.fn().mockResolvedValue(saved),
     attestTranscript: vi.fn().mockResolvedValue(attested),
-    createEvidence: vi.fn().mockResolvedValue({}),
+    ...processingClient(),
   };
 
   render(<AssessmentTranscriptReviewWorkspace assessmentId="assessment_opaque_01" client={client} />);
@@ -69,12 +113,9 @@ test("loads a draft, saves a new revision, and requires explicit attestation", a
     1,
   ));
   expect(await screen.findByText("รับรองแล้ว")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "สร้างหลักฐานเชิงพรรณนา" }));
-  await waitFor(() => expect(client.createEvidence).toHaveBeenCalledWith("assessment_opaque_01"));
-  expect(screen.getByRole("link", { name: "ไปยัง workspace ผลหลักฐาน" })).toHaveAttribute(
-    "href",
-    "/assessments/assessment_opaque_01/evidence",
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "สร้างหลักฐานเชิงพรรณนา" }));
+  await waitFor(() => expect(client.queueEvidence).toHaveBeenCalledWith("assessment_opaque_01"));
+  expect(await screen.findByText("บันทึกงานแล้ว กำลังรอประมวลผล")).toBeInTheDocument();
 });
 
 test("does not hide transcript API failures and offers retry", async () => {
@@ -83,7 +124,7 @@ test("does not hide transcript API failures and offers retry", async () => {
     getTranscript,
     createTranscriptRevision: vi.fn(),
     attestTranscript: vi.fn(),
-    createEvidence: vi.fn(),
+    ...processingClient(),
   };
 
   render(<AssessmentTranscriptReviewWorkspace assessmentId="assessment_opaque_01" client={client} />);
@@ -101,7 +142,7 @@ test("starts the first transcript draft when the processing assessment has no re
     })),
     createTranscriptRevision: vi.fn().mockResolvedValue(transcript({ source: "asr_draft" })),
     attestTranscript: vi.fn(),
-    createEvidence: vi.fn(),
+    ...processingClient(),
   };
 
   render(<AssessmentTranscriptReviewWorkspace assessmentId="assessment_opaque_01" client={client} />);
@@ -129,7 +170,7 @@ test("does not hide an assessment 404 as an empty transcript draft", async () =>
     })),
     createTranscriptRevision: vi.fn(),
     attestTranscript: vi.fn(),
-    createEvidence: vi.fn(),
+    ...processingClient(),
   };
 
   render(<AssessmentTranscriptReviewWorkspace assessmentId="assessment_opaque_01" client={client} />);
@@ -147,7 +188,7 @@ test("does not generate evidence while an attested transcript has unsaved edits"
     })),
     createTranscriptRevision: vi.fn(),
     attestTranscript: vi.fn(),
-    createEvidence: vi.fn(),
+    ...processingClient(),
   };
 
   render(<AssessmentTranscriptReviewWorkspace assessmentId="assessment_opaque_01" client={client} />);
@@ -158,7 +199,7 @@ test("does not generate evidence while an attested transcript has unsaved edits"
   const evidenceButton = screen.getByRole("button", { name: "สร้างหลักฐานเชิงพรรณนา" });
   expect(evidenceButton).toBeDisabled();
   expect(screen.getByText("บันทึกฉบับร่างก่อนสร้างหลักฐาน")).toBeInTheDocument();
-  expect(client.createEvidence).not.toHaveBeenCalled();
+  expect(client.queueEvidence).not.toHaveBeenCalled();
 });
 
 test("shows evidence extraction failure instead of fabricating a local result", async () => {
@@ -166,14 +207,15 @@ test("shows evidence extraction failure instead of fabricating a local result", 
     getTranscript: vi.fn().mockResolvedValue(transcript({ review_state: "attested", version: 2, attested_at: "2026-09-07T08:03:00Z" })),
     createTranscriptRevision: vi.fn(),
     attestTranscript: vi.fn(),
-    createEvidence: vi.fn().mockRejectedValue(new Error("worker unavailable")),
+    ...processingClient(),
   };
+  client.queueEvidence = vi.fn().mockRejectedValue(new Error("worker unavailable"));
 
   render(<AssessmentTranscriptReviewWorkspace assessmentId="assessment_opaque_01" client={client} />);
 
   fireEvent.click(await screen.findByRole("button", { name: "สร้างหลักฐานเชิงพรรณนา" }));
 
-  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("ยังสร้างหลักฐานไม่ได้"));
-  expect(client.createEvidence).toHaveBeenCalledWith("assessment_opaque_01");
+  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("ยังอ่านสถานะการประมวลผลไม่ได้"));
+  expect(client.queueEvidence).toHaveBeenCalledWith("assessment_opaque_01");
   expect(screen.queryByText(/ASD|probability|ความน่าจะเป็น/i)).not.toBeInTheDocument();
 });

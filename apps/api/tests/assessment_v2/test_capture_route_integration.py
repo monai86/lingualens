@@ -43,6 +43,7 @@ from app.assessment_v2.evidence import (
     MeasuredFeature,
 )
 from app.assessment_v2.evidence_adapter import AdaptedEvidence
+from app.assessment_v2.evidence_worker import EvidenceProcessingWorker
 from app.assessment_v2.protocols import PROTOCOL_CATALOG
 from app.assessment_v2.storage import SignedUploadGrant
 from app.core.security import CurrentUser, get_current_user
@@ -436,15 +437,33 @@ def test_real_dependency_stack_runs_reviewed_transcript_worker_after_attestation
         "/api/v2/assessments/route_assessment_01/evidence-runs"
     )
 
-    assert evidence.status_code == 201
+    assert evidence.status_code == 202
     body = evidence.json()
-    assert body["state"] == "completed"
+    assert body["processing_run"]["state"] == "queued"
+    assert body["processing_run"]["result_available"] is False
+    processing_run_id = body["processing_run"]["id"]
+
+    worker_result = EvidenceProcessingWorker(AssessmentRepository(session)).run_once()
+
+    assert worker_result.status == "evidence_recorded"
+    assert worker_result.run_id == processing_run_id
+    completed = real_capture_client.get(f"/api/v2/processing-runs/{processing_run_id}")
+    assert completed.status_code == 200
+    assert completed.json()["state"] == "succeeded"
+    assert completed.json()["result_available"] is True
+
+    evidence_profile = real_capture_client.get(
+        "/api/v2/assessments/route_assessment_01/evidence"
+    )
+    assert evidence_profile.status_code == 200
+    body = evidence_profile.json()
     feature_values = {feature["key"]: feature["value"] for feature in body["features"]}
     assert feature_values["child_utterance_count"] == 3
     assert feature_values["child_token_count"] == 5
     assert body["not_diagnostic"] is True
     assert body["decision_support_only"] is True
     assert content not in evidence.text
+    assert content not in evidence_profile.text
 
 
 def test_real_dependency_stack_blocks_worker_for_unattested_transcript(

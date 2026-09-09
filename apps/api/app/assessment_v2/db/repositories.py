@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from uuid import uuid4
 
-from sqlalchemy import and_, desc, func, or_, select, update
+from sqlalchemy import and_, desc, func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -87,7 +88,21 @@ from app.core.security import CurrentUser
 
 _ASSIGNABLE_MEMBERSHIP_ROLES = frozenset({"therapist", "clinical_supervisor"})
 _CAPTURE_UPLOAD_INTENT_TTL = timedelta(hours=2)
+_CAPTURE_LEASE_DURATION = timedelta(seconds=120)
 _SYSTEM_PROCESSING_KEY_PREFIX = "__system__:"
+_EVIDENCE_PIPELINE_VERSION = "reviewed-transcript-descriptors-v1"
+_EVIDENCE_FEATURE_SCHEMA_VERSION = "descriptive-transcript-features-v1"
+_EVIDENCE_LEASE_DURATION = timedelta(seconds=120)
+_EVIDENCE_RETRY_BACKOFF = (timedelta(seconds=5), timedelta(seconds=30))
+_EVIDENCE_SYSTEM_CANCEL_CODES = frozenset(
+    {
+        "consent_revoked",
+        "transcript_superseded",
+        "transcript_not_attested",
+        "analysis_contract_superseded",
+    }
+)
+_EVIDENCE_USER_CANCEL_CODE = "cancel_requested"
 _AUDIT_CHANGED_FIELDS = frozenset(
     {
         "activity_code",
@@ -124,6 +139,41 @@ class RepositoryError(ValueError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceWorkItem:
+    """Private worker envelope; transcript content never crosses the API seam."""
+
+    run_id: str
+    organization_id: str
+    assessment_id: str
+    transcript_revision_id: str
+    protocol_version_key: str
+    pipeline_version: str
+    feature_schema_version: str
+    content_sha256: str
+    lease_token: str
+    lease_expires_at: datetime
+    attempt_count: int
+    max_attempts: int
+    transcript: TranscriptRevisionSnapshot = field(repr=False)
+
+
+def _evidence_idempotency_key(
+    assessment_id: str,
+    transcript_revision_id: str,
+    pipeline_version: str,
+    feature_schema_version: str,
+) -> str:
+    identity = [
+        assessment_id,
+        transcript_revision_id,
+        pipeline_version,
+        feature_schema_version,
+    ]
+    canonical = json.dumps(identity, ensure_ascii=True, separators=(",", ":"))
+    return "evidence:v1:" + sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _utc_now() -> datetime:
@@ -163,8 +213,21 @@ def _string_values(value: object) -> tuple[str, ...]:
 
 
 class AssessmentRepository:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        clock: Callable[[], datetime] | None = None,
+        worker_organization_id: str | None = None,
+        worker_user_id: str = "capture-worker",
+    ) -> None:
         self.session = session
+        self._clock = clock or _utc_now
+        self._worker_organization_id = worker_organization_id
+        self._worker_user_id = worker_user_id
+
+    def _now(self) -> datetime:
+        return _as_utc(self._clock())
 
     def commit_transaction(self) -> None:
         """Durably commit an external-side-effect boundary.
@@ -175,6 +238,22 @@ class AssessmentRepository:
         """
 
         self.session.commit()
+        if (
+            self._worker_organization_id is not None
+            and self.session.bind is not None
+            and self.session.bind.dialect.name == "postgresql"
+        ):
+            # PostgreSQL `set_config(..., true)` is transaction-local. A
+            # worker commits the claim before extraction or storage, so
+            # establish the tenant context for the next transaction.
+            self.session.execute(
+                text("SELECT set_config('app.current_organization_id', :organization_id, true)"),
+                {"organization_id": self._worker_organization_id},
+            )
+            self.session.execute(
+                text("SELECT set_config('app.current_user_id', :user_id, true)"),
+                {"user_id": self._worker_user_id},
+            )
 
     @staticmethod
     def _worker_scope(organization_id: str) -> AccessScope:
@@ -322,6 +401,16 @@ class AssessmentRepository:
                 "scope_version",
                 "status",
             ])
+            if (
+                command.purpose is ConsentPurpose.CLINICAL_ASSESSMENT
+                and command.status is ConsentStatus.WITHDRAWN
+            ):
+                self._cancel_evidence_runs_for_child(
+                    scope,
+                    child_id,
+                    "consent_revoked",
+                    correlation_id,
+                )
             self.session.flush()
             return self._consent_snapshot(consent)
 
@@ -452,11 +541,25 @@ class AssessmentRepository:
         if assessment is None:
             return None
         self._require_current_capture_consent(scope, assessment.child_id)
+        current_transcript_id = self.session.scalar(
+            select(TranscriptRevisionRecord.transcript_revision_id)
+            .where(
+                TranscriptRevisionRecord.organization_id == scope.organization_id,
+                TranscriptRevisionRecord.assessment_id == assessment_id,
+            )
+            .order_by(desc(TranscriptRevisionRecord.revision))
+            .limit(1)
+        )
+        if current_transcript_id is None:
+            return None
         run = self.session.scalar(
             select(EvidenceRunRecord)
             .where(
                 EvidenceRunRecord.organization_id == scope.organization_id,
                 EvidenceRunRecord.assessment_id == assessment_id,
+                EvidenceRunRecord.transcript_revision_id == current_transcript_id,
+                EvidenceRunRecord.pipeline_version == _EVIDENCE_PIPELINE_VERSION,
+                EvidenceRunRecord.feature_schema_version == _EVIDENCE_FEATURE_SCHEMA_VERSION,
             )
             .order_by(
                 desc(EvidenceRunRecord.created_at),
@@ -618,6 +721,727 @@ class AssessmentRepository:
             self.session.flush()
             return self._evidence_snapshot(run)
 
+    def enqueue_current_evidence_processing(
+        self,
+        scope: AccessScope,
+        assessment_id: str,
+        correlation_id: str,
+    ) -> ProcessingRunSnapshot:
+        """Durably enqueue extraction for the current attested transcript."""
+
+        with self.session.begin_nested():
+            assessment = self._locked_assessment(scope, assessment_id)
+            child = self._locked_child(scope, assessment.child_id)
+            self._require_current_capture_consent(scope, child.child_id)
+            self._require_locked_assignee_eligibility(
+                scope,
+                child.child_id,
+                assessment.assigned_clinician_id,
+            )
+            transcript = self.session.scalar(
+                select(TranscriptRevisionRecord)
+                .where(
+                    TranscriptRevisionRecord.organization_id == scope.organization_id,
+                    TranscriptRevisionRecord.assessment_id == assessment_id,
+                )
+                .order_by(desc(TranscriptRevisionRecord.revision))
+                .with_for_update()
+                .limit(1)
+            )
+            if transcript is None:
+                raise RepositoryError("transcript_not_found")
+            if transcript.review_state != TranscriptReviewState.ATTESTED.value:
+                raise RepositoryError("transcript_not_reviewable")
+
+            selection = self.session.scalar(
+                select(AssessmentProtocolSelectionRecord)
+                .where(
+                    AssessmentProtocolSelectionRecord.organization_id == scope.organization_id,
+                    AssessmentProtocolSelectionRecord.assessment_id == assessment_id,
+                )
+                .with_for_update()
+            )
+            if selection is None:
+                raise RepositoryError("evidence_protocol_mismatch")
+
+            pipeline_version = _EVIDENCE_PIPELINE_VERSION
+            feature_schema_version = _EVIDENCE_FEATURE_SCHEMA_VERSION
+            idempotency_key = _evidence_idempotency_key(
+                assessment_id,
+                transcript.transcript_revision_id,
+                pipeline_version,
+                feature_schema_version,
+            )
+            existing = self.session.scalar(
+                select(ProcessingRunRecord)
+                .where(
+                    ProcessingRunRecord.organization_id == scope.organization_id,
+                    ProcessingRunRecord.idempotency_key == idempotency_key,
+                )
+                .with_for_update()
+            )
+            if existing is not None:
+                return self._processing_run_snapshot(existing)
+
+            self._cancel_evidence_runs_for_assessment(
+                scope,
+                assessment_id,
+                "analysis_contract_superseded",
+                correlation_id,
+                keep_transcript_revision_id=transcript.transcript_revision_id,
+                keep_pipeline_version=pipeline_version,
+                keep_feature_schema_version=feature_schema_version,
+            )
+            now = self._now()
+            run = ProcessingRunRecord(
+                processing_run_id=uuid4().hex,
+                organization_id=scope.organization_id,
+                recording_id=None,
+                assessment_id=assessment_id,
+                transcript_revision_id=transcript.transcript_revision_id,
+                evidence_run_id=None,
+                stage=ProcessingRunStage.EVIDENCE_EXTRACTION.value,
+                state=ProcessingRunState.QUEUED.value,
+                idempotency_key=idempotency_key,
+                attempt_count=0,
+                max_attempts=3,
+                available_at=now,
+                error_code=None,
+                lease_token=None,
+                lease_expires_at=None,
+                cancel_requested_at=None,
+                completed_at=None,
+                pipeline_version=pipeline_version,
+                feature_schema_version=feature_schema_version,
+                version=1,
+                created_at=now,
+                updated_at=now,
+            )
+            self.session.add(run)
+            self.session.flush()
+            self._audit_worker_or_scope_run(
+                scope,
+                run,
+                "processing_run.queued",
+                ["processing_stage", "processing_state"],
+                correlation_id=correlation_id,
+            )
+            self.session.flush()
+            return self._processing_run_snapshot(run)
+
+    def claim_next_evidence_processing_run(self) -> EvidenceWorkItem | None:
+        """Claim one queued or expired evidence job with a tenant-safe lease."""
+
+        now = self._now()
+        candidate_query = select(ProcessingRunRecord.processing_run_id).where(
+            ProcessingRunRecord.stage == ProcessingRunStage.EVIDENCE_EXTRACTION.value,
+            or_(
+                and_(
+                    ProcessingRunRecord.state == ProcessingRunState.QUEUED.value,
+                    ProcessingRunRecord.available_at <= now,
+                ),
+                and_(
+                    ProcessingRunRecord.state == ProcessingRunState.RUNNING.value,
+                    ProcessingRunRecord.lease_expires_at.is_not(None),
+                    ProcessingRunRecord.lease_expires_at <= now,
+                ),
+            ),
+        )
+        if self._worker_organization_id is not None:
+            candidate_query = candidate_query.where(
+                ProcessingRunRecord.organization_id == self._worker_organization_id
+            )
+        candidate_ids = list(
+            self.session.scalars(
+                candidate_query.order_by(
+                    ProcessingRunRecord.available_at,
+                    ProcessingRunRecord.created_at,
+                ).limit(100)
+            )
+        )
+        for candidate_id in candidate_ids:
+            with self.session.begin_nested():
+                # The initial read is deliberately unlocked. Valid candidates
+                # then acquire the shared lock order: assessment -> child ->
+                # transcript -> processing run. This keeps worker polling from
+                # racing with transcript edits, consent withdrawal, or actions.
+                candidate = self.session.scalar(
+                    select(ProcessingRunRecord).where(
+                        ProcessingRunRecord.processing_run_id == candidate_id,
+                        ProcessingRunRecord.stage == ProcessingRunStage.EVIDENCE_EXTRACTION.value,
+                    )
+                )
+                if candidate is None:
+                    continue
+
+                def lock_run() -> ProcessingRunRecord | None:
+                    return self.session.scalar(
+                        select(ProcessingRunRecord)
+                        .where(
+                            ProcessingRunRecord.organization_id == candidate.organization_id,
+                            ProcessingRunRecord.processing_run_id == candidate.processing_run_id,
+                            ProcessingRunRecord.stage == ProcessingRunStage.EVIDENCE_EXTRACTION.value,
+                        )
+                        .with_for_update(skip_locked=True)
+                    )
+
+                if candidate.assessment_id is None or candidate.transcript_revision_id is None:
+                    run = lock_run()
+                    if run is None or not self._processing_run_is_claimable(run, now):
+                        continue
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.FAILED.value,
+                        error_code="invalid_processing_target",
+                        lease_token=None,
+                        lease_expires_at=None,
+                        now=now,
+                    )
+                    self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
+                    continue
+
+                assessment = self.session.scalar(
+                    select(AssessmentRecord)
+                    .where(
+                        AssessmentRecord.organization_id == candidate.organization_id,
+                        AssessmentRecord.assessment_id == candidate.assessment_id,
+                    )
+                    .with_for_update()
+                )
+                if assessment is None:
+                    run = lock_run()
+                    if run is None or not self._processing_run_is_claimable(run, now):
+                        continue
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.FAILED.value,
+                        error_code="assessment_not_found",
+                        lease_token=None,
+                        lease_expires_at=None,
+                        now=now,
+                    )
+                    self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
+                    continue
+
+                child = self.session.scalar(
+                    select(ChildRecord)
+                    .where(
+                        ChildRecord.organization_id == candidate.organization_id,
+                        ChildRecord.child_id == assessment.child_id,
+                    )
+                    .with_for_update()
+                )
+                if child is None:
+                    run = lock_run()
+                    if run is None or not self._processing_run_is_claimable(run, now):
+                        continue
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.FAILED.value,
+                        error_code="child_not_found",
+                        lease_token=None,
+                        lease_expires_at=None,
+                        now=now,
+                    )
+                    self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
+                    continue
+
+                transcript = self.session.scalar(
+                    select(TranscriptRevisionRecord)
+                    .where(
+                        TranscriptRevisionRecord.organization_id == candidate.organization_id,
+                        TranscriptRevisionRecord.transcript_revision_id
+                        == candidate.transcript_revision_id,
+                    )
+                    .with_for_update()
+                )
+                run = lock_run()
+                if run is None or transcript is None:
+                    continue
+                if not self._processing_run_is_claimable(run, now):
+                    continue
+                if run.cancel_requested_at is not None:
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.CANCELLED.value,
+                        error_code=_EVIDENCE_USER_CANCEL_CODE,
+                        lease_token=None,
+                        lease_expires_at=None,
+                        now=now,
+                    )
+                    self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
+                    continue
+                if run.attempt_count >= run.max_attempts:
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.FAILED.value,
+                        error_code="retry_limit_exceeded",
+                        lease_token=None,
+                        lease_expires_at=None,
+                        now=now,
+                    )
+                    self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
+                    continue
+                if not self._has_current_capture_consent(run.organization_id, child.child_id):
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.CANCELLED.value,
+                        error_code="consent_revoked",
+                        lease_token=None,
+                        lease_expires_at=None,
+                        now=now,
+                    )
+                    self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
+                    continue
+                current_transcript_id = self.session.scalar(
+                    select(TranscriptRevisionRecord.transcript_revision_id)
+                    .where(
+                        TranscriptRevisionRecord.organization_id == run.organization_id,
+                        TranscriptRevisionRecord.assessment_id == assessment.assessment_id,
+                    )
+                    .order_by(desc(TranscriptRevisionRecord.revision))
+                    .limit(1)
+                )
+                if current_transcript_id != run.transcript_revision_id:
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.CANCELLED.value,
+                        error_code="transcript_superseded",
+                        lease_token=None,
+                        lease_expires_at=None,
+                        now=now,
+                    )
+                    self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
+                    continue
+                if transcript.review_state != TranscriptReviewState.ATTESTED.value:
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.CANCELLED.value,
+                        error_code="transcript_not_attested",
+                        lease_token=None,
+                        lease_expires_at=None,
+                        now=now,
+                    )
+                    self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
+                    continue
+                selection = self.session.scalar(
+                    select(AssessmentProtocolSelectionRecord)
+                    .where(
+                        AssessmentProtocolSelectionRecord.organization_id == run.organization_id,
+                        AssessmentProtocolSelectionRecord.assessment_id == assessment.assessment_id,
+                    )
+                    .with_for_update()
+                )
+                if (
+                    selection is None
+                    or run.pipeline_version != _EVIDENCE_PIPELINE_VERSION
+                    or run.feature_schema_version != _EVIDENCE_FEATURE_SCHEMA_VERSION
+                ):
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.CANCELLED.value,
+                        error_code="analysis_contract_superseded",
+                        lease_token=None,
+                        lease_expires_at=None,
+                        now=now,
+                    )
+                    self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
+                    continue
+                token = uuid4().hex
+                self._mutate_processing_run(
+                    run,
+                    state=ProcessingRunState.RUNNING.value,
+                    error_code=None,
+                    attempt_count=run.attempt_count + 1,
+                    lease_token=token,
+                    lease_expires_at=now + _EVIDENCE_LEASE_DURATION,
+                    cancel_requested_at=None,
+                    now=now,
+                )
+                self._audit_worker_run(run, "processing_run.claimed", ["processing_state"])
+                self.session.flush()
+                return EvidenceWorkItem(
+                    run_id=run.processing_run_id,
+                    organization_id=run.organization_id,
+                    assessment_id=run.assessment_id,
+                    transcript_revision_id=run.transcript_revision_id,
+                    protocol_version_key=selection.protocol_version_key,
+                    pipeline_version=run.pipeline_version,
+                    feature_schema_version=run.feature_schema_version,
+                    content_sha256=transcript.content_sha256,
+                    lease_token=token,
+                    lease_expires_at=now + _EVIDENCE_LEASE_DURATION,
+                    attempt_count=run.attempt_count,
+                    max_attempts=run.max_attempts,
+                    transcript=self._transcript_snapshot(transcript),
+                )
+        return None
+
+    def complete_evidence_processing_run(
+        self,
+        item: EvidenceWorkItem,
+        adapted: AdaptedEvidence,
+    ) -> EvidenceRunSnapshot | None:
+        """Persist evidence only when the worker still owns the lease."""
+
+        with self.session.begin_nested():
+            # Match claim/cancel/transcript mutation ordering before touching
+            # the processing row: assessment -> child -> transcript -> run.
+            # This prevents a slow extractor completion from deadlocking a
+            # clinician cancellation or a newer transcript revision.
+            assessment = self.session.scalar(
+                select(AssessmentRecord)
+                .where(
+                    AssessmentRecord.organization_id == item.organization_id,
+                    AssessmentRecord.assessment_id == item.assessment_id,
+                )
+                .with_for_update()
+            )
+            if assessment is None:
+                return None
+            child = self.session.scalar(
+                select(ChildRecord)
+                .where(
+                    ChildRecord.organization_id == item.organization_id,
+                    ChildRecord.child_id == assessment.child_id,
+                )
+                .with_for_update()
+            )
+            if child is None:
+                run = self.session.scalar(
+                    select(ProcessingRunRecord)
+                    .where(
+                        ProcessingRunRecord.organization_id == item.organization_id,
+                        ProcessingRunRecord.processing_run_id == item.run_id,
+                    )
+                    .with_for_update()
+                )
+                if run is not None and run.state == ProcessingRunState.RUNNING.value:
+                    self._cancel_worker_evidence_run(run, "consent_revoked")
+                return None
+            transcript = self.session.scalar(
+                select(TranscriptRevisionRecord)
+                .where(
+                    TranscriptRevisionRecord.organization_id == item.organization_id,
+                    TranscriptRevisionRecord.transcript_revision_id == item.transcript_revision_id,
+                )
+                .with_for_update()
+            )
+            run = self.session.scalar(
+                select(ProcessingRunRecord)
+                .where(
+                    ProcessingRunRecord.organization_id == item.organization_id,
+                    ProcessingRunRecord.processing_run_id == item.run_id,
+                    ProcessingRunRecord.stage == ProcessingRunStage.EVIDENCE_EXTRACTION.value,
+                )
+                .with_for_update()
+            )
+            if (
+                run is None
+                or run.state != ProcessingRunState.RUNNING.value
+                or run.lease_token != item.lease_token
+            ):
+                return None
+            if run.assessment_id != item.assessment_id or run.transcript_revision_id != item.transcript_revision_id:
+                return None
+            now = self._now()
+            if run.lease_expires_at is None or _is_expired(run.lease_expires_at, now):
+                return None
+            if run.cancel_requested_at is not None:
+                self._mutate_processing_run(
+                    run,
+                    state=ProcessingRunState.CANCELLED.value,
+                    error_code=_EVIDENCE_USER_CANCEL_CODE,
+                    lease_token=None,
+                    lease_expires_at=None,
+                    now=now,
+                )
+                self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
+                return None
+            if transcript is None:
+                self._cancel_worker_evidence_run(run, "transcript_superseded")
+                return None
+            if not self._has_current_capture_consent(run.organization_id, child.child_id):
+                self._cancel_worker_evidence_run(run, "consent_revoked")
+                return None
+            current_transcript_id = self.session.scalar(
+                select(TranscriptRevisionRecord.transcript_revision_id)
+                .where(
+                    TranscriptRevisionRecord.organization_id == run.organization_id,
+                    TranscriptRevisionRecord.assessment_id == assessment.assessment_id,
+                )
+                .order_by(desc(TranscriptRevisionRecord.revision))
+                .limit(1)
+            )
+            if (
+                current_transcript_id != run.transcript_revision_id
+                or transcript.review_state != TranscriptReviewState.ATTESTED.value
+                or transcript.content_sha256 != item.content_sha256
+                or sha256(transcript.content.encode("utf-8")).hexdigest() != item.content_sha256
+            ):
+                self._cancel_worker_evidence_run(run, "transcript_superseded")
+                return None
+            selection = self.session.scalar(
+                select(AssessmentProtocolSelectionRecord)
+                .where(
+                    AssessmentProtocolSelectionRecord.organization_id == run.organization_id,
+                    AssessmentProtocolSelectionRecord.assessment_id == assessment.assessment_id,
+                )
+                .with_for_update()
+            )
+            if (
+                selection is None
+                or selection.protocol_version_key != item.protocol_version_key
+                or run.pipeline_version != _EVIDENCE_PIPELINE_VERSION
+                or run.feature_schema_version != _EVIDENCE_FEATURE_SCHEMA_VERSION
+            ):
+                self._cancel_worker_evidence_run(run, "analysis_contract_superseded")
+                return None
+            provenance = adapted.provenance
+            if (
+                provenance is None
+                or provenance.input_sha256 != item.content_sha256
+                or provenance.protocol_version_key != selection.protocol_version_key
+                or provenance.pipeline_version != run.pipeline_version
+                or provenance.feature_schema_version != run.feature_schema_version
+            ):
+                raise RepositoryError("evidence_provenance_mismatch")
+
+            evidence = self._persist_adapted_evidence(
+                self._worker_scope(run.organization_id),
+                assessment.assessment_id,
+                transcript,
+                selection,
+                adapted,
+                self._worker_correlation(run.processing_run_id),
+            )
+            self._mutate_processing_run(
+                run,
+                state=ProcessingRunState.SUCCEEDED.value,
+                error_code=None,
+                evidence_run_id=evidence.id,
+                lease_token=None,
+                lease_expires_at=None,
+                completed_at=self._now(),
+                now=self._now(),
+            )
+            self._audit_worker_run(run, "processing_run.succeeded", ["processing_state"])
+            self.session.flush()
+            return evidence
+
+    def fail_evidence_processing_run(
+        self,
+        item: EvidenceWorkItem,
+        error_code: str,
+        *,
+        retryable: bool,
+    ) -> ProcessingRunSnapshot:
+        with self.session.begin_nested():
+            run = self._worker_run(item, check_lease_expiry=False)
+            if run is None:
+                raise RepositoryError("processing_run_not_found")
+            if (
+                run.stage != ProcessingRunStage.EVIDENCE_EXTRACTION.value
+                or run.state != ProcessingRunState.RUNNING.value
+                or run.lease_token != item.lease_token
+            ):
+                return self._processing_run_snapshot(run)
+            now = self._now()
+            if run.lease_expires_at is None or _is_expired(run.lease_expires_at, now):
+                # A stale worker must not clear or reschedule a lease that may
+                # already have been reclaimed by another worker.
+                return self._processing_run_snapshot(run)
+            if run.cancel_requested_at is not None:
+                # A user cancellation may race with extractor failure. Once
+                # the request is persisted, a late worker failure must not
+                # resurrect the job as queued or make it appear cancellable.
+                target_state = ProcessingRunState.CANCELLED.value
+                persisted_error_code = _EVIDENCE_USER_CANCEL_CODE
+                available_at = run.available_at
+            elif error_code in _EVIDENCE_SYSTEM_CANCEL_CODES or error_code == _EVIDENCE_USER_CANCEL_CODE:
+                target_state = ProcessingRunState.CANCELLED.value
+                persisted_error_code = error_code
+                available_at = run.available_at
+            elif retryable and run.attempt_count < run.max_attempts:
+                target_state = ProcessingRunState.QUEUED.value
+                persisted_error_code = error_code
+                backoff_index = min(run.attempt_count - 1, len(_EVIDENCE_RETRY_BACKOFF) - 1)
+                available_at = now + _EVIDENCE_RETRY_BACKOFF[backoff_index]
+            else:
+                target_state = ProcessingRunState.FAILED.value
+                persisted_error_code = error_code
+                available_at = run.available_at
+            self._mutate_processing_run(
+                run,
+                state=target_state,
+                error_code=persisted_error_code,
+                available_at=available_at,
+                lease_token=None,
+                lease_expires_at=None,
+                now=now,
+            )
+            action = (
+                "processing_run.retry_scheduled"
+                if target_state == ProcessingRunState.QUEUED.value
+                else "processing_run.cancelled"
+                if target_state == ProcessingRunState.CANCELLED.value
+                else "processing_run.failed"
+            )
+            self._audit_worker_run(run, action, ["processing_state"])
+            self.session.flush()
+            return self._processing_run_snapshot(run)
+
+    def retry_evidence_processing_run(
+        self,
+        scope: AccessScope,
+        run_id: str,
+        expected_version: int,
+        correlation_id: str,
+    ) -> ProcessingRunSnapshot:
+        with self.session.begin_nested():
+            run_ref = self.session.scalar(
+                select(ProcessingRunRecord).where(
+                    ProcessingRunRecord.organization_id == scope.organization_id,
+                    ProcessingRunRecord.processing_run_id == run_id,
+                )
+            )
+            if run_ref is None or run_ref.stage != ProcessingRunStage.EVIDENCE_EXTRACTION.value:
+                raise RepositoryError("processing_run_not_found")
+            assessment = self._locked_assessment(scope, run_ref.assessment_id or "")
+            self._locked_child(scope, assessment.child_id)
+            self._require_current_capture_consent(scope, assessment.child_id)
+            run = self.session.scalar(
+                select(ProcessingRunRecord)
+                .where(
+                    ProcessingRunRecord.organization_id == scope.organization_id,
+                    ProcessingRunRecord.processing_run_id == run_id,
+                )
+                .with_for_update()
+            )
+            if run is None:
+                raise RepositoryError("processing_run_not_found")
+            if run.version != expected_version:
+                raise RepositoryError("stale_processing_run_version")
+            if run.state not in {
+                ProcessingRunState.FAILED.value,
+                ProcessingRunState.CANCELLED.value,
+            }:
+                raise RepositoryError("processing_run_not_retryable")
+            if run.state == ProcessingRunState.CANCELLED.value and run.error_code != _EVIDENCE_USER_CANCEL_CODE:
+                raise RepositoryError("processing_run_not_retryable")
+            transcript = self.session.scalar(
+                select(TranscriptRevisionRecord)
+                .where(
+                    TranscriptRevisionRecord.organization_id == scope.organization_id,
+                    TranscriptRevisionRecord.transcript_revision_id == run.transcript_revision_id,
+                )
+                .with_for_update()
+            )
+            current_transcript_id = self.session.scalar(
+                select(TranscriptRevisionRecord.transcript_revision_id)
+                .where(
+                    TranscriptRevisionRecord.organization_id == scope.organization_id,
+                    TranscriptRevisionRecord.assessment_id == assessment.assessment_id,
+                )
+                .order_by(desc(TranscriptRevisionRecord.revision))
+                .limit(1)
+            )
+            if (
+                transcript is None
+                or current_transcript_id != run.transcript_revision_id
+                or transcript.review_state != TranscriptReviewState.ATTESTED.value
+                or run.pipeline_version != _EVIDENCE_PIPELINE_VERSION
+                or run.feature_schema_version != _EVIDENCE_FEATURE_SCHEMA_VERSION
+            ):
+                raise RepositoryError("processing_run_not_retryable")
+            now = self._now()
+            self._mutate_processing_run(
+                run,
+                state=ProcessingRunState.QUEUED.value,
+                error_code=None,
+                attempt_count=0,
+                available_at=now,
+                lease_token=None,
+                lease_expires_at=None,
+                cancel_requested_at=None,
+                completed_at=None,
+                evidence_run_id=None,
+                now=now,
+            )
+            self._audit_worker_or_scope_run(
+                scope,
+                run,
+                "processing_run.retry_requested",
+                ["processing_state"],
+                correlation_id=correlation_id,
+            )
+            self.session.flush()
+            return self._processing_run_snapshot(run)
+
+    def request_evidence_processing_cancellation(
+        self,
+        scope: AccessScope,
+        run_id: str,
+        expected_version: int,
+        correlation_id: str,
+    ) -> ProcessingRunSnapshot:
+        with self.session.begin_nested():
+            run_ref = self.session.scalar(
+                select(ProcessingRunRecord).where(
+                    ProcessingRunRecord.organization_id == scope.organization_id,
+                    ProcessingRunRecord.processing_run_id == run_id,
+                )
+            )
+            if run_ref is None or run_ref.stage != ProcessingRunStage.EVIDENCE_EXTRACTION.value:
+                raise RepositoryError("processing_run_not_found")
+            assessment = self._locked_assessment(scope, run_ref.assessment_id or "")
+            self._locked_child(scope, assessment.child_id)
+            self._require_current_capture_consent(scope, assessment.child_id)
+            run = self.session.scalar(
+                select(ProcessingRunRecord)
+                .where(
+                    ProcessingRunRecord.organization_id == scope.organization_id,
+                    ProcessingRunRecord.processing_run_id == run_id,
+                )
+                .with_for_update()
+            )
+            if run is None or run.stage != ProcessingRunStage.EVIDENCE_EXTRACTION.value:
+                raise RepositoryError("processing_run_not_found")
+            if run.version != expected_version:
+                raise RepositoryError("stale_processing_run_version")
+            if run.state not in {
+                ProcessingRunState.QUEUED.value,
+                ProcessingRunState.RUNNING.value,
+            }:
+                raise RepositoryError("processing_run_not_cancellable")
+            now = self._now()
+            if run.state == ProcessingRunState.QUEUED.value:
+                self._mutate_processing_run(
+                    run,
+                    state=ProcessingRunState.CANCELLED.value,
+                    error_code=_EVIDENCE_USER_CANCEL_CODE,
+                    cancel_requested_at=now,
+                    lease_token=None,
+                    lease_expires_at=None,
+                    now=now,
+                )
+            else:
+                self._mutate_processing_run(
+                    run,
+                    error_code=_EVIDENCE_USER_CANCEL_CODE,
+                    cancel_requested_at=now,
+                    now=now,
+                )
+            self._audit_worker_or_scope_run(
+                scope,
+                run,
+                "processing_run.cancel_requested",
+                ["processing_state"],
+                correlation_id=correlation_id,
+            )
+            self.session.flush()
+            return self._processing_run_snapshot(run)
+
     def create_transcript_revision(
         self,
         scope: AccessScope,
@@ -655,6 +1479,12 @@ class AssessmentRepository:
             ):
                 raise RepositoryError("stale_transcript_version")
 
+            self._cancel_evidence_runs_for_assessment(
+                scope,
+                assessment.assessment_id,
+                "transcript_superseded",
+                correlation_id,
+            )
             self._mark_evidence_stale_for_assessment(
                 scope,
                 assessment.assessment_id,
@@ -1133,11 +1963,54 @@ class AssessmentRepository:
         )
         if run is None:
             return None
+        if run.stage == ProcessingRunStage.EVIDENCE_EXTRACTION.value:
+            if run.assessment_id is None:
+                return None
+            assessment = self._assessment_record(scope, run.assessment_id)
+            if assessment is None:
+                return None
+            self._require_current_capture_consent(scope, assessment.child_id)
+            return self._processing_run_snapshot(run)
         context = self._recording_with_assessment(scope, run.recording_id)
         if context is None or context[0].recording_id != run.recording_id:
             return None
         self._require_current_capture_consent(scope, context[1].child_id)
         return self._processing_run_snapshot(run)
+
+    def get_current_evidence_processing_run(
+        self, scope: AccessScope, assessment_id: str
+    ) -> ProcessingRunSnapshot | None:
+        """Return the latest job for the assessment's current transcript revision."""
+
+        assessment = self._assessment_record(scope, assessment_id)
+        if assessment is None:
+            return None
+        self._require_current_capture_consent(scope, assessment.child_id)
+        current_transcript_id = self.session.scalar(
+            select(TranscriptRevisionRecord.transcript_revision_id)
+            .where(
+                TranscriptRevisionRecord.organization_id == scope.organization_id,
+                TranscriptRevisionRecord.assessment_id == assessment_id,
+            )
+            .order_by(desc(TranscriptRevisionRecord.revision))
+            .limit(1)
+        )
+        if current_transcript_id is None:
+            return None
+        run = self.session.scalar(
+            select(ProcessingRunRecord)
+            .where(
+                ProcessingRunRecord.organization_id == scope.organization_id,
+                ProcessingRunRecord.assessment_id == assessment_id,
+                ProcessingRunRecord.transcript_revision_id == current_transcript_id,
+                ProcessingRunRecord.stage == ProcessingRunStage.EVIDENCE_EXTRACTION.value,
+                ProcessingRunRecord.pipeline_version == _EVIDENCE_PIPELINE_VERSION,
+                ProcessingRunRecord.feature_schema_version == _EVIDENCE_FEATURE_SCHEMA_VERSION,
+            )
+            .order_by(desc(ProcessingRunRecord.created_at), desc(ProcessingRunRecord.processing_run_id))
+            .limit(1)
+        )
+        return self._processing_run_snapshot(run) if run is not None else None
 
     def mark_recording_deleted_if_consented(
         self,
@@ -1188,9 +2061,13 @@ class AssessmentRepository:
                 .with_for_update()
             )
             if upload_run is not None:
-                upload_run.state = ProcessingRunState.CANCELLED.value
-                upload_run.error_code = "upload_intent_expired"
-                upload_run.updated_at = _utc_now()
+                self._mutate_processing_run(
+                    upload_run,
+                    state=ProcessingRunState.CANCELLED.value,
+                    error_code="upload_intent_expired",
+                    lease_token=None,
+                    lease_expires_at=None,
+                )
                 self._audit_worker_run(upload_run, "processing_run.cancelled", ["processing_state"])
             self._queue_cleanup_run(self._worker_scope(scope.organization_id), recording)
             self._append_audit(
@@ -1207,8 +2084,8 @@ class AssessmentRepository:
 
     def complete_cleanup_for_recording(self, scope: AccessScope, recording_id: str) -> None:
         with self.session.begin_nested():
-            self.session.execute(
-                update(ProcessingRunRecord)
+            cleanup_runs = self.session.scalars(
+                select(ProcessingRunRecord)
                 .where(
                     ProcessingRunRecord.organization_id == scope.organization_id,
                     ProcessingRunRecord.recording_id == recording_id,
@@ -1217,12 +2094,17 @@ class AssessmentRepository:
                         (ProcessingRunState.QUEUED.value, ProcessingRunState.RUNNING.value)
                     ),
                 )
-                .values(
+                .with_for_update()
+            ).all()
+            for cleanup_run in cleanup_runs:
+                self._mutate_processing_run(
+                    cleanup_run,
                     state=ProcessingRunState.SUCCEEDED.value,
                     error_code=None,
-                    updated_at=_utc_now(),
+                    lease_token=None,
+                    lease_expires_at=None,
                 )
-            )
+                self._audit_worker_run(cleanup_run, "processing_run.succeeded", ["processing_state"])
             self.session.flush()
 
     def _tombstone_recording_if_consented(
@@ -1275,8 +2157,8 @@ class AssessmentRepository:
                 if refreshed is not None and refreshed.upload_state == RecordingUploadState.FAILED.value:
                     return self._recording_snapshot(refreshed)
                 raise RepositoryError("upload_verification_failed")
-            self.session.execute(
-                update(ProcessingRunRecord)
+            active_runs = self.session.scalars(
+                select(ProcessingRunRecord)
                 .where(
                     ProcessingRunRecord.organization_id == scope.organization_id,
                     ProcessingRunRecord.recording_id == recording_id,
@@ -1284,11 +2166,17 @@ class AssessmentRepository:
                         (ProcessingRunState.QUEUED.value, ProcessingRunState.RUNNING.value)
                     ),
                 )
-                .values(
+                .with_for_update()
+            ).all()
+            for active_run in active_runs:
+                self._mutate_processing_run(
+                    active_run,
                     state=ProcessingRunState.CANCELLED.value,
-                    updated_at=_utc_now(),
+                    error_code="recording_deleted",
+                    lease_token=None,
+                    lease_expires_at=None,
                 )
-            )
+                self._audit_worker_run(active_run, "processing_run.cancelled", ["processing_state"])
             quality = self.session.scalar(
                 select(RecordingQualityResultRecord)
                 .where(
@@ -1585,9 +2473,13 @@ class AssessmentRepository:
                 ProcessingRunState.QUEUED.value,
                 ProcessingRunState.RUNNING.value,
             }:
-                upload_run.state = ProcessingRunState.SUCCEEDED.value
-                upload_run.error_code = None
-                upload_run.updated_at = _utc_now()
+                self._mutate_processing_run(
+                    upload_run,
+                    state=ProcessingRunState.SUCCEEDED.value,
+                    error_code=None,
+                    lease_token=None,
+                    lease_expires_at=None,
+                )
             elif upload_run.state != ProcessingRunState.SUCCEEDED.value:
                 raise RepositoryError("upload_verification_failed")
             quality_run = self._queue_quality_run(scope, updated)
@@ -1724,9 +2616,14 @@ class AssessmentRepository:
         existing = self._quality_run_for_recording(scope, recording.recording_id)
         if existing is not None:
             if existing.state == ProcessingRunState.FAILED.value:
-                existing.state = ProcessingRunState.QUEUED.value
-                existing.error_code = None
-                existing.updated_at = _utc_now()
+                self._mutate_processing_run(
+                    existing,
+                    state=ProcessingRunState.QUEUED.value,
+                    error_code=None,
+                    available_at=_utc_now(),
+                    lease_token=None,
+                    lease_expires_at=None,
+                )
             return existing
         now = _utc_now()
         run = ProcessingRunRecord(
@@ -1762,10 +2659,14 @@ class AssessmentRepository:
                 ProcessingRunState.FAILED.value,
                 ProcessingRunState.CANCELLED.value,
             }:
-                existing.state = ProcessingRunState.QUEUED.value
-                existing.error_code = None
-                existing.available_at = _utc_now()
-                existing.updated_at = _utc_now()
+                self._mutate_processing_run(
+                    existing,
+                    state=ProcessingRunState.QUEUED.value,
+                    error_code=None,
+                    available_at=_utc_now(),
+                    lease_token=None,
+                    lease_expires_at=None,
+                )
             return existing
         now = _utc_now()
         run = ProcessingRunRecord(
@@ -1851,6 +2752,271 @@ class AssessmentRepository:
                 correlation_id,
                 ["state", "version"],
                 target_version=run.version,
+            )
+
+    def _persist_adapted_evidence(
+        self,
+        scope: AccessScope,
+        assessment_id: str,
+        transcript: TranscriptRevisionRecord,
+        selection: AssessmentProtocolSelectionRecord,
+        adapted: AdaptedEvidence,
+        correlation_id: str,
+    ) -> EvidenceRunSnapshot:
+        provenance = adapted.provenance
+        if provenance is None:
+            raise RepositoryError("evidence_provenance_required")
+        if transcript.assessment_id != assessment_id:
+            raise RepositoryError("transcript_not_found")
+        if selection.assessment_id != assessment_id:
+            raise RepositoryError("evidence_protocol_mismatch")
+        if selection.protocol_version_key != provenance.protocol_version_key:
+            raise RepositoryError("evidence_protocol_mismatch")
+        if transcript.content_sha256 != provenance.input_sha256:
+            raise RepositoryError("stale_evidence_input")
+        if any(feature.provenance != provenance for feature in adapted.features):
+            raise RepositoryError("evidence_provenance_mismatch")
+        if adapted.state is EvidenceState.COMPLETED and not adapted.features:
+            raise RepositoryError("evidence_no_measurements")
+
+        existing = self.session.scalar(
+            select(EvidenceRunRecord)
+            .where(
+                EvidenceRunRecord.organization_id == scope.organization_id,
+                EvidenceRunRecord.assessment_id == assessment_id,
+                EvidenceRunRecord.transcript_revision_id == transcript.transcript_revision_id,
+                EvidenceRunRecord.pipeline_version == provenance.pipeline_version,
+                EvidenceRunRecord.feature_schema_version == provenance.feature_schema_version,
+            )
+            .with_for_update()
+        )
+        if existing is not None:
+            return self._evidence_snapshot(existing)
+
+        generated_at = _as_utc(provenance.analyzed_at)
+        profile = build_developmental_profile(
+            assessment_id=assessment_id,
+            features=adapted.features,
+            generated_at=generated_at,
+        )
+        profile = replace(
+            profile,
+            state=adapted.state,
+            limitations=_merge_texts(profile.limitations, adapted.limitations),
+        )
+        now = self._now()
+        run = EvidenceRunRecord(
+            evidence_run_id=uuid4().hex,
+            organization_id=scope.organization_id,
+            assessment_id=assessment_id,
+            transcript_revision_id=transcript.transcript_revision_id,
+            state=adapted.state.value,
+            input_ref=provenance.input_ref,
+            input_sha256=provenance.input_sha256,
+            protocol_version_key=provenance.protocol_version_key,
+            extractor=provenance.extractor,
+            pipeline_version=provenance.pipeline_version,
+            feature_schema_version=provenance.feature_schema_version,
+            limitations_json=list(profile.limitations),
+            generated_at=generated_at,
+            version=1,
+            created_at=now,
+            updated_at=now,
+        )
+        self.session.add(run)
+        self.session.flush()
+        self.session.add_all(
+            EvidenceFeatureRecord(
+                evidence_feature_id=uuid4().hex,
+                organization_id=scope.organization_id,
+                evidence_run_id=run.evidence_run_id,
+                feature_key=feature.key,
+                value_json=feature.value,
+                unit=feature.unit,
+                source=feature.source.value,
+                state=feature.state.value,
+                limitation=feature.limitation,
+                version=1,
+                created_at=now,
+                updated_at=now,
+            )
+            for feature in profile.features
+        )
+        self.session.add_all(
+            EvidenceDomainProfileRecord(
+                domain_profile_id=uuid4().hex,
+                organization_id=scope.organization_id,
+                evidence_run_id=run.evidence_run_id,
+                domain=domain.domain.value,
+                status=domain.status.value,
+                summary=domain.summary,
+                feature_keys_json=list(domain.feature_keys),
+                supporting_features_json=list(domain.supporting_features),
+                conflicting_features_json=list(domain.conflicting_features),
+                limitations_json=list(domain.limitations),
+                version=1,
+                created_at=now,
+                updated_at=now,
+            )
+            for domain in profile.domains
+        )
+        self._append_audit(
+            scope,
+            "evidence.run_created",
+            "evidence_run",
+            run.evidence_run_id,
+            correlation_id,
+            ["state", "version"],
+            target_version=run.version,
+        )
+        self.session.flush()
+        return self._evidence_snapshot(run)
+
+    def _audit_worker_or_scope_run(
+        self,
+        scope: AccessScope,
+        run: ProcessingRunRecord,
+        action: str,
+        changed_fields: list[str],
+        *,
+        correlation_id: str,
+    ) -> None:
+        self._append_audit(
+            scope,
+            action,
+            "processing_run",
+            run.processing_run_id,
+            correlation_id,
+            changed_fields,
+            target_version=run.version,
+        )
+
+    def _mutate_processing_run(
+        self,
+        run: ProcessingRunRecord,
+        *,
+        now: datetime | None = None,
+        **values: object,
+    ) -> None:
+        changed_at = _as_utc(now or self._now())
+        for name, value in values.items():
+            setattr(run, name, value)
+        run.version = (run.version or 1) + 1
+        run.updated_at = changed_at
+
+    def _processing_run_is_claimable(
+        self,
+        run: ProcessingRunRecord,
+        now: datetime,
+    ) -> bool:
+        if run.state == ProcessingRunState.QUEUED.value:
+            return _as_utc(run.available_at) <= now
+        return (
+            run.state == ProcessingRunState.RUNNING.value
+            and run.lease_expires_at is not None
+            and _as_utc(run.lease_expires_at) <= now
+        )
+
+    def _cancel_worker_evidence_run(self, run: ProcessingRunRecord, error_code: str) -> None:
+        now = self._now()
+        self._mutate_processing_run(
+            run,
+            state=ProcessingRunState.CANCELLED.value,
+            error_code=error_code,
+            lease_token=None,
+            lease_expires_at=None,
+            now=now,
+        )
+        self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
+
+    def _cancel_evidence_runs_for_assessment(
+        self,
+        scope: AccessScope,
+        assessment_id: str,
+        error_code: str,
+        correlation_id: str,
+        *,
+        keep_transcript_revision_id: str | None = None,
+        keep_pipeline_version: str | None = None,
+        keep_feature_schema_version: str | None = None,
+    ) -> None:
+        runs = self.session.scalars(
+            select(ProcessingRunRecord)
+            .where(
+                ProcessingRunRecord.organization_id == scope.organization_id,
+                ProcessingRunRecord.assessment_id == assessment_id,
+                ProcessingRunRecord.stage == ProcessingRunStage.EVIDENCE_EXTRACTION.value,
+                ProcessingRunRecord.state.in_(
+                    (ProcessingRunState.QUEUED.value, ProcessingRunState.RUNNING.value)
+                ),
+            )
+            .with_for_update()
+        ).all()
+        for run in runs:
+            if (
+                keep_transcript_revision_id is not None
+                and run.transcript_revision_id == keep_transcript_revision_id
+                and run.pipeline_version == keep_pipeline_version
+                and run.feature_schema_version == keep_feature_schema_version
+            ):
+                continue
+            self._mutate_processing_run(
+                run,
+                state=ProcessingRunState.CANCELLED.value,
+                error_code=error_code,
+                lease_token=None,
+                lease_expires_at=None,
+                now=self._now(),
+            )
+            self._audit_worker_or_scope_run(
+                scope,
+                run,
+                "processing_run.cancelled",
+                ["processing_state"],
+                correlation_id=correlation_id,
+            )
+
+    def _cancel_evidence_runs_for_child(
+        self,
+        scope: AccessScope,
+        child_id: str,
+        error_code: str,
+        correlation_id: str,
+    ) -> None:
+        runs = self.session.scalars(
+            select(ProcessingRunRecord)
+            .join(
+                AssessmentRecord,
+                and_(
+                    AssessmentRecord.organization_id == ProcessingRunRecord.organization_id,
+                    AssessmentRecord.assessment_id == ProcessingRunRecord.assessment_id,
+                ),
+            )
+            .where(
+                ProcessingRunRecord.organization_id == scope.organization_id,
+                AssessmentRecord.child_id == child_id,
+                ProcessingRunRecord.stage == ProcessingRunStage.EVIDENCE_EXTRACTION.value,
+                ProcessingRunRecord.state.in_(
+                    (ProcessingRunState.QUEUED.value, ProcessingRunState.RUNNING.value)
+                ),
+            )
+            .with_for_update()
+        ).all()
+        for run in runs:
+            self._mutate_processing_run(
+                run,
+                state=ProcessingRunState.CANCELLED.value,
+                error_code=error_code,
+                lease_token=None,
+                lease_expires_at=None,
+                now=self._now(),
+            )
+            self._audit_worker_or_scope_run(
+                scope,
+                run,
+                "processing_run.cancelled",
+                ["processing_state"],
+                correlation_id=correlation_id,
             )
 
     def _require_current_capture_consent(self, scope: AccessScope, child_id: str) -> None:
@@ -1962,7 +3128,8 @@ class AssessmentRepository:
         )
         for _ in range(100):
             with self.session.begin_nested():
-                run = self.session.scalar(
+                now = _utc_now()
+                capture_query = (
                     select(ProcessingRunRecord)
                     .join(
                         RecordingRecord,
@@ -1979,32 +3146,52 @@ class AssessmentRepository:
                         ),
                     )
                     .where(
-                        ProcessingRunRecord.state == ProcessingRunState.QUEUED.value,
-                        ProcessingRunRecord.available_at <= _utc_now(),
+                        or_(
+                            and_(
+                                ProcessingRunRecord.state == ProcessingRunState.QUEUED.value,
+                                ProcessingRunRecord.available_at <= now,
+                            ),
+                            and_(
+                                ProcessingRunRecord.state == ProcessingRunState.RUNNING.value,
+                                ProcessingRunRecord.lease_expires_at.is_not(None),
+                                ProcessingRunRecord.lease_expires_at <= now,
+                            ),
+                        ),
                         or_(
                             ProcessingRunRecord.stage != ProcessingRunStage.UPLOAD_VERIFICATION.value,
                             and_(
                                 ProcessingRunRecord.stage == ProcessingRunStage.UPLOAD_VERIFICATION.value,
                                 or_(
                                     RecordingRecord.upload_state == RecordingUploadState.UPLOADED.value,
-                                    RecordingRecord.expires_at <= _utc_now(),
+                                    RecordingRecord.expires_at <= now,
                                 ),
                             ),
                             latest_consent_status.is_(None),
                             latest_consent_status != ConsentStatus.ACTIVE.value,
                         ),
                     )
-                    .order_by(ProcessingRunRecord.available_at, ProcessingRunRecord.created_at)
-                    .with_for_update(skip_locked=True)
-                    .limit(1)
+                )
+                if self._worker_organization_id is not None:
+                    capture_query = capture_query.where(
+                        ProcessingRunRecord.organization_id == self._worker_organization_id
+                    )
+                run = self.session.scalar(
+                    capture_query.order_by(
+                        ProcessingRunRecord.available_at,
+                        ProcessingRunRecord.created_at,
+                    ).with_for_update(skip_locked=True).limit(1)
                 )
                 if run is None:
                     return None
                 context = self._worker_recording_context(run.organization_id, run.recording_id)
                 if context is None:
-                    run.state = ProcessingRunState.FAILED.value
-                    run.error_code = "recording_not_found"
-                    run.updated_at = _utc_now()
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.FAILED.value,
+                        error_code="recording_not_found",
+                        lease_token=None,
+                        lease_expires_at=None,
+                    )
                     self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
                     continue
                 recording, assessment = context
@@ -2021,9 +3208,13 @@ class AssessmentRepository:
                     recording.upload_state = RecordingUploadState.EXPIRED.value
                     recording.version += 1
                     recording.updated_at = _utc_now()
-                    run.state = ProcessingRunState.CANCELLED.value
-                    run.error_code = "upload_intent_expired"
-                    run.updated_at = _utc_now()
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.CANCELLED.value,
+                        error_code="upload_intent_expired",
+                        lease_token=None,
+                        lease_expires_at=None,
+                    )
                     self._queue_cleanup_run(self._worker_scope(run.organization_id), recording)
                     self._append_audit(
                         self._worker_scope(run.organization_id),
@@ -2040,15 +3231,23 @@ class AssessmentRepository:
                 if stage is not ProcessingRunStage.CLEANUP and not self._has_current_capture_consent(
                     run.organization_id, assessment.child_id
                 ):
-                    run.state = ProcessingRunState.CANCELLED.value
-                    run.error_code = "consent_revoked"
-                    run.updated_at = _utc_now()
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.CANCELLED.value,
+                        error_code="consent_revoked",
+                        lease_token=None,
+                        lease_expires_at=None,
+                    )
                     self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
                     continue
-                if run.attempt_count >= 3:
-                    run.state = ProcessingRunState.FAILED.value
-                    run.error_code = "retry_limit_exceeded"
-                    run.updated_at = _utc_now()
+                if run.attempt_count >= run.max_attempts:
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.FAILED.value,
+                        error_code="retry_limit_exceeded",
+                        lease_token=None,
+                        lease_expires_at=None,
+                    )
                     self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
                     continue
                 activity = None
@@ -2061,20 +3260,35 @@ class AssessmentRepository:
                         )
                     )
                     if activity is None:
-                        run.state = ProcessingRunState.FAILED.value
-                        run.error_code = "recording_activity_invalid"
-                        run.updated_at = _utc_now()
+                        self._mutate_processing_run(
+                            run,
+                            state=ProcessingRunState.FAILED.value,
+                            error_code="recording_activity_invalid",
+                            lease_token=None,
+                            lease_expires_at=None,
+                        )
                         self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
                         continue
                 if stage is ProcessingRunStage.QUALITY_ANALYSIS and recording.upload_state != RecordingUploadState.VERIFIED.value:
-                    run.state = ProcessingRunState.FAILED.value
-                    run.error_code = "recording_not_verified"
-                    run.updated_at = _utc_now()
+                    self._mutate_processing_run(
+                        run,
+                        state=ProcessingRunState.FAILED.value,
+                        error_code="recording_not_verified",
+                        lease_token=None,
+                        lease_expires_at=None,
+                    )
                     self._audit_worker_run(run, "processing_run.failed", ["processing_state"])
                     continue
-                run.state = ProcessingRunState.RUNNING.value
-                run.attempt_count += 1
-                run.updated_at = _utc_now()
+                lease_token = uuid4().hex
+                self._mutate_processing_run(
+                    run,
+                    state=ProcessingRunState.RUNNING.value,
+                    attempt_count=run.attempt_count + 1,
+                    lease_token=lease_token,
+                    lease_expires_at=now + _CAPTURE_LEASE_DURATION,
+                    available_at=now,
+                    cancel_requested_at=None,
+                )
                 self._audit_worker_run(run, "processing_run.claimed", ["processing_state"])
                 self.session.flush()
                 return CaptureWorkItem(
@@ -2088,6 +3302,7 @@ class AssessmentRepository:
                     declared_size_bytes=recording.declared_size_bytes,
                     minimum_duration_seconds=(activity.minimum_duration_seconds if activity else 0),
                     target_duration_seconds=(activity.target_duration_seconds if activity else 0),
+                    lease_token=lease_token,
                 )
         return None
 
@@ -2095,20 +3310,31 @@ class AssessmentRepository:
         with self.session.begin_nested():
             run = self._worker_run(item)
             context = self._worker_recording_context(item.organization_id, item.recording_id)
-            if run is None or context is None:
+            if run is None:
+                return False
+            if context is None:
                 raise RepositoryError("recording_not_found")
             recording, assessment = context
             if not self._has_current_capture_consent(item.organization_id, assessment.child_id):
-                run.state = ProcessingRunState.CANCELLED.value
-                run.error_code = "consent_revoked"
-                run.updated_at = _utc_now()
+                self._mutate_processing_run(
+                    run,
+                    state=ProcessingRunState.CANCELLED.value,
+                    error_code="consent_revoked",
+                    lease_token=None,
+                    lease_expires_at=None,
+                )
                 self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
                 self.session.flush()
                 return False
             if recording.upload_state == RecordingUploadState.VERIFIED.value:
-                run.state = ProcessingRunState.SUCCEEDED.value
-                run.error_code = None
-                run.updated_at = _utc_now()
+                self._mutate_processing_run(
+                    run,
+                    state=ProcessingRunState.SUCCEEDED.value,
+                    error_code=None,
+                    lease_token=None,
+                    lease_expires_at=None,
+                    completed_at=_utc_now(),
+                )
                 self._audit_worker_run(run, "processing_run.succeeded", ["processing_state"])
                 return True
             if (
@@ -2134,9 +3360,14 @@ class AssessmentRepository:
             recording.verified_at = _utc_now()
             recording.version += 1
             recording.updated_at = _utc_now()
-            run.state = ProcessingRunState.SUCCEEDED.value
-            run.error_code = None
-            run.updated_at = _utc_now()
+            self._mutate_processing_run(
+                run,
+                state=ProcessingRunState.SUCCEEDED.value,
+                error_code=None,
+                lease_token=None,
+                lease_expires_at=None,
+                completed_at=_utc_now(),
+            )
             quality_run = self._queue_quality_run(self._worker_scope(item.organization_id), recording)
             self._append_audit(
                 self._worker_scope(item.organization_id),
@@ -2156,22 +3387,32 @@ class AssessmentRepository:
         with self.session.begin_nested():
             run = self._worker_run(item)
             context = self._worker_recording_context(item.organization_id, item.recording_id)
-            if run is None or context is None:
+            if run is None:
+                return False
+            if context is None:
                 raise RepositoryError("recording_not_found")
             recording, assessment = context
             if not self._has_current_capture_consent(item.organization_id, assessment.child_id):
-                run.state = ProcessingRunState.CANCELLED.value
-                run.error_code = "consent_revoked"
-                run.updated_at = _utc_now()
+                self._mutate_processing_run(
+                    run,
+                    state=ProcessingRunState.CANCELLED.value,
+                    error_code="consent_revoked",
+                    lease_token=None,
+                    lease_expires_at=None,
+                )
                 self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
                 self.session.flush()
                 return False
             if run.stage != ProcessingRunStage.QUALITY_ANALYSIS.value or run.state != ProcessingRunState.RUNNING.value:
                 raise RepositoryError("processing_run_not_found")
             if recording.upload_state != RecordingUploadState.VERIFIED.value:
-                run.state = ProcessingRunState.CANCELLED.value
-                run.error_code = "recording_not_verified"
-                run.updated_at = _utc_now()
+                self._mutate_processing_run(
+                    run,
+                    state=ProcessingRunState.CANCELLED.value,
+                    error_code="recording_not_verified",
+                    lease_token=None,
+                    lease_expires_at=None,
+                )
                 self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
                 self.session.flush()
                 return False
@@ -2207,9 +3448,14 @@ class AssessmentRepository:
                 for name, value in values.items():
                     setattr(existing, name, value)
                 existing.version += 1
-            run.state = ProcessingRunState.SUCCEEDED.value
-            run.error_code = None
-            run.updated_at = _utc_now()
+            self._mutate_processing_run(
+                run,
+                state=ProcessingRunState.SUCCEEDED.value,
+                error_code=None,
+                lease_token=None,
+                lease_expires_at=None,
+                completed_at=_utc_now(),
+            )
             self._append_audit(
                 self._worker_scope(item.organization_id),
                 "recording.quality_recorded",
@@ -2227,12 +3473,17 @@ class AssessmentRepository:
         with self.session.begin_nested():
             run = self._worker_run(item)
             if run is None:
-                raise RepositoryError("processing_run_not_found")
+                return
             if run.stage != ProcessingRunStage.CLEANUP.value:
                 raise RepositoryError("processing_run_not_found")
-            run.state = ProcessingRunState.SUCCEEDED.value
-            run.error_code = None
-            run.updated_at = _utc_now()
+            self._mutate_processing_run(
+                run,
+                state=ProcessingRunState.SUCCEEDED.value,
+                error_code=None,
+                lease_token=None,
+                lease_expires_at=None,
+                completed_at=_utc_now(),
+            )
             self._audit_worker_run(run, "processing_run.succeeded", ["processing_state"])
             self.session.flush()
 
@@ -2241,14 +3492,20 @@ class AssessmentRepository:
             run = self._worker_run(item)
             if run is None or run.state != ProcessingRunState.RUNNING.value:
                 return
-            run.error_code = error_code
-            run.state = (
-                ProcessingRunState.FAILED.value
-                if run.attempt_count >= 3
-                else ProcessingRunState.QUEUED.value
+            now = _utc_now()
+            self._mutate_processing_run(
+                run,
+                error_code=error_code,
+                state=(
+                    ProcessingRunState.FAILED.value
+                    if run.attempt_count >= run.max_attempts
+                    else ProcessingRunState.QUEUED.value
+                ),
+                available_at=now,
+                lease_token=None,
+                lease_expires_at=None,
+                now=now,
             )
-            run.available_at = _utc_now()
-            run.updated_at = _utc_now()
             self._audit_worker_run(
                 run,
                 "processing_run.failed" if run.state == ProcessingRunState.FAILED.value else "processing_run.retry_scheduled",
@@ -2261,14 +3518,21 @@ class AssessmentRepository:
             run = self._worker_run(item)
             if run is None:
                 return
-            run.state = ProcessingRunState.CANCELLED.value
-            run.error_code = error_code
-            run.updated_at = _utc_now()
+            self._mutate_processing_run(
+                run,
+                state=ProcessingRunState.CANCELLED.value,
+                error_code=error_code,
+                lease_token=None,
+                lease_expires_at=None,
+                now=_utc_now(),
+            )
             self._audit_worker_run(run, "processing_run.cancelled", ["processing_state"])
             self.session.flush()
 
-    def _worker_run(self, item) -> ProcessingRunRecord | None:
-        return self.session.scalar(
+    def _worker_run(
+        self, item, *, check_lease_expiry: bool = True
+    ) -> ProcessingRunRecord | None:
+        run = self.session.scalar(
             select(ProcessingRunRecord)
             .where(
                 ProcessingRunRecord.organization_id == item.organization_id,
@@ -2276,6 +3540,20 @@ class AssessmentRepository:
             )
             .with_for_update()
         )
+        lease_token = getattr(item, "lease_token", None)
+        if (
+            run is None
+            or not lease_token
+            or run.state != ProcessingRunState.RUNNING.value
+            or run.lease_token != lease_token
+            or run.lease_expires_at is None
+            or (
+                check_lease_expiry
+                and _is_expired(run.lease_expires_at, self._now())
+            )
+        ):
+            return None
+        return run
 
     def _worker_recording_context(
         self, organization_id: str, recording_id: str
@@ -2634,15 +3912,34 @@ class AssessmentRepository:
 
     @staticmethod
     def _processing_run_snapshot(run: ProcessingRunRecord) -> ProcessingRunSnapshot:
+        evidence_stage = run.stage == ProcessingRunStage.EVIDENCE_EXTRACTION.value
+        can_retry = evidence_stage and (
+            run.state == ProcessingRunState.FAILED.value
+            or (
+                run.state == ProcessingRunState.CANCELLED.value
+                and run.error_code == _EVIDENCE_USER_CANCEL_CODE
+            )
+        )
+        can_cancel = evidence_stage and run.state in {
+            ProcessingRunState.QUEUED.value,
+            ProcessingRunState.RUNNING.value,
+        } and run.error_code != _EVIDENCE_USER_CANCEL_CODE
         return ProcessingRunSnapshot(
             id=run.processing_run_id,
             organization_id=run.organization_id,
             recording_id=run.recording_id,
+            assessment_id=run.assessment_id,
+            transcript_revision_id=run.transcript_revision_id,
             stage=ProcessingRunStage(run.stage),
             state=ProcessingRunState(run.state),
             attempt_count=run.attempt_count,
-            available_at=run.available_at,
+            max_attempts=run.max_attempts,
+            available_at=_as_utc(run.available_at),
             error_code=run.error_code,
+            result_available=(evidence_stage and run.evidence_run_id is not None),
+            can_retry=can_retry,
+            can_cancel=can_cancel,
+            version=run.version,
         )
 
     @staticmethod

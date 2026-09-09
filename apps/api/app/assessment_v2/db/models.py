@@ -474,12 +474,54 @@ class ProcessingRunRecord(AssessmentBase):
             ["recordings.organization_id", "recordings.recording_id"],
             name="fk_processing_runs_recording_tenant",
         ),
+        ForeignKeyConstraint(
+            ["organization_id", "assessment_id"],
+            ["assessments.organization_id", "assessments.assessment_id"],
+            name="fk_processing_runs_assessment_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "transcript_revision_id"],
+            [
+                "transcript_revisions.organization_id",
+                "transcript_revisions.transcript_revision_id",
+            ],
+            name="fk_processing_runs_transcript_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["organization_id", "evidence_run_id"],
+            ["evidence_runs.organization_id", "evidence_runs.evidence_run_id"],
+            name="fk_processing_runs_evidence_tenant",
+        ),
         CheckConstraint(f"stage IN ({_PROCESSING_STAGE_VALUES})", name="ck_processing_runs_stage"),
         CheckConstraint(f"state IN ({_PROCESSING_STATE_VALUES})", name="ck_processing_runs_state"),
         CheckConstraint("length(idempotency_key) > 0", name="ck_processing_runs_idempotency_key"),
         CheckConstraint("attempt_count >= 0", name="ck_processing_runs_attempt_count"),
+        CheckConstraint("max_attempts >= 1", name="ck_processing_runs_max_attempts"),
+        CheckConstraint("version >= 1", name="ck_processing_runs_version"),
+        CheckConstraint(
+            "(stage IN ('upload_verification', 'quality_analysis', 'cleanup') "
+            "AND recording_id IS NOT NULL AND assessment_id IS NULL "
+            "AND transcript_revision_id IS NULL) OR "
+            "(stage = 'evidence_extraction' AND recording_id IS NULL "
+            "AND assessment_id IS NOT NULL AND transcript_revision_id IS NOT NULL)",
+            name="ck_processing_runs_target",
+        ),
         Index("ix_processing_runs_organization_recording", "organization_id", "recording_id"),
         Index("ix_processing_runs_organization_state_available", "organization_id", "state", "available_at"),
+        Index(
+            "ix_processing_runs_organization_stage_state_available",
+            "organization_id",
+            "stage",
+            "state",
+            "available_at",
+        ),
+        Index(
+            "ix_processing_runs_organization_stage_lease",
+            "organization_id",
+            "stage",
+            "state",
+            "lease_expires_at",
+        ),
     )
 
     processing_run_id: Mapped[str] = mapped_column(String(64), primary_key=True, default=opaque_id)
@@ -488,9 +530,27 @@ class ProcessingRunRecord(AssessmentBase):
         nullable=False,
         index=True,
     )
-    recording_id: Mapped[str] = mapped_column(
+    recording_id: Mapped[str | None] = mapped_column(
         ForeignKey("recordings.recording_id", name="fk_processing_runs_recording"),
-        nullable=False,
+        nullable=True,
+        index=True,
+    )
+    assessment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("assessments.assessment_id", name="fk_processing_runs_assessment"),
+        nullable=True,
+        index=True,
+    )
+    transcript_revision_id: Mapped[str | None] = mapped_column(
+        ForeignKey(
+            "transcript_revisions.transcript_revision_id",
+            name="fk_processing_runs_transcript_revision",
+        ),
+        nullable=True,
+        index=True,
+    )
+    evidence_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("evidence_runs.evidence_run_id", name="fk_processing_runs_evidence_run"),
+        nullable=True,
         index=True,
     )
     stage: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -499,8 +559,26 @@ class ProcessingRunRecord(AssessmentBase):
     )
     idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_attempts: Mapped[int] = mapped_column(
+        Integer,
+        default=3,
+        server_default=text("3"),
+        nullable=False,
+    )
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(64))
+    lease_token: Mapped[str | None] = mapped_column(String(128))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pipeline_version: Mapped[str | None] = mapped_column(String(128))
+    feature_schema_version: Mapped[str | None] = mapped_column(String(128))
+    version: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        server_default=text("1"),
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 

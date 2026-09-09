@@ -20,6 +20,13 @@ def test_native_runtime_check_exists_and_does_not_depend_on_docker() -> None:
     assert "uvicorn" in source
     assert "LINGUALENS_ASSESSMENT_TEST_DATABASE_URL" in source
     assert "assessment-v2 native runtime check passed" in source
+    assert "test_postgres_processing_leases.py" in source
+    assert "app.assessment_v2.worker_runtime" in source
+    assert "/evidence-runs" in source
+    assert "status_code != 202" in source
+    assert "_wait_for_evidence_success" in source
+    assert "not_diagnostic" in source
+    assert "decision_support_only" in source
 
 
 def test_native_runtime_check_uses_an_ephemeral_database_and_cleans_it_up() -> None:
@@ -30,6 +37,7 @@ def test_native_runtime_check_uses_an_ephemeral_database_and_cleans_it_up() -> N
     assert "CREATE DATABASE" in source
     assert "DROP DATABASE" in source
     assert "_wait_for_api" in source
+    assert "_stop_api(worker_process, worker_log_file)" in source
     assert "finally" in source
 
 

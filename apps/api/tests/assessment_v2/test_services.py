@@ -16,6 +16,9 @@ from app.assessment_v2.domain.models import (
     ConsentStatus,
     CreateChild,
     AttestTranscript,
+    ProcessingRunSnapshot,
+    ProcessingRunStage,
+    ProcessingRunState,
     RecordConsent,
     StartAssessment,
     TransitionAssessment,
@@ -124,6 +127,40 @@ class FakeRepository:
         return self.assessment_value
 
 
+def processing_run() -> ProcessingRunSnapshot:
+    return ProcessingRunSnapshot(
+        id="processing_run_01",
+        organization_id="org_alpha",
+        recording_id=None,
+        assessment_id="assessment_01",
+        transcript_revision_id="transcript_01",
+        stage=ProcessingRunStage.EVIDENCE_EXTRACTION,
+        state=ProcessingRunState.QUEUED,
+        attempt_count=0,
+        available_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        error_code=None,
+        max_attempts=3,
+        result_available=False,
+        can_retry=False,
+        can_cancel=True,
+        version=1,
+    )
+
+
+class ProcessingRepository(FakeRepository):
+    def enqueue_current_evidence_processing(self, scope, assessment_id, correlation_id):
+        return processing_run()
+
+    def get_current_evidence_processing_run(self, scope, assessment_id):
+        return processing_run()
+
+    def retry_evidence_processing_run(self, scope, run_id, expected_version, correlation_id):
+        return processing_run()
+
+    def request_evidence_processing_cancellation(self, scope, run_id, expected_version, correlation_id):
+        return processing_run()
+
+
 def service_for(repository: FakeRepository, user: CurrentUser | None = None) -> AssessmentService:
     service = AssessmentService(repository, user or therapist())
     service.now = lambda: datetime(2026, 9, 1, tzinfo=timezone.utc)
@@ -142,6 +179,23 @@ def test_inactive_membership_is_denied() -> None:
 def test_role_outside_clinical_workflow_is_denied() -> None:
     with pytest.raises(ClinicalPolicyError) as error:
         service_for(FakeRepository(child_value=child()), therapist(role="researcher")).get_child("child_01")
+
+    assert error.value.code == "role_not_permitted"
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        lambda service: service.enqueue_current_evidence_processing("assessment_01", "req-01"),
+        lambda service: service.retry_processing_run("processing_run_01", 1, "req-02"),
+        lambda service: service.cancel_processing_run("processing_run_01", 1, "req-03"),
+    ],
+)
+def test_org_admin_cannot_mutate_evidence_processing(action) -> None:
+    service = service_for(ProcessingRepository(), therapist(role="org_admin"))
+
+    with pytest.raises(ClinicalPolicyError) as error:
+        action(service)
 
     assert error.value.code == "role_not_permitted"
 

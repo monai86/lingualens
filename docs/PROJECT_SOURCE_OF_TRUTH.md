@@ -44,15 +44,18 @@ evidence workspace ต่อท้าย assessment; หน้า session เด
   review page ที่ `/assessments/{assessmentId}/transcript`, evidence read model
   ที่ `/api/v2/assessments/{assessment_id}/evidence` และ explicit
   reviewed-transcript extraction worker ที่
-  `POST /api/v2/assessments/{assessment_id}/evidence-runs` แล้ว; background queue,
-  timestamp-level review และ reference-band comparison ยังไม่เปิด
+  `POST /api/v2/assessments/{assessment_id}/evidence-runs` แล้ว โดย endpoint
+  ตอบ `202` หลัง durable enqueue และ worker เดียวกันประมวลผลผ่าน
+  `processing_runs`; current-run/detail/retry/cancel เป็น backend-owned
+  contract; timestamp-level review และ reference-band comparison ยังไม่เปิด
 - evidence profile เก็บ provenance, ฟีเจอร์ที่วัดได้, developmental domains,
   ข้อจำกัด และสถานะ stale เมื่อ transcript revision ใหม่เกิดขึ้น; ใช้เพื่อ
   decision support เชิงพรรณนาเท่านั้น ไม่ใช่การวินิจฉัย
 - `LINGUALENS_DATABASE_URL`/v1 Alembic และ
   `LINGUALENS_ASSESSMENT_DATABASE_URL`/v2 Alembic เป็นคนละฐานและคนละ history;
-  v2 transcript/evidence อยู่ใน migration `0005_transcript_revisions` และ
-  `0006_evidence_profiles`
+  v2 transcript/evidence อยู่ใน migration `0005_transcript_revisions`,
+  `0006_evidence_profiles` และ durable job fields/result linkage อยู่ใน
+  `0007_durable_evidence_jobs`
 - ฐาน v2 เริ่มว่าง ไม่มีการ import หรือ rewrite records/audio/storage จาก v1
 - Supabase Auth ยืนยันตัวตน, FastAPI บังคับ policy, PostgreSQL RLS เป็น
   defense in depth
@@ -191,12 +194,12 @@ persistence layer หลักของ lingualens.
     consent, notification, job-attempt SQL tables, organization-scoped clinical
     child records, backend organization-admin membership and case care-team
     assignment endpoints, application-level guards on clinical routes, and a
-    PostgreSQL RLS migration as defense-in-depth. This is implementation
-    foundation only; production readiness still requires Supabase Auth/RLS
-    verification, invitation/MFA frontend flows, managed private Storage, and
-    security/legal rollout evidence. Durable asynchronous execution is required
-    only if measured workload cannot be handled synchronously or by the existing
-    database-backed job model with one worker.
+    PostgreSQL RLS migration as defense-in-depth. Assessment V2 now uses the
+    database-backed `processing_runs` queue and one tenant-scoped worker for
+    durable evidence extraction, retry, lease reclaim, and cancellation. This
+    is implementation foundation only; production readiness still requires
+    Supabase Auth/RLS verification, invitation/MFA frontend flows, managed
+    private Storage, and security/legal rollout evidence.
 27. Phase 2 backend auth lifecycle foundation now includes org-admin
     invitation records, invitation acceptance into active organization
     membership, membership revocation with care-team deactivation, production

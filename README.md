@@ -44,6 +44,11 @@ This project is a **research prototype and educational demo**. It supports scree
   The experimental audio-to-CHAT implementation remains in
   `src/audio_pipeline/`. `src/therapist_backend/` is retained only as a legacy
   research compatibility API.
+- **Durable Assessment V2 Processing**: Assessment V2 uses the PostgreSQL
+  `processing_runs` table as its durable queue. One native worker process
+  handles capture and evidence stages with bounded retry, lease reclaim, and
+  explicit cancellation. Redis/Celery are not part of this path; Docker
+  Compose is optional packaging verification.
 - **Human Review Gate**: Generated transcripts require clinician review before preliminary feature outputs or AI-assisted explanation are interpreted.
 - **Decision-Support AI Output**: All AI output is strictly designed for screening support (e.g., concern level, review priority, clinician review support) and must never be interpreted as an automated clinical conclusion.
 - **Feature-Based ML Review**: lingualens can persist transparent review
@@ -124,8 +129,9 @@ rotation runbook reference; see `docs/SECRET_ROTATION_RUNBOOK.md`.
 For the reduced one-day pilot scope, see
 `docs/ONE_DAY_PILOT_SCOPE.md` and `docs/ONE_DAY_PILOT_RUNBOOK.md`. The pilot
 adds backend organization/care-team guards and local-private upload intents, but
-does not activate production Auth, Supabase Storage, durable workers, legal
-review, or clinical validation.
+  does not activate production Auth, managed Supabase Storage, legal review, or
+  clinical validation. Assessment V2's local/native worker is a research
+  prototype path and is not production approval.
 Phase 1 tenant hardening now adds SQL organization settings, membership and
 care-team assignment tables, identity/retention/consent/notification/job-attempt
 scaffolds, organization-scoped clinical child records, broader backend route
@@ -257,8 +263,8 @@ protocol selection, consent-gated activities, private signed uploads, durable
 processing runs, worker-owned checksum verification, and basic non-diagnostic
 audio quality states. The reviewed-transcript boundary, therapist review page,
 persisted evidence read model, and explicit reviewed-transcript extraction
-worker are now mounted additively; background extraction queues and
-reference-band comparison are not mounted yet. The v2 database starts
+worker and durable evidence queue are now mounted additively; reference-band
+comparison is not mounted yet. The v2 database starts
 empty: no v1 records, audio, storage keys, or JSON data are imported or
 rewritten.
 
@@ -270,7 +276,10 @@ assessment. Existing `/api/v1` session screens remain unchanged. Set
 `NEXT_PUBLIC_ASSESSMENT_API_BASE_URL` only when the v2 API is hosted at a
 different origin; otherwise it is derived from `NEXT_PUBLIC_API_BASE_URL`. After
 capture, therapists can open `/assessments/{assessmentId}/transcript` to review,
-save, and attest the transcript, then run the explicit evidence worker and open
+save, and attest the transcript. The evidence action returns `202` after a
+durable enqueue; the web client follows the backend-owned run through
+`GET /api/v2/assessments/{assessment_id}/evidence-processing-run` and
+`GET /api/v2/processing-runs/{processing_run_id}` before opening
 `/assessments/{assessmentId}/evidence` to read the backend-owned descriptive
 evidence profile, its developmental domains, measured features, provenance, and
 limitations.
@@ -299,7 +308,9 @@ ASD or any developmental condition and does not expose an ASD probability.
 For local setup without Docker, install PostgreSQL 16 natively and provide an
 admin connection to the local `postgres` database. The native check creates a
 unique temporary v2 database, starts FastAPI directly, probes `/api/v2`, runs
-the PostgreSQL RLS suite, and removes only its temporary database and role:
+the PostgreSQL RLS suite, and removes only its temporary database and role. The
+gate also exercises transcript attestation, `202` evidence enqueue, the native
+capture/evidence worker, evidence read, and duplicate-enqueue idempotency:
 
 ```bash
 PYTHONPATH=apps/api:src python scripts/check_api_migrations.py
@@ -313,8 +324,9 @@ test. It verifies that the v2 history runs in the API service, confirms the API
 can create a child through `/api/v2`, and verifies the runtime role is
 `NOSUPERUSER`/`NOBYPASSRLS`.
 
-Capture processing is run from durable `processing_runs` records. The capture
-worker requires private Supabase Storage configuration for real objects,
+Capture and evidence processing are run from durable `processing_runs` records
+by the same tenant-scoped native worker process. The capture worker requires
+private Supabase Storage configuration for real objects,
 `LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS` for tenant-scoped PostgreSQL RLS
 polling, and `ffprobe`/`ffmpeg` for quality checks; missing media tools produce
 an explicit unavailable quality state. Local Compose includes a capture-worker

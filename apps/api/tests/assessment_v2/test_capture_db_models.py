@@ -112,12 +112,23 @@ def test_capture_metadata_defines_exact_tables_and_essential_columns() -> None:
         "processing_run_id",
         "organization_id",
         "recording_id",
+        "assessment_id",
+        "transcript_revision_id",
+        "evidence_run_id",
         "stage",
         "state",
         "idempotency_key",
         "attempt_count",
+        "max_attempts",
         "available_at",
         "error_code",
+        "lease_token",
+        "lease_expires_at",
+        "cancel_requested_at",
+        "completed_at",
+        "pipeline_version",
+        "feature_schema_version",
+        "version",
         "created_at",
         "updated_at",
     }
@@ -248,7 +259,7 @@ def test_capture_migration_seeds_catalog_and_reverses_to_0002(monkeypatch) -> No
                 revision = connection.execute("select version_num from alembic_version").fetchone()
 
             assert CAPTURE_TABLES.issubset(tables_at_head)
-            assert revision == ("0006_evidence_profiles",)
+            assert revision == ("0007_durable_evidence_jobs",)
 
             with sqlite3.connect(database_path) as connection:
                 for statement in (

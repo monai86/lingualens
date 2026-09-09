@@ -308,12 +308,26 @@ class UploadIntentResponse(_StrictModel):
     upload: UploadGrantResponse
 
 
+class ProcessingRunActionRequest(_StrictModel):
+    expected_version: int = Field(strict=True, ge=1)
+
+
 class ProcessingRunResponse(_StrictModel):
     id: str = Field(min_length=1, max_length=64)
     stage: ProcessingRunStage
     state: ProcessingRunState
     attempt_count: int = Field(strict=True, ge=0, le=1000)
+    max_attempts: int = Field(strict=True, ge=1, le=1000)
+    available_at: datetime
     error_code: str | None = Field(default=None, min_length=1, max_length=64)
+    result_available: bool
+    can_retry: bool
+    can_cancel: bool
+    version: int = Field(strict=True, ge=1)
+
+
+class EvidenceProcessingResponse(_StrictModel):
+    processing_run: ProcessingRunResponse
 
 
 class RecordingIntentResponse(_StrictModel):

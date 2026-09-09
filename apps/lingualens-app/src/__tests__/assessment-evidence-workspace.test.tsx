@@ -59,8 +59,18 @@ function evidenceProfile(state: "completed" | "stale" = "completed") {
   };
 }
 
+function processingClient(): Omit<AssessmentEvidenceClient, "getEvidence"> {
+  return {
+    queueEvidence: vi.fn(),
+    getCurrentEvidenceProcessingRun: vi.fn(),
+    getProcessingRun: vi.fn(),
+    retryProcessingRun: vi.fn(),
+    cancelProcessingRun: vi.fn(),
+  };
+}
+
 function clientFor(value: ReturnType<typeof evidenceProfile>): AssessmentEvidenceClient {
-  return { getEvidence: vi.fn().mockResolvedValue(value) };
+  return { ...processingClient(), getEvidence: vi.fn().mockResolvedValue(value) };
 }
 
 test("renders domain evidence and provenance without diagnostic language", async () => {
@@ -96,7 +106,7 @@ test("keeps API failure visible and offers a retry", async () => {
   render(
     <AssessmentEvidenceWorkspace
       assessmentId="assessment_opaque_01"
-      client={{ getEvidence }}
+      client={{ ...processingClient(), getEvidence }}
     />,
   );
 

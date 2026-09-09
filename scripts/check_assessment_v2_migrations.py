@@ -34,7 +34,7 @@ EXPECTED_TABLES = {
     "evidence_feature_values",
     "evidence_domain_profiles",
 }
-HEAD_REVISION = "0006_evidence_profiles"
+HEAD_REVISION = "0007_durable_evidence_jobs"
 PROTOCOL_VERSION_KEY = "thai_guided_language_sample:v0"
 EXPECTED_PURPOSES = "initial,developmental_follow_up,post_intervention_follow_up,additional_evidence"
 

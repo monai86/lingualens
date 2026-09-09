@@ -47,6 +47,7 @@ class ProcessingRunStage(StrEnum):
     UPLOAD_VERIFICATION = "upload_verification"
     QUALITY_ANALYSIS = "quality_analysis"
     CLEANUP = "cleanup"
+    EVIDENCE_EXTRACTION = "evidence_extraction"
 
 
 class ProcessingRunState(StrEnum):
@@ -216,12 +217,58 @@ class RecordingSnapshot:
 class ProcessingRunSnapshot:
     id: str
     organization_id: str
-    recording_id: str
+    recording_id: str | None
     stage: ProcessingRunStage
     state: ProcessingRunState
     attempt_count: int
     available_at: datetime
     error_code: str | None
+    assessment_id: str | None = None
+    transcript_revision_id: str | None = None
+    max_attempts: int = 3
+    result_available: bool = False
+    can_retry: bool = False
+    can_cancel: bool = False
+    version: int = 1
+
+    def __post_init__(self) -> None:
+        if self.max_attempts < 1:
+            raise ValueError("max_attempts must be positive")
+        if self.version < 1:
+            raise ValueError("version must be positive")
+
+        has_recording_target = self.recording_id is not None
+        has_evidence_target = (
+            self.assessment_id is not None or self.transcript_revision_id is not None
+        )
+        if not has_recording_target and not has_evidence_target:
+            raise ValueError("processing run requires a target")
+        if has_recording_target and has_evidence_target:
+            raise ValueError("processing run cannot mix recording and evidence targets")
+
+        if self.stage is ProcessingRunStage.EVIDENCE_EXTRACTION:
+            if (
+                has_recording_target
+                or self.assessment_id is None
+                or self.transcript_revision_id is None
+            ):
+                raise ValueError(
+                    "evidence extraction requires an assessment and transcript revision target"
+                )
+            return
+
+        if self.stage not in {
+            ProcessingRunStage.UPLOAD_VERIFICATION,
+            ProcessingRunStage.QUALITY_ANALYSIS,
+            ProcessingRunStage.CLEANUP,
+        }:
+            raise ValueError("processing run has an invalid target family")
+        if not has_recording_target:
+            raise ValueError("capture processing run requires a recording target")
+        if self.result_available:
+            raise ValueError("capture processing run cannot expose a result")
+        if self.can_retry or self.can_cancel:
+            raise ValueError("capture processing run cannot expose retry or cancel actions")
 
 
 @dataclass(frozen=True, slots=True)

@@ -189,10 +189,20 @@ export type AssessmentV2Capture = {
 
 export type AssessmentV2ProcessingRun = {
   id: string;
-  stage: "upload_verification" | "quality_analysis" | "cleanup";
+  stage: "upload_verification" | "quality_analysis" | "cleanup" | "evidence_extraction";
   state: AssessmentV2ProcessingState;
   attempt_count: number;
+  max_attempts: number;
+  available_at: string;
   error_code: string | null;
+  result_available: boolean;
+  can_retry: boolean;
+  can_cancel: boolean;
+  version: number;
+};
+
+export type AssessmentV2EvidenceProcessing = {
+  processing_run: AssessmentV2ProcessingRun;
 };
 
 export type AssessmentV2UploadIntent = {
@@ -334,8 +344,26 @@ export class AssessmentV2Client {
     });
   }
 
-  createEvidence(assessmentId: string): Promise<AssessmentV2EvidenceProfile> {
+  queueEvidence(assessmentId: string): Promise<AssessmentV2EvidenceProcessing> {
     return this.request(`/assessments/${pathSegment(assessmentId)}/evidence-runs`, { method: "POST" });
+  }
+
+  getCurrentEvidenceProcessingRun(assessmentId: string): Promise<AssessmentV2EvidenceProcessing> {
+    return this.request(`/assessments/${pathSegment(assessmentId)}/evidence-processing-run`);
+  }
+
+  retryProcessingRun(runId: string, expectedVersion: number): Promise<AssessmentV2ProcessingRun> {
+    return this.request(`/processing-runs/${pathSegment(runId)}/retry`, {
+      method: "POST",
+      body: JSON.stringify({ expected_version: expectedVersion }),
+    });
+  }
+
+  cancelProcessingRun(runId: string, expectedVersion: number): Promise<AssessmentV2ProcessingRun> {
+    return this.request(`/processing-runs/${pathSegment(runId)}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ expected_version: expectedVersion }),
+    });
   }
 
   completeCapture(assessmentId: string): Promise<AssessmentV2Assessment> {

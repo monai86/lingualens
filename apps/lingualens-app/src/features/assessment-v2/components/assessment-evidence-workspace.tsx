@@ -9,8 +9,17 @@ import {
   type AssessmentV2DomainProfile,
   type AssessmentV2EvidenceProfile,
 } from "@/services/assessment-v2-client";
+import { AssessmentProcessingStatus } from "@/features/assessment-v2/components/assessment-processing-status";
 
-export type AssessmentEvidenceClient = Pick<AssessmentV2Client, "getEvidence">;
+export type AssessmentEvidenceClient = Pick<
+  AssessmentV2Client,
+  | "getEvidence"
+  | "queueEvidence"
+  | "getCurrentEvidenceProcessingRun"
+  | "getProcessingRun"
+  | "retryProcessingRun"
+  | "cancelProcessingRun"
+>;
 
 type AssessmentEvidenceWorkspaceProps = {
   assessmentId: string;
@@ -32,9 +41,9 @@ export function AssessmentEvidenceWorkspace({
     setError(false);
     try {
       setProfile(await client.getEvidence(assessmentId));
-    } catch {
+    } catch (requestError) {
       setProfile(null);
-      setError(true);
+      setError(!isMissingEvidenceError(requestError));
     } finally {
       setLoading(false);
     }
@@ -52,7 +61,7 @@ export function AssessmentEvidenceWorkspace({
     );
   }
 
-  if (error || !profile) {
+  if (error) {
     return (
       <section className="workspace-panel p-6" role="alert">
         <h1 className="text-xl font-semibold">ไม่สามารถโหลดผลหลักฐานได้</h1>
@@ -66,6 +75,25 @@ export function AssessmentEvidenceWorkspace({
         >
           ลองใหม่
         </button>
+      </section>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <section className="space-y-5">
+        <header>
+          <p className="text-sm font-semibold text-[color:var(--color-primary)]">ขั้นตอนที่ 5 จาก 5</p>
+          <h1 className="mt-1 text-2xl font-semibold">ผลหลักฐานเชิงพรรณนา</h1>
+          <p className="mt-2 text-sm text-[color:var(--color-text-muted)]">
+            ผลจะปรากฏเมื่อ worker ประมวลผล transcript ที่นักบำบัดรับรองแล้วเสร็จ
+          </p>
+        </header>
+        <AssessmentProcessingStatus
+          assessmentId={assessmentId}
+          client={client}
+          onEvidenceReady={loadEvidence}
+        />
       </section>
     );
   }
@@ -213,4 +241,24 @@ function domainStatusLabel(value: AssessmentV2DomainProfile["status"]): string {
     not_assessed: "ยังไม่ได้ประเมิน",
   };
   return labels[value];
+}
+
+function isMissingEvidenceError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "status" in error
+    && (error as { status?: unknown }).status === 404
+    && errorCode(error) === "evidence_not_found";
+}
+
+function errorCode(error: unknown): string | null {
+  if (typeof error !== "object" || error === null || !("body" in error)) return null;
+  const body = (error as { body?: unknown }).body;
+  if (typeof body !== "string") return null;
+  try {
+    const parsed = JSON.parse(body) as { error?: { code?: unknown } };
+    return typeof parsed.error?.code === "string" ? parsed.error.code : null;
+  } catch {
+    return null;
+  }
 }

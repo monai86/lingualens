@@ -8,6 +8,14 @@
 
 **Tech Stack:** FastAPI, Pydantic, SQLAlchemy 2, Alembic, PostgreSQL/Supabase RLS, Python 3.13, Next.js 16, React 19, TypeScript, pytest, Vitest, Playwright, Figma handoff artifacts
 
+**Current implementation status:** A1 is implemented in the uncommitted
+worktree. Reviewer call 1 returned `fix-first`; its B1-B5 findings were closed
+test-first, then reviewer call 3 returned the final-budget `fix-first` verdict
+with B1-B4. Parent recovery has now added capture lease reclaim, scheduler
+fairness, current-contract filtering and persisted-cancel UI coverage. No
+further independent review call is available; final-strict independent
+attestation is not obtained.
+
 ---
 
 ## ตำแหน่งของแผนนี้
@@ -34,24 +42,30 @@ unit เดิมเพื่อรองรับงานนี้
 GUI และ TUI เดิมต้องไม่ถูกลบหรือเพิ่ม business rule ใหม่ใน A1 ทั้งสอง surface
 จะย้ายมาใช้ contract สุดท้ายใน Slice D หลัง API state model คงที่
 
+## TDD record for A1
+
+```text
+TDD_REQUIRED: yes
+OBSERVABLE_SEAMS: processing-run state transitions and leases; HTTP 202/current-run/detail/retry/cancel contract; native worker enqueue-to-evidence path; therapist polling/recovery UI
+RED_EVIDENCE: contract, repository, worker, route, and frontend status tests were introduced before their corresponding implementation; the initial frontend focused run failed on the removed synchronous client/component path; the cancellation-vs-late-failure regression first failed with `AssertionError: QUEUED is not CANCELLED`; the supported-RLS migration preservation probe first failed with `RuntimeError: Native migration probe lost processing rows while upgrading as the RLS app role`; the worker event regression first observed `claim -> extract -> complete` without a committed lease; the max-attempt cancellation regression first ended `FAILED` instead of `CANCELLED`; the expired-lease failure regression first mutated a run that should have remained `RUNNING`; the native parent-lock contention path initially exposed the old transaction/lock boundary by holding the claim's parent locks through the worker cycle; parent-recovery RED then observed no capture `lease_token` on claim, scheduler return after a busy capture tenant, stale evidence returned after contract supersession, and `กำลังประมวลผล` shown for a persisted `cancel_requested` running job
+GREEN_EVIDENCE: parent-recovery focused regressions (`4 paths passed`, plus the frontend processing-status suite `5 passed`); complete Assessment V2 suite (`326 passed, 10 deselected, 2 warnings`); frontend full suite (`540 passed`); typecheck, lint, production build, isolated Playwright processing smoke (`1 passed`), native PostgreSQL/RLS/migration/lease gate (`10 passed`), and repository-wide `bash scripts/check_project.sh` (core `1139 passed, 10 skipped, 3 deselected`; Assessment V2 `326 passed, 10 deselected`) passed on the parent-recovery candidate. `npm audit --audit-level=high` reports 8 baseline lockfile advisories (2 moderate, 5 high, 1 critical); package-lock files are unchanged and no breaking remediation was applied.
+REFACTOR_EVIDENCE: PostgreSQL migration 0007 now alters the existing table in place for the supported RLS migration role and checks downgrade safety; capture and evidence worker claim leases commit before external work and stale capture tokens cannot mutate a reclaimed run; shared scheduling services every configured tenant's capture and evidence handler before returning; current evidence and processing reads filter transcript/pipeline/schema identity; persisted cancellation is acknowledged in the browser while the worker settles; parent-row locks block instead of treating contention as absence; persisted cancellation precedes retry exhaustion; expired lease holders cannot mutate failure state; shared lock ordering and tenant binding remain explicit; browser evidence state remains backend-owned polling with no local result cache
+```
+
 ไม่มี commit, push, merge หรือ deploy ในแผนนี้จนกว่า owner จะอนุญาตโดยตรง
 
 ## Execution preflight
 
-worktree `assessment-web-capture-v2` ยังมี candidate รอบก่อนทั้ง tracked และ
-untracked อยู่บน branch `codex/assessment-web-capture` ส่วนไฟล์แผนนี้เป็น
-post-phase planning artifact และไม่ใช่การเปิด assurance unit เดิมอีกครั้ง
+Preflight นี้เสร็จแล้วใน linked worktree
+`/Users/porschecaa/lingualens/.worktrees/assessment-web-capture-v2` บน branch
+`codex/durable-evidence-processing`. Owner อนุญาต checkpoint `7a37fe8a` ก่อน
+เริ่ม A1 และ candidate ปัจจุบันถูกแยกเป็น assurance unit ใหม่
+`lingualens/assessment-v2/durable-evidence-processing`; implementation ยัง
+uncommitted ตาม authorization boundary
 
-ก่อนเริ่ม Task 1 ให้หยุดที่ขอบเขต authorization แล้วทำตามลำดับนี้:
-
-1. ตรวจว่า complete diff รอบก่อนยังตรงกับ verification receipts ที่รายงานไว้
-2. ขอ owner อนุญาต checkpoint/commit candidate เดิมโดยระบุไฟล์และ commit message
-3. หลัง checkpoint เท่านั้น จึงสร้าง branch/worktree ใหม่จาก baseline นั้น เช่น
-   `codex/durable-evidence-processing` และเปิด assurance unit A1 ใหม่
-
-ถ้า owner เลือกทำ A1 ต่อใน dirty worktree เดิม ต้องบันทึกเป็นการยอมรับ combined
-diff โดยชัดเจน; ห้ามถือว่าเป็นค่าเริ่มต้น เพราะจะทำให้ rollback และ candidate
-identity ของสอง slice ปะปนกัน
+ไม่ได้นำ dirty worktree ของ slice อื่นมาปน และไม่แตะ assurance ledger ของ
+Evidence V2 เดิม. ห้าม commit, push, merge, deploy, migrate shared Supabase
+หรือเปิด production worker ต่อจากแผนนี้โดยไม่มี owner authorization เพิ่มเติม
 
 ## เหตุผลที่ทำ A1 ก่อน A2
 
@@ -260,7 +274,7 @@ explicit retry สามารถ requeue run เดิมได้
 - Modify: `docs/ux/therapist-workflow/figma-delivery-manifest.md`
 - Modify: Figma frames `H10`, `H11`, `E07`, `E09`
 
-- [ ] **Step 1: Add the exact processing variants to the frame inventory**
+- [x] **Step 1: Add the exact processing variants to the frame inventory**
 
 Add H10 variants for desktop, tablet and mobile:
 
@@ -274,19 +288,19 @@ cancelled: ระบุเหตุผลเชิง workflow, ทางกล�
 succeeded: แสดงปุ่มเปิดโปรไฟล์หลักฐาน
 ```
 
-- [ ] **Step 2: Update the API-screen contract map**
+- [x] **Step 2: Update the API-screen contract map**
 
 H10 ต้อง map ไปยัง enqueue/current-run/get-run/retry/cancel endpoints ข้างต้น
 H11 ต้อง map transcript attestation ไปยัง enqueue เท่านั้น และ E07/E09 ต้อง
 ระบุว่า browser ห้ามสร้างหรือเติม evidence เอง
 
-- [ ] **Step 3: Update the working Figma frames**
+- [x] **Step 3: Update the working Figma frames**
 
 ใน Figma file `YOh8m47gDzPuX2EBZsPCcy` ให้ H10 ใช้ component state เดียวกัน
 ทุก viewport, มี `aria-live` equivalent annotation, action สูงอย่างน้อย 44px,
 และไม่ใช้สีเพียงอย่างเดียวแยก state
 
-- [ ] **Step 4: Walk the five recovery paths before frontend code**
+- [x] **Step 4: Walk the five recovery paths before frontend code**
 
 ใช้ synthetic assessment เท่านั้นและบันทึกผลใน `prototype-scenarios.md`:
 
@@ -301,7 +315,7 @@ transcript superseded -> E07 -> old run cancelled -> enqueue current revision
 Expected: ผู้ทดสอบบอกได้ว่างานถูกบันทึกหรือยัง, อะไรยังอยู่, อะไรถูกบล็อก และ
 ต้องทำอะไรต่อ โดยไม่เห็น diagnosis/probability wording
 
-- [ ] **Step 5: Keep the Figma manifest honest**
+- [x] **Step 5: Keep the Figma manifest honest**
 
 หาก Presentation-mode walkthrough หรือ export ยังไม่ครบ ให้คง
 `Manifest status: working skeleton` และ `Accepted version: not frozen`; ห้าม
@@ -316,7 +330,7 @@ mark accepted จาก repository docs เพียงอย่างเดี�
 - Modify: `apps/api/app/assessment_v2/domain/models.py`
 - Add: `apps/api/tests/assessment_v2/test_processing_contract.py`
 
-- [ ] **Step 1: Write failing contract tests**
+- [x] **Step 1: Write failing contract tests**
 
 Add tests that require an evidence stage, versioned public snapshot and
 lease-bearing private work item:
@@ -349,7 +363,7 @@ def test_processing_snapshot_exposes_recovery_state_without_lease_token() -> Non
 Also test that `max_attempts < 1`, `version < 1`, both target IDs missing, or a
 recording target combined with an evidence target raises `ValueError`.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -359,7 +373,7 @@ PYTHONPATH=apps/api:src python3.13 -m pytest \
 Expected: fail because `EVIDENCE_EXTRACTION` and the new snapshot fields do not
 exist
 
-- [ ] **Step 3: Add the minimal domain types**
+- [x] **Step 3: Add the minimal domain types**
 
 Implement this public shape:
 
@@ -395,7 +409,7 @@ recording for capture stages, or assessment plus transcript revision for
 `evidence_extraction`. Capture snapshots always expose both action flags as
 false; evidence flags follow the server-owned state/reason policy above
 
-- [ ] **Step 4: Run GREEN and refactor**
+- [x] **Step 4: Run GREEN and refactor**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -417,10 +431,12 @@ transcript content
 - Modify: `apps/api/app/assessment_v2/db/models.py`
 - Add: `apps/api/tests/assessment_v2/test_processing_db_models.py`
 - Modify: `apps/api/tests/assessment_v2/test_capture_db_models.py`
+- Modify: `apps/api/tests/assessment_v2/test_evidence_db_models.py`
 - Modify: `apps/api/tests/assessment_v2/test_migrations.py`
 - Modify: `apps/api/tests/assessment_v2/test_postgres_rls.py`
+- Modify: `scripts/check_assessment_v2_migrations.py`
 
-- [ ] **Step 1: Write failing model and migration tests**
+- [x] **Step 1: Write failing model and migration tests**
 
 Require these columns on `processing_runs`:
 
@@ -444,7 +460,7 @@ idempotency uniqueness. Preserve the capture index and add claim-path indexes
 covering `(organization_id, stage, state, available_at)` and expired leases;
 assert every index/constraint name fits PostgreSQL's 63-character limit
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -457,7 +473,7 @@ PYTHONPATH=apps/api:src python3.13 -m pytest \
 Expected: fail because revision `0007_durable_evidence_jobs` and the new columns
 do not exist
 
-- [ ] **Step 3: Implement migration 0007**
+- [x] **Step 3: Implement migration 0007**
 
 Use revision identifiers shorter than 32 characters:
 
@@ -491,19 +507,19 @@ clear migration error when any `evidence_extraction` row exists. Prove both the
 safe refusal on a populated database and successful downgrade on an empty fresh
 database
 
-- [ ] **Step 4: Update the ORM model**
+- [x] **Step 4: Update the ORM model**
 
 Add matching nullable foreign keys and private lease fields to
 `ProcessingRunRecord`. Do not add transcript content, raw provider payload or
 storage URL columns
 
-- [ ] **Step 5: Preserve and extend RLS**
+- [x] **Step 5: Preserve and extend RLS**
 
 The existing `processing_runs` organization policy must continue to enforce
 `app.current_organization_id`. Add adversarial rows for evidence jobs and prove
 that another organization cannot read, claim, retry, cancel or link a result
 
-- [ ] **Step 6: Run GREEN plus fresh upgrade/downgrade**
+- [x] **Step 6: Run GREEN plus fresh upgrade/downgrade**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -530,7 +546,7 @@ and upgrades again
 - Modify: `apps/api/tests/assessment_v2/test_capture_repository.py`
 - Modify: `apps/api/tests/assessment_v2/test_native_runtime_contract.py`
 
-- [ ] **Step 1: Write repository RED tests for enqueue and idempotency**
+- [x] **Step 1: Write repository RED tests for enqueue and idempotency**
 
 Test this sequence with synthetic IDs/content:
 
@@ -549,7 +565,7 @@ selection. Test the canonical JSON hash directly: identical material is stable,
 changing any one identity field changes the key, and the persisted key is at
 most 128 characters
 
-- [ ] **Step 2: Write state-machine RED tests with an injected clock**
+- [x] **Step 2: Write state-machine RED tests with an injected clock**
 
 Do not sleep in tests. Advance a fake clock through:
 
@@ -569,7 +585,7 @@ consent withdrawal -> queued/running evidence jobs cancelled
 pipeline/schema change -> old-contract job cancelled
 ```
 
-- [ ] **Step 3: Write a real PostgreSQL concurrency RED test**
+- [x] **Step 3: Write a real PostgreSQL concurrency RED test**
 
 In `test_postgres_processing_leases.py`, use two independent SQLAlchemy sessions
 against the temporary native database. Hold the first claimant's transaction
@@ -581,7 +597,7 @@ Add this test file to the PostgreSQL target list in
 `scripts/check_assessment_v2_native.py`; update `test_native_runtime_contract.py`
 first so omission from the native gate is itself a failing contract
 
-- [ ] **Step 4: Run RED**
+- [x] **Step 4: Run RED**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -593,7 +609,7 @@ Expected: unit tests fail because enqueue/lease/recovery methods do not exist;
 the native gate reaches the new PostgreSQL lease test and fails for the same
 missing behavior
 
-- [ ] **Step 5: Implement enqueue with the established lock order**
+- [x] **Step 5: Implement enqueue with the established lock order**
 
 Use this order in every protected mutation:
 
@@ -608,7 +624,7 @@ Do not silently requeue a failed or cancelled row; explicit recovery owns that
 transition. Enqueueing a new analysis contract cancels old-contract queued or
 running jobs before inserting the new identity
 
-- [ ] **Step 6: Implement private lease methods**
+- [x] **Step 6: Implement private lease methods**
 
 Add repository methods with these signatures:
 
@@ -631,7 +647,7 @@ and issues a new token. Completion writes evidence/result linkage and marks the
 run succeeded in one transaction; stale-token completion or failure performs no
 mutation
 
-- [ ] **Step 7: Implement therapist recovery methods**
+- [x] **Step 7: Implement therapist recovery methods**
 
 ```python
 def retry_evidence_processing_run(
@@ -650,7 +666,7 @@ stale expected version returns `stale_processing_run_version`. Every capture and
 evidence processing-run mutation increments `version`; snapshots derive
 `can_retry` and `can_cancel` from server state and safe cancellation reason
 
-- [ ] **Step 8: Preserve audit privacy**
+- [x] **Step 8: Preserve audit privacy**
 
 Emit only actions and safe fields:
 
@@ -668,7 +684,7 @@ processing_run.succeeded
 Audit detail must exclude assessment ID, child ID, transcript ID/content,
 storage key, provider payload and raw exception
 
-- [ ] **Step 9: Run GREEN, PostgreSQL concurrency and Capture V2 regressions**
+- [x] **Step 9: Run GREEN, PostgreSQL concurrency and Capture V2 regressions**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -691,7 +707,7 @@ cleanup behavior remains green; no test uses wall-clock sleep
 - Add: `apps/api/tests/assessment_v2/test_evidence_processing_worker.py`
 - Modify: `apps/api/tests/assessment_v2/test_capture_runtime.py`
 
-- [ ] **Step 1: Write worker RED tests**
+- [x] **Step 1: Write worker RED tests**
 
 Require successful extraction, explicit insufficient data, retryable failure,
 cancel-before-persist and stale lease rejection:
@@ -710,7 +726,7 @@ def test_worker_preserves_insufficient_data_as_a_completed_job() -> None:
     assert repository.saved_evidence.state is EvidenceState.INSUFFICIENT_DATA
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -719,7 +735,7 @@ PYTHONPATH=apps/api:src python3.13 -m pytest \
 
 Expected: fail because `EvidenceProcessingWorker` does not exist
 
-- [ ] **Step 3: Implement the narrow worker**
+- [x] **Step 3: Implement the narrow worker**
 
 Use the existing scientific boundaries only:
 
@@ -740,7 +756,7 @@ saved = repository.complete_evidence_processing_run(item, adapted)
 The worker must not catch an insufficient/partial analysis and replace it with
 zero values. It must not log `item`, transcript content or raw exceptions
 
-- [ ] **Step 4: Run capture and evidence handlers in one supervised loop**
+- [x] **Step 4: Run capture and evidence handlers in one supervised loop**
 
 Keep `python -m app.assessment_v2.worker_runtime` as the entrypoint. One cycle
 may process at most one capture job and one evidence job per configured tenant,
@@ -748,7 +764,7 @@ then sleep only if both handlers are idle. Keep
 `LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS` as the explicit PostgreSQL RLS
 allowlist until a separately reviewed service-identity design exists
 
-- [ ] **Step 5: Run GREEN**
+- [x] **Step 5: Run GREEN**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -776,7 +792,7 @@ Assessment V2 runtime
 - Modify: `apps/api/tests/assessment_v2/test_capture_route_integration.py`
 - Modify: `apps/api/tests/assessment_v2/test_schemas.py`
 
-- [ ] **Step 1: Write API RED tests**
+- [x] **Step 1: Write API RED tests**
 
 Test the exact external behavior:
 
@@ -797,7 +813,7 @@ cross-tenant 404, org-admin mutation denial, stale expected version and consent
 withdrawal. Existing capture endpoint tests must accept the additive scheduler/
 version/action fields while preserving their prior values
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -810,7 +826,7 @@ PYTHONPATH=apps/api:src python3.13 -m pytest \
 Expected: fail because the existing POST returns a completed evidence profile
 with status 201 and recovery endpoints do not exist
 
-- [ ] **Step 3: Add strict schemas**
+- [x] **Step 3: Add strict schemas**
 
 Implement:
 
@@ -837,7 +853,7 @@ class EvidenceProcessingResponse(_StrictModel):
     processing_run: ProcessingRunResponse
 ```
 
-- [ ] **Step 4: Add service methods and safe errors**
+- [x] **Step 4: Add service methods and safe errors**
 
 `AssessmentService` must expose enqueue/current/retry/cancel methods and reuse
 the existing evidence-run role boundary. Add safe mappings for:
@@ -849,13 +865,13 @@ processing_run_not_cancellable -> 409
 stale_processing_run_version -> 409
 ```
 
-- [ ] **Step 5: Change the POST route to 202**
+- [x] **Step 5: Change the POST route to 202**
 
 The route must call enqueue only; remove direct calls to
 `extract_reviewed_transcript()` and `adapt_analysis_result()` from the HTTP
 request path. Keep `GET /evidence` unchanged
 
-- [ ] **Step 6: Run GREEN and inspect OpenAPI**
+- [x] **Step 6: Run GREEN and inspect OpenAPI**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -887,7 +903,7 @@ Expected: focused tests pass and OpenAPI declares 202
 - Modify: `apps/lingualens-app/src/__tests__/assessment-transcript-review-workspace.test.tsx`
 - Modify: `apps/lingualens-app/src/__tests__/assessment-evidence-workspace.test.tsx`
 
-- [ ] **Step 1: Write client and UI RED tests**
+- [x] **Step 1: Write client and UI RED tests**
 
 Require these user-visible behaviors:
 
@@ -903,7 +919,7 @@ stale transcript -> stop polling old run and offer current reprocessing
 API outage -> never show success or synthesize evidence locally
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 cd apps/lingualens-app
@@ -919,7 +935,7 @@ npm test -- \
 Expected: fail because the client still expects a synchronous profile and the
 processing status component does not exist
 
-- [ ] **Step 3: Extend the client contract**
+- [x] **Step 3: Extend the client contract**
 
 Add these methods with strict TypeScript return types:
 
@@ -937,7 +953,7 @@ contract after all callers and tests move to `queueEvidence`. Extend
 backend-owned `can_retry`/`can_cancel`, and `version`; update existing capture
 fixtures rather than making the new contract optional
 
-- [ ] **Step 4: Implement `AssessmentProcessingStatus`**
+- [x] **Step 4: Implement `AssessmentProcessingStatus`**
 
 The component polls only while state is `queued` or `running`, starts at a
 2-second interval, backs off transient API errors to at most 15 seconds, pauses
@@ -947,14 +963,14 @@ unmount, renders actions only from `can_retry`/`can_cancel`, and maps only safe
 error codes to Thai copy. It must not write evidence, run ID or clinical content
 to localStorage/sessionStorage
 
-- [ ] **Step 5: Replace `evidenceReady` local state**
+- [x] **Step 5: Replace `evidenceReady` local state**
 
 `assessment-transcript-review-workspace.tsx` must render the server run state
 instead of `const [evidenceReady, setEvidenceReady]`. The evidence workspace
 must show queued/running/failed recovery when no completed evidence exists,
 rather than treating every 404 as a generic API failure
 
-- [ ] **Step 6: Run GREEN, accessibility checks and build**
+- [x] **Step 6: Run GREEN, accessibility checks and build**
 
 ```bash
 cd apps/lingualens-app
@@ -985,7 +1001,7 @@ introduced
 - Modify: `apps/api/tests/assessment_v2/test_postgres_rls.py`
 - Modify: `apps/lingualens-app/e2e/assessment-v2-transcript.smoke.spec.ts`
 
-- [ ] **Step 1: Write native runtime RED assertions**
+- [x] **Step 1: Write native runtime RED assertions**
 
 The contract test must require the runner to:
 
@@ -999,7 +1015,7 @@ retry the POST and receive the same processing run ID
 leave no temporary database or role
 ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -1008,25 +1024,25 @@ PYTHONPATH=apps/api:src python3.13 -m pytest \
 
 Expected: fail because the current native runner probes children and RLS only
 
-- [ ] **Step 3: Extend the native runner with synthetic workflow data**
+- [x] **Step 3: Extend the native runner with synthetic workflow data**
 
 Use only synthetic IDs and CHAT content. Start API and worker as native Python
 processes against the same temporary PostgreSQL database. Preserve the existing
 limited application role, RLS checks and `finally` cleanup. Do not add Docker
 commands or persist test transcript/audio outside the temporary database
 
-- [ ] **Step 4: Extend PostgreSQL RLS adversarial coverage**
+- [x] **Step 4: Extend PostgreSQL RLS adversarial coverage**
 
 Prove that an organization cannot read or mutate another organization's evidence
 processing row, including result linkage, retry and cancellation
 
-- [ ] **Step 5: Update the browser smoke**
+- [x] **Step 5: Update the browser smoke**
 
 The Playwright scenario must observe queued/running or deterministic test-worker
 state, then succeeded evidence, reload once during processing, and confirm no
 local evidence object is created
 
-- [ ] **Step 6: Run the real native gate**
+- [x] **Step 6: Run the real native gate**
 
 ```bash
 brew services start postgresql@16
@@ -1056,7 +1072,7 @@ Compose may be run optionally but cannot replace this receipt
 - Modify: `docs/CURRENT_HANDOFF.md`
 - Modify: `CHANGELOG.md`
 
-- [ ] **Step 1: Document one worker and one database queue**
+- [x] **Step 1: Document one worker and one database queue**
 
 State explicitly:
 
@@ -1067,24 +1083,24 @@ Redis/Celery are not part of this path.
 Docker Compose is optional.
 ```
 
-- [ ] **Step 2: Document the API behavior change**
+- [x] **Step 2: Document the API behavior change**
 
 Replace statements saying evidence POST returns a completed profile with the
 202 enqueue → processing poll → GET evidence sequence. Keep transcript
 attestation, consent and non-diagnostic boundaries visible
 
-- [ ] **Step 3: Update migration and limitation status**
+- [x] **Step 3: Update migration and limitation status**
 
 Record `0007_durable_evidence_jobs`, mark background evidence processing active,
 and keep timestamp-level review, longitudinal comparison, disposition/report
 and GUI/TUI parity as future slices
 
-- [ ] **Step 4: Add a real behavior changelog entry**
+- [x] **Step 4: Add a real behavior changelog entry**
 
 Describe the durable evidence queue, recovery actions and web polling. Do not
 bump the product version unless the owner separately authorizes a release
 
-- [ ] **Step 5: Run documentation consistency checks**
+- [x] **Step 5: Run documentation consistency checks**
 
 ```bash
 rg -n "synchronous|no background queue|evidence-runs|processing_runs|Redis|Celery|Docker" \
@@ -1107,7 +1123,7 @@ Docker is optional and the native path remains primary
 - Verify: complete diff, staged/unstaged/untracked paths, migrations, API, web,
   native runtime and assurance sidecar for the new unit
 
-- [ ] **Step 1: Run the focused backend suite**
+- [x] **Step 1: Run the focused backend suite**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -1121,9 +1137,9 @@ PYTHONPATH=apps/api:src python3.13 -m pytest \
   apps/api/tests/assessment_v2/test_capture_route_integration.py -q
 ```
 
-Expected: zero failures
+Expected: zero failures. Receipt: `46 passed, 2 warnings` after the tenant-bound worker claim hardening.
 
-- [ ] **Step 2: Run the complete Assessment V2 suite**
+- [x] **Step 2: Run the complete Assessment V2 suite**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 -m pytest \
@@ -1131,9 +1147,10 @@ PYTHONPATH=apps/api:src python3.13 -m pytest \
 ```
 
 Expected: zero failures; PostgreSQL-marked tests deselected here and exercised
-by the native gate
+by the native gate. Receipt after parent recovery: `326 passed, 10 deselected,
+2 warnings`.
 
-- [ ] **Step 3: Run the frontend and browser gates**
+- [x] **Step 3: Run the frontend and browser gates**
 
 ```bash
 cd apps/lingualens-app
@@ -1146,10 +1163,17 @@ npx playwright test e2e/assessment-v2-transcript.smoke.spec.ts --reporter=line
 cd ../..
 ```
 
-Expected: all commands exit 0 and audit reports no unresolved high/critical
-vulnerability
+Expected: frontend tests, typecheck, lint, build and the isolated browser smoke
+exit 0. The dependency audit is recorded separately and must not be silently
+treated as a clean gate. Receipts after parent recovery: `540 passed`; typecheck,
+lint and production build passed; the isolated Playwright processing smoke
+passed `1 test` on ports `3128/8128`. `npm audit --audit-level=high` reported
+the existing lockfile dependency tree's 8 advisories (2 moderate, 5 high,
+1 critical) in `@vitest/mocker`, `js-yaml`, `next` and `sharp`; neither
+package-lock changed and no breaking `npm audit fix --force` was applied in
+this A1 scope.
 
-- [ ] **Step 4: Run native and repository-wide gates once on the frozen candidate**
+- [x] **Step 4: Run native and repository-wide gates once on the frozen candidate**
 
 ```bash
 PYTHONPATH=apps/api:src python3.13 scripts/check_assessment_v2_native.py
@@ -1160,9 +1184,18 @@ git status --short --branch
 
 Expected: native runtime and full repository verification exit 0; no `.next/`,
 `dist/`, `.local/`, `node_modules/`, `*.tsbuildinfo`, `.DS_Store`, secret, real
-identifier, transcript or audio enters the candidate
+identifier, transcript or audio enters the candidate. Receipts after parent
+recovery: native PostgreSQL `10 passed` with migration preservation, enqueue
+`202`, worker evidence record, idempotency, RLS, lease and cleanup; isolated
+Playwright `1 passed`; repository checker passed with core `1139 passed, 10
+skipped, 3 deselected`, Assessment V2 `326 passed, 10 deselected`, frontend
+`540 passed`, production build and `git diff --check`. The repository checker
+used a narrowly scoped macOS metadata quarantine wrapper because Finder
+recreated `.DS_Store` during consistency scanning; no metadata was included in
+the candidate. The separate npm audit finding remains visible as a baseline
+dependency advisory and was not changed by this candidate.
 
-- [ ] **Step 5: Perform the parent adversarial pass**
+- [x] **Step 5: Perform the parent adversarial pass**
 
 Test counterexamples for:
 
@@ -1183,19 +1216,63 @@ partial/insufficient evidence semantics
 old capture stages after nullable recording_id migration
 ```
 
-- [ ] **Step 6: Build the new final-strict packet and request one fresh review**
+Parent adversarial receipt, first pass: cross-tenant worker claim is rejected by
+the tenant-bound repository and PostgreSQL RLS/native proof; scoped
+read/retry/cancel paths use organization and care-team predicates; org-admin
+clinical mutations are denied; consent withdrawal, supersession, duplicate
+enqueue, insufficient data, browser reload/offline behavior, and safety/privacy
+paths are covered. Reviewer call 1 then found five reachable gaps. The fix
+cycle added observed regressions for migration row preservation under the
+supported RLS owner, commit-before-extraction, blocking parent contention,
+cancel-before-retry-exhaustion, and expired-lease failure no-op. All five now
+  pass in the focused suites and native PostgreSQL gate; the full candidate gate
+  was rerun. Reviewer call 3 then found B1-B4. Parent recovery added and passed
+  regressions for capture lease reclaim after a crash, scheduler fairness across
+  capture/evidence tenants, current transcript/pipeline/schema filtering, and
+  persisted running-cancel acknowledgement. The refreshed focused, full,
+  native and browser gates are green. Independent final-strict ship attestation
+  is unavailable because the review budget is exhausted.
 
-Create a new assurance unit with a new ledger, journal, candidate manifest,
-readiness record and atomic reviewer reservation. Bind every in-scope tracked,
-modified and untracked file. The reviewer must inspect the complete A1 candidate
-and return `ship`; do not reuse the exhausted Evidence V2 unit or its review
-calls
+- [x] **Step 6: Close reviewer call 1 findings with a new TDD/adversarial cycle**
 
-- [ ] **Step 7: Stop at the authorization boundary**
+The first final-strict reviewer returned `fix-first` with blockers B1-B5:
 
-After `ship`, report the branch/worktree and verification receipts. Do not
-commit, push, merge, deploy, migrate a shared Supabase database or enable a
-production worker without explicit owner authorization
+- B1: migration 0007 could lose existing `processing_runs` under the supported
+  non-bypass-RLS migration owner. The PostgreSQL path now alters in place and
+  the native probe migrates real synthetic rows down/up under that role.
+- B2: a worker lease was not committed before extraction. Capture and evidence
+  now commit the claim before external work and use separate tenant-scoped
+  sessions in the runtime.
+- B3: `SKIP LOCKED` parent contention could look like absence. Parent/child/
+  transcript locks now wait, with a native contention regression proving the
+  worker does not fail the job while a parent row is temporarily locked.
+- B4: retry exhaustion could override persisted cancellation. Reclaim checks
+  cancellation first, with a max-attempt regression covering the terminal path.
+- B5: an expired lease could mutate failure state. Failure handling now no-ops
+  after lease expiry, with a repository regression covering the stale worker.
+
+Observed RED evidence and post-fix GREEN receipts are recorded in the TDD
+record above and the A1 assurance ledger. The candidate was refrozen after the
+fixes; the previous review call remains consumed and its packet is historical.
+
+- [x] **Step 7: Complete the final-strict review boundary and enter parent recovery**
+
+The refrozen candidate was bound by a new manifest and packet, and the final
+predeclared call completed with `fix-first`, complete audit, mixed findings and
+behavior blockers B1-B4. The response is persisted in the Solweaver sidecar;
+the assurance findings A1-A3 are also recorded. The maximum three review calls
+are consumed, so no further reviewer reservation or same-attempt closure is
+permitted. Parent recovery may fix and verify behavior without independent
+re-review, but this unit cannot claim final-strict `ship`.
+
+- [x] **Step 8: Stop at the authorization boundary**
+
+Parent recovery is complete for the A1 behavior scope. Report the result,
+branch/worktree and verification receipts. Do not commit, push, merge, deploy,
+migrate a shared Supabase database or enable a production worker without
+explicit owner authorization. Final-strict independent attestation was not
+obtained within the fixed review budget; this candidate is therefore
+parent-completed, not final-strict `ship`.
 
 ---
 

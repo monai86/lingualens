@@ -27,8 +27,15 @@
   review page, an explicit provenance-bound reviewed-transcript extraction worker,
   feature/domain persistence, stale invalidation after transcript changes, and a
   therapist evidence workspace. The read model is descriptive decision support;
-  background extraction queues, reference-band comparison, ASD/developmental
-  diagnosis, and numeric risk output remain out of scope.
+  reference-band comparison, ASD/developmental diagnosis, and numeric risk
+  output remain out of scope.
+- Added durable Assessment V2 evidence processing: `processing_runs` now owns
+  assessment/transcript targets, leases, bounded retry, explicit therapist
+  cancellation, result linkage, and safe recovery state. The evidence endpoint
+  returns `202` after enqueue; the shared native worker processes capture and
+  evidence stages, while the therapist web client reloads and polls the server
+  run before reading the descriptive profile. No diagnosis or numeric risk is
+  produced.
 - Added Visual Fundamental Pitch Contour Overlay (`self._show_pitch_overlay`) in Desktop GUI with real-time F0 curve rendering, voiced autocorrelation sampling, 250 Hz child pitch threshold guideline, and dynamic toolbar toggle (**📈 F0 Curve: ON/OFF**).
 - Added Batch Audio Ingestion Queue & Modal Runner in Desktop GUI (**📦 Batch Ingest Files...**), supporting multi-file automated ingestion into dedicated case sessions with real-time status tracking.
 - Added Longitudinal Assessment Trajectory Tracker (`subtab_longitudinal`, `tree_longitudinal`) providing cross-session developmental progress monitoring, MLU-w growth delta, vocabulary TTR trajectory, and historical session comparison.
