@@ -20,24 +20,30 @@ from app.assessment_v2.db.models import (
     ProtocolActivityRecord,
     ProtocolVersionRecord,
     TranscriptRevisionRecord,
+    TranscriptSegmentSetRecord,
 )
 from app.assessment_v2.db.repositories import AssessmentRepository, RepositoryError
 from app.assessment_v2.domain.models import (
     AccessScope,
     AssessmentPurpose,
     AssessmentState,
+    AttestTranscriptSegmentSet,
     AttestTranscript,
     ConsentPurpose,
     ConsentStatus,
     CreateAssessment,
     CreateChild,
     CreateTranscriptRevision,
+    CreateTranscriptSegmentSet,
     ProcessingRunState,
     RecordConsent,
     SelectProtocol,
+    TranscriptSegmentSpeakerRole,
+    TranscriptSegmentUncertaintyReason,
     TranscriptReviewState,
     TranscriptSource,
 )
+from app.assessment_v2.domain.segments import TranscriptSegment
 from app.core.security import CurrentUser
 from app.assessment_v2.evidence import (
     EvidenceProvenance,
@@ -88,6 +94,7 @@ def _seed_evidence_context(
     session: Session,
     *,
     clock: FakeClock | None = None,
+    with_segments: bool = True,
 ) -> tuple[AssessmentRepository, AccessScope, AssessmentRecord, TranscriptRevisionRecord]:
     scope = _scope()
     repository = AssessmentRepository(session, clock=clock)
@@ -205,6 +212,35 @@ def _seed_evidence_context(
         )
     )
     assert transcript is not None
+    if with_segments:
+        segment_set = repository.create_transcript_segment_set(
+            scope,
+            CreateTranscriptSegmentSet(
+                assessment_id=assessment_snapshot.id,
+                transcript_revision_id=transcript.transcript_revision_id,
+                segments=(
+                    TranscriptSegment(
+                        ordinal=1,
+                        start_ms=0,
+                        end_ms=1200,
+                        speaker_role=TranscriptSegmentSpeakerRole.CHILD,
+                        text="hello .",
+                        confidence=0.99,
+                        uncertainty_reason=TranscriptSegmentUncertaintyReason.NONE,
+                    ),
+                ),
+                source=TranscriptSource.MANUAL,
+            ),
+            correlation_id=CORRELATION_ID,
+        )
+        repository.attest_transcript_segment_set(
+            scope,
+            AttestTranscriptSegmentSet(
+                transcript_segment_set_id=segment_set.id,
+                expected_version=segment_set.version,
+            ),
+            correlation_id=CORRELATION_ID,
+        )
     return repository, scope, assessment, transcript
 
 
@@ -251,6 +287,128 @@ def test_evidence_idempotency_key_is_canonical_and_bounded() -> None:
     assert len(first.removeprefix("evidence:v1:")) == 64
 
 
+def test_evidence_idempotency_key_includes_content_and_segment_checksums() -> None:
+    first = repository_module._evidence_idempotency_key(
+        "assessment-01",
+        "transcript-01",
+        "a" * 64,
+        "b" * 64,
+        "pipeline-v1",
+        "schema-v1",
+    )
+    changed_transcript = repository_module._evidence_idempotency_key(
+        "assessment-01",
+        "transcript-01",
+        "c" * 64,
+        "b" * 64,
+        "pipeline-v1",
+        "schema-v1",
+    )
+    changed_segments = repository_module._evidence_idempotency_key(
+        "assessment-01",
+        "transcript-01",
+        "a" * 64,
+        "d" * 64,
+        "pipeline-v1",
+        "schema-v1",
+    )
+
+    assert first != changed_transcript
+    assert first != changed_segments
+
+
+def test_evidence_idempotency_key_includes_segment_set_identity() -> None:
+    first = repository_module._evidence_idempotency_key(
+        "assessment-01",
+        "transcript-01",
+        "a" * 64,
+        "segment-set-01",
+        "b" * 64,
+        "pipeline-v1",
+        "schema-v1",
+    )
+    changed_set = repository_module._evidence_idempotency_key(
+        "assessment-01",
+        "transcript-01",
+        "a" * 64,
+        "segment-set-02",
+        "b" * 64,
+        "pipeline-v1",
+        "schema-v1",
+    )
+
+    assert first != changed_set
+    assert first.startswith("evidence:v3:")
+
+
+def test_enqueue_requires_current_attested_segment_set(session: Session) -> None:
+    repository, scope, assessment, _ = _seed_evidence_context(session, with_segments=False)
+
+    with pytest.raises(RepositoryError, match="segment_set_not_reviewable"):
+        repository.enqueue_current_evidence_processing(
+            scope, assessment.assessment_id, CORRELATION_ID
+        )
+
+
+def test_claim_cancels_legacy_unbound_evidence_job(session: Session) -> None:
+    repository, scope, assessment, transcript = _seed_evidence_context(session, with_segments=False)
+    legacy = ProcessingRunRecord(
+        processing_run_id="legacy_unbound_evidence_run",
+        organization_id=scope.organization_id,
+        assessment_id=assessment.assessment_id,
+        transcript_revision_id=transcript.transcript_revision_id,
+        stage="evidence_extraction",
+        state=ProcessingRunState.QUEUED.value,
+        idempotency_key="evidence:v1:legacy-unbound",
+        attempt_count=0,
+        max_attempts=3,
+        available_at=datetime(2026, 9, 8, 9, 0, tzinfo=timezone.utc),
+        pipeline_version="reviewed-transcript-descriptors-v1",
+        feature_schema_version="descriptive-transcript-features-v1",
+        version=1,
+    )
+    session.add(legacy)
+    session.flush()
+
+    assert repository.claim_next_evidence_processing_run() is None
+    assert legacy.state == ProcessingRunState.CANCELLED.value
+    assert legacy.error_code == "segment_provenance_missing"
+
+
+def test_claim_cancels_unbound_running_job_even_before_old_lease_expires(session: Session) -> None:
+    clock = FakeClock(datetime(2026, 9, 8, 9, 0, tzinfo=timezone.utc))
+    repository, scope, assessment, transcript = _seed_evidence_context(
+        session,
+        clock=clock,
+        with_segments=False,
+    )
+    legacy = ProcessingRunRecord(
+        processing_run_id="legacy_running_unbound_evidence_run",
+        organization_id=scope.organization_id,
+        assessment_id=assessment.assessment_id,
+        transcript_revision_id=transcript.transcript_revision_id,
+        stage="evidence_extraction",
+        state=ProcessingRunState.RUNNING.value,
+        idempotency_key="evidence:v1:legacy-running-unbound",
+        attempt_count=1,
+        max_attempts=3,
+        available_at=clock.current,
+        lease_token="legacy-lease-token",
+        lease_expires_at=clock.current + timedelta(minutes=5),
+        pipeline_version="reviewed-transcript-descriptors-v1",
+        feature_schema_version="descriptive-transcript-features-v1",
+        version=2,
+    )
+    session.add(legacy)
+    session.flush()
+
+    assert repository.claim_next_evidence_processing_run() is None
+    assert legacy.state == ProcessingRunState.CANCELLED.value
+    assert legacy.error_code == "segment_provenance_missing"
+    assert legacy.lease_token is None
+    assert legacy.lease_expires_at is None
+
+
 def test_enqueue_is_idempotent_and_requires_current_attested_input(session: Session) -> None:
     repository, scope, assessment, transcript = _seed_evidence_context(session)
 
@@ -265,6 +423,8 @@ def test_enqueue_is_idempotent_and_requires_current_attested_input(session: Sess
     assert first.state is ProcessingRunState.QUEUED
     assert first.assessment_id == assessment.assessment_id
     assert first.transcript_revision_id == transcript.transcript_revision_id
+    assert first.segment_set_id
+    assert first.segment_set_sha256
     assert first.recording_id is None
     assert session.scalar(
         select(func.count(ProcessingRunRecord.processing_run_id)).where(
@@ -359,6 +519,134 @@ def test_claim_reclaims_expired_lease_and_rejects_stale_completion(session: Sess
     assert stored is not None
     assert stored.state == ProcessingRunState.SUCCEEDED.value
     assert stored.evidence_run_id == completed.id
+    assert completed.segment_set_id == reclaimed.segment_set_id
+    assert completed.segment_set_sha256 == reclaimed.segment_set_sha256
+    stored_evidence = session.scalar(
+        select(EvidenceRunRecord).where(EvidenceRunRecord.evidence_run_id == completed.id)
+    )
+    assert stored_evidence is not None
+    assert stored_evidence.segment_set_id == reclaimed.segment_set_id
+    assert stored_evidence.segment_set_sha256 == reclaimed.segment_set_sha256
+
+
+def test_worker_cancels_segment_bound_job_when_segment_checksum_changes(session: Session) -> None:
+    repository, scope, assessment, _ = _seed_evidence_context(session)
+    queued = repository.enqueue_current_evidence_processing(
+        scope, assessment.assessment_id, CORRELATION_ID
+    )
+    stored = session.scalar(
+        select(ProcessingRunRecord).where(
+            ProcessingRunRecord.processing_run_id == queued.id
+        )
+    )
+    assert stored is not None
+    stored.segment_set_sha256 = "c" * 64
+    session.flush()
+
+    assert repository.claim_next_evidence_processing_run() is None
+    assert stored.state == ProcessingRunState.CANCELLED.value
+    assert stored.error_code == "segment_set_superseded"
+
+
+def test_new_segment_revision_stales_bound_evidence_and_cancels_pending_job(
+    session: Session,
+) -> None:
+    repository, scope, assessment, transcript = _seed_evidence_context(session)
+    queued = repository.enqueue_current_evidence_processing(
+        scope, assessment.assessment_id, CORRELATION_ID
+    )
+    item = repository.claim_next_evidence_processing_run()
+    assert item is not None
+    completed = repository.complete_evidence_processing_run(
+        item, _adapted_evidence(transcript)
+    )
+    assert completed is not None
+
+    previous_segment_set = session.scalar(
+        select(TranscriptSegmentSetRecord)
+        .where(
+            TranscriptSegmentSetRecord.organization_id == scope.organization_id,
+            TranscriptSegmentSetRecord.assessment_id == assessment.assessment_id,
+        )
+        .order_by(TranscriptSegmentSetRecord.revision.desc())
+        .limit(1)
+    )
+    assert previous_segment_set is not None
+    revised = repository.create_transcript_segment_set(
+        scope,
+        CreateTranscriptSegmentSet(
+            assessment_id=assessment.assessment_id,
+            transcript_revision_id=transcript.transcript_revision_id,
+            segments=(
+                TranscriptSegment(
+                    ordinal=1,
+                    start_ms=0,
+                    end_ms=1500,
+                    speaker_role=TranscriptSegmentSpeakerRole.CHILD,
+                    text="hello revised .",
+                    confidence=0.97,
+                    uncertainty_reason=TranscriptSegmentUncertaintyReason.MANUAL_REVIEW,
+                ),
+            ),
+            source=TranscriptSource.MANUAL,
+            expected_revision=previous_segment_set.revision,
+            expected_version=previous_segment_set.version,
+        ),
+        correlation_id=CORRELATION_ID,
+    )
+    assert revised.review_state is TranscriptReviewState.DRAFT
+    old_evidence = session.scalar(
+        select(EvidenceRunRecord).where(EvidenceRunRecord.evidence_run_id == completed.id)
+    )
+    assert old_evidence is not None
+    assert old_evidence.state == EvidenceState.STALE.value
+
+
+def test_new_segment_revision_cancels_pending_segment_bound_job(session: Session) -> None:
+    repository, scope, assessment, transcript = _seed_evidence_context(session)
+    pending = repository.enqueue_current_evidence_processing(
+        scope, assessment.assessment_id, CORRELATION_ID
+    )
+    previous_segment_set = session.scalar(
+        select(TranscriptSegmentSetRecord)
+        .where(
+            TranscriptSegmentSetRecord.organization_id == scope.organization_id,
+            TranscriptSegmentSetRecord.assessment_id == assessment.assessment_id,
+        )
+        .order_by(TranscriptSegmentSetRecord.revision.desc())
+        .limit(1)
+    )
+    assert previous_segment_set is not None
+    repository.create_transcript_segment_set(
+        scope,
+        CreateTranscriptSegmentSet(
+            assessment_id=assessment.assessment_id,
+            transcript_revision_id=transcript.transcript_revision_id,
+            segments=(
+                TranscriptSegment(
+                    ordinal=1,
+                    start_ms=0,
+                    end_ms=1500,
+                    speaker_role=TranscriptSegmentSpeakerRole.CHILD,
+                    text="hello revised .",
+                    confidence=0.97,
+                    uncertainty_reason=TranscriptSegmentUncertaintyReason.MANUAL_REVIEW,
+                ),
+            ),
+            source=TranscriptSource.MANUAL,
+            expected_revision=previous_segment_set.revision,
+            expected_version=previous_segment_set.version,
+        ),
+        correlation_id=CORRELATION_ID,
+    )
+    old_processing = session.scalar(
+        select(ProcessingRunRecord).where(
+            ProcessingRunRecord.processing_run_id == pending.id
+        )
+    )
+    assert old_processing is not None
+    assert old_processing.state == ProcessingRunState.CANCELLED.value
+    assert old_processing.error_code == "segment_set_superseded"
 
 
 def test_expired_current_lease_cannot_persist_evidence(session: Session) -> None:
@@ -612,6 +900,49 @@ def test_system_cancellation_and_contract_supersession_are_not_user_retryable(
         AttestTranscript(
             transcript_revision_id=superseding.id,
             expected_version=superseding.version,
+        ),
+        correlation_id=CORRELATION_ID,
+    )
+    previous_segment_set = session.scalar(
+        select(TranscriptSegmentSetRecord)
+        .where(
+            TranscriptSegmentSetRecord.organization_id == scope.organization_id,
+            TranscriptSegmentSetRecord.assessment_id == assessment.assessment_id,
+        )
+        .order_by(TranscriptSegmentSetRecord.revision.desc())
+        .limit(1)
+    )
+    assert previous_segment_set is not None
+    superseding_segment_set = repository.create_transcript_segment_set(
+        scope,
+        CreateTranscriptSegmentSet(
+            assessment_id=assessment.assessment_id,
+            transcript_revision_id=superseding.id,
+            segments=(
+                TranscriptSegment(
+                    ordinal=1,
+                    start_ms=0,
+                    end_ms=1400,
+                    speaker_role=TranscriptSegmentSpeakerRole.CHILD,
+                    text="hello world .",
+                    confidence=0.99,
+                    uncertainty_reason=TranscriptSegmentUncertaintyReason.NONE,
+                ),
+            ),
+            source=TranscriptSource.MANUAL,
+            # The previous snapshot is superseded with the transcript. A
+            # first segment set for the new current transcript has no active
+            # segment-set concurrency token to present.
+            expected_revision=None,
+            expected_version=None,
+        ),
+        correlation_id=CORRELATION_ID,
+    )
+    repository.attest_transcript_segment_set(
+        scope,
+        AttestTranscriptSegmentSet(
+            transcript_segment_set_id=superseding_segment_set.id,
+            expected_version=superseding_segment_set.version,
         ),
         correlation_id=CORRELATION_ID,
     )

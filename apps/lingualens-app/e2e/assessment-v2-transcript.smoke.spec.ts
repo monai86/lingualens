@@ -19,6 +19,37 @@ const attestedTranscript = {
   attested_at: "2026-09-07T08:03:00Z",
   version: 2,
 };
+const segmentSet = {
+  id: "segment_set_opaque_01",
+  assessment_id: assessmentId,
+  transcript_revision_id: transcript.id,
+  transcript_content_sha256: "a".repeat(64),
+  recording_id: null,
+  revision: 1,
+  source: "asr_draft",
+  review_state: "draft",
+  segments_sha256: "b".repeat(64),
+  segments: [{
+    id: "segment_opaque_01",
+    ordinal: 1,
+    start_ms: 0,
+    end_ms: 1200,
+    speaker_role: "child",
+    text: "hello .",
+    confidence: 0.91,
+    uncertainty_reason: "none",
+    created_at: "2026-09-07T08:03:00Z",
+  }],
+  created_at: "2026-09-07T08:03:00Z",
+  attested_at: null,
+  version: 1,
+};
+const attestedSegmentSet = {
+  ...segmentSet,
+  review_state: "attested",
+  attested_at: "2026-09-07T08:04:00Z",
+  version: 2,
+};
 const processingRun = {
   id: "processing_run_opaque_01",
   stage: "evidence_extraction",
@@ -36,6 +67,8 @@ const evidenceProfile = {
   evidence_run_id: "evidence_run_opaque_01",
   assessment_id: assessmentId,
   transcript_revision_id: transcript.id,
+  segment_set_id: attestedSegmentSet.id,
+  segment_set_sha256: attestedSegmentSet.segments_sha256,
   state: "completed",
   generated_at: "2026-09-07T08:05:00Z",
   provenance: {
@@ -108,6 +141,7 @@ test("processing assessment can review a transcript and follow durable evidence 
   });
 
   let transcriptExists = false;
+  let segmentSetAttested = false;
   await page.route(`**/api/v2/assessments/${assessmentId}/transcript`, async (route) => {
     if (!transcriptExists) {
       await route.fulfill({
@@ -138,6 +172,40 @@ test("processing assessment can review a transcript and follow durable evidence 
     expect(route.request().postDataJSON()).toEqual({ expected_version: 1 });
     transcriptExists = true;
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(attestedTranscript) });
+  });
+  await page.route(`**/api/v2/assessments/${assessmentId}/transcript-segment-set`, async (route) => {
+    expect(route.request().method()).toBe("GET");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(segmentSetAttested ? attestedSegmentSet : segmentSet),
+    });
+  });
+  await page.route(`**/api/v2/assessments/${assessmentId}/transcript-segment-sets`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ ...segmentSet, revision: 2 }) });
+  });
+  await page.route(`**/api/v2/transcript-segment-sets/${segmentSet.id}/attest`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual({ expected_version: 1 });
+    segmentSetAttested = true;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(attestedSegmentSet) });
+  });
+  await page.route(`**/api/v2/transcript-segments/${segmentSet.segments[0].id}/audio-replay-grant`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        segment_id: segmentSet.segments[0].id,
+        start_ms: 0,
+        end_ms: 1200,
+        available: false,
+        url: null,
+        expires_at: null,
+        expires_in_seconds: null,
+      }),
+    });
   });
 
   let currentRun: typeof processingRun | null = null;
@@ -180,11 +248,18 @@ test("processing assessment can review a transcript and follow durable evidence 
   await page.getByRole("textbox", { name: "เนื้อหา transcript" }).fill(transcript.content);
   await page.getByRole("button", { name: "สร้างฉบับร่าง" }).click();
 
-  await expect(page.getByRole("heading", { name: "ทบทวน transcript" })).toBeVisible();
-  await expect(page.getByText("สถานะ: รอตรวจสอบ")).toBeVisible();
-  await page.getByRole("checkbox", { name: /ฉันได้ตรวจสอบ/ }).check();
+  await expect(page.getByRole("heading", { name: "ตรวจ transcript ก่อนสร้าง segment" })).toBeVisible();
+  await page.getByRole("checkbox", { name: /ฉันได้ตรวจสอบข้อความ/ }).check();
   await page.getByRole("button", { name: "รับรอง transcript" }).click();
   await expect(page.getByText("รับรองแล้ว", { exact: true })).toBeVisible();
+
+  await expect(page.getByRole("heading", { name: "ทบทวน transcript รายช่วง" })).toBeVisible();
+  await expect(page.getByRole("article").getByText("hello .", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "เล่นเสียงช่วงที่ 1" }).click();
+  await expect(page.getByText(/เสียงของช่วงนี้ยังไม่พร้อมใช้งาน/)).toBeVisible();
+  await page.getByRole("checkbox", { name: /ฉันได้ตรวจสอบทุกช่วง/ }).check();
+  await page.getByRole("button", { name: "รับรอง segment revision" }).click();
+  await expect(page.getByText("รับรอง segment revision แล้ว", { exact: true }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "สร้างหลักฐานเชิงพรรณนา" }).click();
   await expect(page.getByText("บันทึกงานแล้ว กำลังรอประมวลผล")).toBeVisible();

@@ -46,7 +46,8 @@ foundation uses a fresh database and a separate Alembic history. It starts with
 no imported v1 records and now covers the first Capture V2 workflow slice:
 children, consent records, assessment lifecycle, protocol selection, private
 recording upload intents, durable processing runs, checksum verification,
-reviewed transcript attestation, asynchronous evidence extraction, and
+reviewed transcript attestation, immutable timestamped segment review with
+uncertainty filtering and bounded replay, asynchronous evidence extraction, and
 non-diagnostic quality states. Capture and evidence jobs share the same native
 tenant-scoped worker and PostgreSQL `processing_runs` queue.
 
@@ -54,9 +55,11 @@ For the primary local verification path, Docker is optional. Install PostgreSQL
 16 with Postgres.app, Homebrew, or the PostgreSQL distribution for your OS,
 then provide an admin connection to the local `postgres` database. The native
 check creates a uniquely named temporary assessment database, starts local
-FastAPI and worker processes, exercises transcript attestation plus the
-`202` enqueue → poll → evidence-read path, runs the API/RLS/lease suite, and
-removes only that temporary database and test role when it finishes:
+FastAPI and worker processes, exercises transcript attestation, segment v1 → v2
+revision/attestation, bounded replay, segment-bound evidence provenance, the
+`202` enqueue → poll → evidence-read path, staleness and access denials, runs
+the API/RLS/lease suite, and removes only that temporary database and test role
+when it finishes:
 
 ```bash
 export LINGUALENS_NATIVE_ADMIN_DATABASE_URL=postgresql+psycopg://<local-admin>:<password>@127.0.0.1:5432/postgres

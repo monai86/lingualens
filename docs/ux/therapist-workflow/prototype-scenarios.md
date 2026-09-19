@@ -121,6 +121,40 @@ backend-owned processing state only.
 - All recovery actions use `expected_version` and a server response; reload and
   API outage cannot fabricate evidence or completion.
 
+## Segment review scenario: `P05_Segment_Uncertainty_Review_Desktop`
+
+Use synthetic segment content only. The segment set is already tied by FastAPI
+to the current attested transcript revision; the browser does not invent
+timestamps or audio.
+
+1. Open the current transcript review and confirm the revision, version, and
+   number of segments are visible before editing.
+2. Toggle `แสดงเฉพาะช่วงที่ไม่แน่ใจ` and verify that a segment marked
+   `speaker_uncertain`, `low_asr_confidence`, `unintelligible_audio`, or
+   `timestamp_uncertain` remains visible with a textual reason.
+3. Focus one segment, edit its text or speaker role, and confirm the primary
+   action changes to `บันทึก revision ใหม่` while attestation is disabled.
+4. Save the revision and verify that the server response supplies the new
+   immutable revision/version. The old set is not edited in place.
+5. Request replay. If the signed grant is available, play only the bounded
+   interval. If it is unavailable, verify that text review and save remain
+   usable and that no storage key or permanent URL is shown.
+6. Check the attestation box only after saving, attest the current segment set,
+   and confirm that evidence processing is offered only after the server
+   returns `review_state=attested`.
+7. Reproduce a `409 stale_segment_set_version`, confirm the UI states that a
+   newer revision exists, and use `โหลด revision ล่าสุด`. The unsaved local
+   text is not silently merged into the newer server revision.
+
+### P05 assertions
+
+- Segment uncertainty is an explicit review queue, not a diagnostic label.
+- Speaker role, timing, confidence, and uncertainty reason remain separate
+  fields so downstream developmental features can report their provenance.
+- Replay availability is non-fatal; missing audio never becomes a fabricated
+  quality result.
+- Save and attest are separate actions with separate server version checks.
+
 ## Safety and recovery branches
 
 | branch_id | trigger | visible state | required recovery or safe exit | rejoins |

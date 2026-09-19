@@ -223,6 +223,8 @@ class EvidenceRunSnapshot:
     provenance: EvidenceProvenance
     profile: DevelopmentalEvidenceProfile
     version: int
+    segment_set_id: str | None = None
+    segment_set_sha256: str | None = None
 
     def __post_init__(self) -> None:
         _require_text(self.id, "evidence run id")
@@ -231,6 +233,11 @@ class EvidenceRunSnapshot:
         _require_text(self.transcript_revision_id, "transcript revision id")
         if self.version < 1:
             raise ValueError("evidence run version must be positive")
+        if (self.segment_set_id is None) != (self.segment_set_sha256 is None):
+            raise ValueError("segment set provenance must include both id and checksum")
+        if self.segment_set_id is not None:
+            _require_text(self.segment_set_id, "segment set id")
+            _require_sha256(self.segment_set_sha256 or "", "segment set checksum")
         if self.profile.assessment_id != self.assessment_id:
             raise ValueError("evidence profile assessment must match its run")
         if self.profile.state is not self.state:
@@ -242,6 +249,8 @@ class EvidenceRunSnapshot:
             {
                 "evidence_run_id": self.id,
                 "transcript_revision_id": self.transcript_revision_id,
+                "segment_set_id": self.segment_set_id,
+                "segment_set_sha256": self.segment_set_sha256,
                 "provenance": self.provenance.to_dict(),
                 "version": self.version,
             }

@@ -47,15 +47,20 @@ evidence workspace ต่อท้าย assessment; หน้า session เด
   `POST /api/v2/assessments/{assessment_id}/evidence-runs` แล้ว โดย endpoint
   ตอบ `202` หลัง durable enqueue และ worker เดียวกันประมวลผลผ่าน
   `processing_runs`; current-run/detail/retry/cancel เป็น backend-owned
-  contract; timestamp-level review และ reference-band comparison ยังไม่เปิด
+  contract; `/assessments/{assessmentId}/transcript` มี prerequisite transcript
+  attestation ต่อด้วย immutable timestamped segment review, uncertain-only
+  filter, focused editing, bounded audio replay และ explicit segment attestation;
+  reference-band comparison ยังไม่เปิด
 - evidence profile เก็บ provenance, ฟีเจอร์ที่วัดได้, developmental domains,
   ข้อจำกัด และสถานะ stale เมื่อ transcript revision ใหม่เกิดขึ้น; ใช้เพื่อ
   decision support เชิงพรรณนาเท่านั้น ไม่ใช่การวินิจฉัย
 - `LINGUALENS_DATABASE_URL`/v1 Alembic และ
   `LINGUALENS_ASSESSMENT_DATABASE_URL`/v2 Alembic เป็นคนละฐานและคนละ history;
   v2 transcript/evidence อยู่ใน migration `0005_transcript_revisions`,
-  `0006_evidence_profiles` และ durable job fields/result linkage อยู่ใน
-  `0007_durable_evidence_jobs`
+  `0006_evidence_profiles`, durable job fields/result linkage อยู่ใน
+  `0007_durable_evidence_jobs`, timestamped segment snapshots อยู่ใน
+  `0008_transcript_segments` และ segment-bound evidence provenance อยู่ใน
+  `0009_segment_evidence_provenance`
 - ฐาน v2 เริ่มว่าง ไม่มีการ import หรือ rewrite records/audio/storage จาก v1
 - Supabase Auth ยืนยันตัวตน, FastAPI บังคับ policy, PostgreSQL RLS เป็น
   defense in depth
@@ -115,8 +120,9 @@ persistence layer หลักของ lingualens.
    tenant/RLS schema foundation แล้ว แต่ยังไม่ถือว่า production-hardened จนกว่า
    จะ verify กับ managed Postgres/Supabase และ production auth จริง
 6. Browser ห้ามสร้าง ML/evidence result หรือ report-final state แทน backend
-   และ evidence worker รับเฉพาะ transcript revision ที่ attest แล้วผ่าน
-   versioned provenance adapter ก่อน persistence
+   และ evidence worker รับเฉพาะ transcript revision ที่ attest แล้วพร้อม
+   current segment set ที่ attest แล้ว ผ่าน versioned provenance adapter ก่อน
+   persistence; ทุก segment edit สร้าง immutable revision ใหม่
 7. Signed-off reports ต้องมี backend-generated signed snapshot, SHA-256 report
    hash, signer, version และ export timestamp เพื่อ audit/export ย้อนหลังได้;
    การแก้ report หลัง sign-off ต้องสร้าง draft revision ใหม่ที่อ้างถึง report

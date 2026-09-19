@@ -34,6 +34,8 @@ def test_processing_runs_has_durable_evidence_target_and_lease_columns() -> None
         "pipeline_version",
         "feature_schema_version",
         "version",
+        "segment_set_id",
+        "segment_set_sha256",
     }.issubset(table.columns.keys())
     assert table.c.recording_id.nullable is True
     assert table.c.assessment_id.nullable is True
@@ -63,14 +65,17 @@ def test_processing_runs_has_target_constraints_tenant_links_and_claim_indexes()
         ("organization_id", "assessment_id"),
         ("organization_id", "transcript_revision_id"),
         ("organization_id", "evidence_run_id"),
+        ("organization_id", "segment_set_id"),
     }.issubset(foreign_keys)
     assert {
         "ck_processing_runs_target",
         "ck_processing_runs_max_attempts",
         "ck_processing_runs_version",
+        "ck_processing_runs_segment_provenance",
     }.issubset(_constraints("processing_runs"))
     assert "ix_processing_runs_organization_stage_state_available" in indexes
     assert "ix_processing_runs_organization_stage_lease" in indexes
+    assert "ix_processing_runs_organization_segment_set" in indexes
     assert all(len(name) <= 63 for name in indexes)
 
 

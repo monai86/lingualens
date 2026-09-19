@@ -102,12 +102,22 @@ export function AssessmentEvidenceWorkspace({
 
   return (
     <section className="space-y-5">
-      <header>
-        <p className="text-sm font-semibold text-[color:var(--color-primary)]">ขั้นตอนที่ 5 จาก 5</p>
-        <h1 className="mt-1 text-2xl font-semibold">โปรไฟล์พัฒนาการเชิงพรรณนา</h1>
-        <p className="mt-2 text-sm text-[color:var(--color-text-muted)]">
-          แสดงสิ่งที่วัดได้ แหล่งข้อมูล และข้อจำกัด เพื่อประกอบการพิจารณาของนักบำบัด
-        </p>
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-[color:var(--color-primary)]">ขั้นตอนที่ 5 จาก 5</p>
+          <h1 className="mt-1 text-2xl font-semibold">โปรไฟล์พัฒนาการเชิงพรรณนา</h1>
+          <p className="mt-2 text-sm text-[color:var(--color-text-muted)]">
+            แสดงสิ่งที่วัดได้ แหล่งข้อมูล และข้อจำกัด เพื่อประกอบการพิจารณาของนักบำบัด
+          </p>
+        </div>
+        <div>
+          <Link
+            href={`/assessments/${encodeURIComponent(assessmentId)}/history`}
+            className="inline-flex items-center rounded-lg border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-300"
+          >
+            เปรียบเทียบประวัติพัฒนาการ (History) →
+          </Link>
+        </div>
       </header>
 
       {isStale ? (

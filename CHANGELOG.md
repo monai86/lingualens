@@ -3,7 +3,17 @@
 ## Unreleased
 
 ### Added
+- Hardened LinguaLens thin clients (`packages/tui`, `packages/gui`) against silent mock fallback:
+  in live mode (`mock_mode=False`), all operations communicate via the backend REST API
+  or fail closed with structured, sanitized exceptions (`LinguaLensApiError`, `LinguaLensAuthError`,
+  `LinguaLensPermissionError`, `LinguaLensConflictError`, `LinguaLensRateLimitError`, `LinguaLensServerError`,
+  `LinguaLensUnsupportedOperationError`). Local mock mutations (`_mock_data`) are strictly prohibited in
+  live mode, unsupported local-only methods (`ingest_audio_file`, `update_utterance`, `auto_refine_speakers`,
+  `swap_speakers`) raise before local mutation, and GUI/TUI direct access to `_mock_data` has been replaced
+  with clean client query methods (`get_session_report`, `get_report`) and UI state counts. Added loopback
+  transport and parameterized failure test suites.
 - Added the first therapist web Capture V2 entry point at `/assessments`:
+
   consent-gated child selection, protocol activities, browser audio capture,
   SHA-256 upload handoff, quality polling, non-diagnostic quality states, and
   resume for in-progress assessments. Existing `/api/v1` session screens are
@@ -36,6 +46,14 @@
   evidence stages, while the therapist web client reloads and polls the server
   run before reading the descriptive profile. No diagnosis or numeric risk is
   produced.
+- Added immutable Assessment V2 transcript segment review under `/api/v2` and
+  `/assessments/{assessmentId}/transcript`: timestamped segments with controlled
+  speaker/uncertainty fields, uncertain-only filtering, focused therapist edits,
+  explicit segment attestation, bounded private replay grants, and segment-bound
+  evidence provenance. Segment edits create new revisions; transcript changes
+  safely stale prior segment evidence. The native PostgreSQL gate now verifies
+  migrations through `0009`, RLS/lease behavior, tenant/consent/role denials,
+  and this workflow without Docker. No diagnosis or numeric risk is produced.
 - Added Visual Fundamental Pitch Contour Overlay (`self._show_pitch_overlay`) in Desktop GUI with real-time F0 curve rendering, voiced autocorrelation sampling, 250 Hz child pitch threshold guideline, and dynamic toolbar toggle (**📈 F0 Curve: ON/OFF**).
 - Added Batch Audio Ingestion Queue & Modal Runner in Desktop GUI (**📦 Batch Ingest Files...**), supporting multi-file automated ingestion into dedicated case sessions with real-time status tracking.
 - Added Longitudinal Assessment Trajectory Tracker (`subtab_longitudinal`, `tree_longitudinal`) providing cross-session developmental progress monitoring, MLU-w growth delta, vocabulary TTR trajectory, and historical session comparison.

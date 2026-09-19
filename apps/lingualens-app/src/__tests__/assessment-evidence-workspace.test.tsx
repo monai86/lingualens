@@ -11,6 +11,8 @@ function evidenceProfile(state: "completed" | "stale" = "completed") {
     evidence_run_id: "evidence_run_opaque_01",
     assessment_id: "assessment_opaque_01",
     transcript_revision_id: "transcript_revision_opaque_01",
+    segment_set_id: "segment_set_opaque_01",
+    segment_set_sha256: "b".repeat(64),
     state,
     generated_at: "2026-09-07T08:02:00Z",
     provenance: {

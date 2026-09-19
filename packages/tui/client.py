@@ -1,25 +1,196 @@
-"""LinguaLens TUI API Client with live REST API and offline mock fallback."""
+"""LinguaLens TUI API Client with live REST API communication and explicit offline mock mode.
+
+In live mode (`mock_mode=False`), all operations communicate with the backend API or
+fail closed with structured exceptions (`LinguaLensApiError`). Local mock data is never
+mutated in live mode. Explicit local mode (`mock_mode=True`) is reserved for demos and research.
+"""
 
 from __future__ import annotations
 
+import email.utils
 import json
+import math
 import os
+import re
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
+
+from packages.cha.parser import parse_cha_text
 
 
 DEFAULT_API_URL = os.environ.get("LINGUALENS_API_URL", "http://localhost:8000/api/v1")
 
 
+class LinguaLensApiError(RuntimeError):
+    """Base error for LinguaLens API communication failures."""
+
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class LinguaLensAuthError(LinguaLensApiError):
+    """Authentication failure (HTTP 401)."""
+    pass
+
+
+class LinguaLensPermissionError(LinguaLensApiError):
+    """Permission denied (HTTP 403)."""
+    pass
+
+
+class LinguaLensConflictError(LinguaLensApiError):
+    """Resource state conflict (HTTP 409)."""
+    pass
+
+
+class LinguaLensRateLimitError(LinguaLensApiError):
+    """Rate limit exceeded (HTTP 429)."""
+
+    def __init__(self, message: str, retry_after_seconds: int | None = None):
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
+class LinguaLensServerError(LinguaLensApiError):
+    """Server-side execution failure (HTTP 500+)."""
+    pass
+
+
+class LinguaLensUnsupportedOperationError(LinguaLensApiError):
+    """Operation unsupported in current live/local client mode."""
+    pass
+
+
+from packages.tui.validation import (
+    LinguaLensValidationError as _BaseValidationError,
+    calculate_age_in_months,
+    validate_assessment_input,
+    validate_child_input,
+    validate_consent_input,
+)
+
+
+class LinguaLensValidationError(LinguaLensApiError, _BaseValidationError):
+    """Client input failed canonical V2 transport validation."""
+    pass
+
+
+
+@dataclass(frozen=True)
+class ClientSession:
+    """Active client authenticated session representation."""
+    access_token: str
+    organization_id: str | None = None
+    token_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    generation: int = 1
+    created_at: float = field(default_factory=time.time)
+
+    def __repr__(self) -> str:
+        tok = self.access_token
+        masked = f"{tok[:4]}...{tok[-4:]}" if len(tok) > 8 else "***"
+        return f"ClientSession(organization_id={self.organization_id!r}, token_id={self.token_id!r}, generation={self.generation}, access_token='{masked}')"
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+
+def _get_current_utc_time() -> datetime:
+    """Return current UTC time; factored for deterministic clock injection in testing."""
+    return datetime.now(timezone.utc)
+
+
+def _parse_retry_after(retry_header: str | None) -> float | None:
+    """Safely parse HTTP Retry-After header supporting delta-seconds and RFC HTTP-date formats."""
+    if not retry_header:
+        return None
+    retry_str = retry_header.strip()
+    if not retry_str:
+        return None
+
+    # 1. Delta-seconds format (integer or float)
+    try:
+        val = float(retry_str)
+        if math.isnan(val) or math.isinf(val):
+            return None
+        return max(0.0, val)
+    except (ValueError, TypeError):
+        pass
+
+    # 2. RFC 1123 / RFC 822 HTTP-date format
+    try:
+        dt = email.utils.parsedate_to_datetime(retry_str)
+        if dt is not None:
+            now = _get_current_utc_time()
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            delta_sec = (dt - now).total_seconds()
+            return max(0.0, float(delta_sec))
+    except Exception:
+        pass
+
+    return None
+
+
+class _SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Prevents credential and tenant header leakage across origins, and rejects mutation redirects."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # Reject redirects for mutations (POST, PUT, PATCH, DELETE) to prevent unintended method conversion or replay
+        if req.get_method() in ("POST", "PUT", "PATCH", "DELETE"):
+            raise LinguaLensApiError(
+                f"HTTP {code} redirect rejected for {req.get_method()} mutation to prevent unintended method conversion or replay."
+            )
+
+        new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new_req:
+            orig_parsed = urllib.parse.urlparse(req.full_url)
+            new_parsed = urllib.parse.urlparse(newurl)
+            orig_port = orig_parsed.port or (443 if orig_parsed.scheme == "https" else 80)
+            new_port = new_parsed.port or (443 if new_parsed.scheme == "https" else 80)
+
+            is_cross_origin = (orig_parsed.scheme, orig_parsed.hostname, orig_port) != (new_parsed.scheme, new_parsed.hostname, new_port)
+            is_https_downgrade = (orig_parsed.scheme == "https" and new_parsed.scheme == "http")
+
+            if is_cross_origin or is_https_downgrade:
+                strip_keys = {"authorization", "x-organization-id", "cookie"}
+                new_req.headers = {k: v for k, v in new_req.headers.items() if k.lower() not in strip_keys}
+                new_req.unredirected_hdrs = {k: v for k, v in new_req.unredirected_hdrs.items() if k.lower() not in strip_keys}
+        return new_req
+
+
 class LinguaLensClient:
     """Client for interacting with LinguaLens Backend API."""
 
-    def __init__(self, base_url: str = DEFAULT_API_URL, mock_mode: bool = False, seed_demo: bool = False):
+    def __init__(
+        self,
+        base_url: str = DEFAULT_API_URL,
+        mock_mode: bool = False,
+        seed_demo: bool = False,
+        clock: Optional[Callable[[], datetime]] = None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.mock_mode = mock_mode
+        self._session_lock = threading.Lock()
+        self._session_generation: int = 0
+        self._session: ClientSession | None = None
+        self._opener = urllib.request.build_opener(_SafeRedirectHandler())
+        self._clock = clock
         self._mock_data: dict[str, Any] = self._init_mock_data(seed_demo=seed_demo)
+
+    def _get_now(self) -> datetime:
+        """Return current time; honors injected clock for deterministic testing."""
+        if callable(getattr(self, "_clock", None)):
+            return self._clock()
+        return _get_current_utc_time()
+
 
     def seed_demo_dataset(self) -> None:
         """Explicitly seed demo cases and transcripts for demonstration or tutorial."""
@@ -34,27 +205,37 @@ class LinguaLensClient:
                 "transcripts": {},
                 "features": {},
                 "reports": {},
+                "children": [],
+                "consents": {},
+                "assessments": {},
             }
+
 
         return {
             "cases": [
                 {
                     "case_id": "case-demo-001",
                     "child_id": "C-0104",
+                    "child_code": "C-0104",
                     "birth_year_month": "2020-04",
                     "age_months": 52,
                     "primary_language": "th",
+                    "language": "th",
                     "clinical_notes": "Receptive-expressive language delay evaluation.",
+                    "notes": "Receptive-expressive language delay evaluation.",
                     "status": "active",
                     "session_count": 2,
                 },
                 {
                     "case_id": "case-demo-002",
                     "child_id": "C-0208",
+                    "child_code": "C-0208",
                     "birth_year_month": "2021-01",
                     "age_months": 43,
                     "primary_language": "th",
+                    "language": "th",
                     "clinical_notes": "Social communication and joint attention follow-up.",
+                    "notes": "Social communication and joint attention follow-up.",
                     "status": "active",
                     "session_count": 1,
                 },
@@ -146,18 +327,107 @@ class LinguaLensClient:
             },
         }
 
+    def set_session(self, access_token: str, organization_id: str | None = None) -> ClientSession:
+        """Inject active authenticated session credentials with monotonic generation tracking."""
+        with self._session_lock:
+            self._session_generation += 1
+            self._session = ClientSession(
+                access_token=access_token,
+                organization_id=organization_id,
+                generation=self._session_generation,
+            )
+            return self._session
+
+    def get_session(self) -> ClientSession | None:
+        """Retrieve current active session credentials, if any."""
+        with self._session_lock:
+            return self._session
+
+    def clear_session(self) -> None:
+        """Clear the current authenticated session."""
+        with self._session_lock:
+            self._session = None
+
+    def _handle_auth_failure(self, failed_session_generation: int | None = None, token_used: str | None = None) -> None:
+        """Compare-and-clear session: invalidate session only if it matches the failed generation or token."""
+        with self._session_lock:
+            if self._session is None:
+                return
+            if failed_session_generation is not None:
+                if self._session.generation == failed_session_generation:
+                    self._session = None
+            elif token_used is not None:
+                if self._session.access_token == token_used:
+                    self._session = None
+            else:
+                self._session = None
+
     def _http_request(self, method: str, endpoint: str, data: dict[str, Any] | None = None) -> Any:
-        url = f"{self.base_url}{endpoint}"
+        if endpoint.startswith("/api/v2"):
+            if self.base_url.endswith("/api/v1"):
+                url = f"{self.base_url[:-7]}{endpoint}"
+            else:
+                url = f"{self.base_url}{endpoint}"
+        else:
+            url = f"{self.base_url}{endpoint}"
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        req_data = json.dumps(data).encode("utf-8") if data else None
+
+        req_data = json.dumps(data).encode("utf-8") if data is not None else None
+
+        with self._session_lock:
+            active_session = self._session
+
+        session_gen: int | None = active_session.generation if active_session else None
+        token_used: str | None = active_session.access_token if active_session else None
+
+        if active_session and active_session.access_token:
+            base_p = urllib.parse.urlparse(self.base_url)
+            req_p = urllib.parse.urlparse(url)
+            base_port = base_p.port or (443 if base_p.scheme == "https" else 80)
+            req_port = req_p.port or (443 if req_p.scheme == "https" else 80)
+            if (base_p.scheme, base_p.hostname, base_port) == (req_p.scheme, req_p.hostname, req_port):
+                headers["Authorization"] = f"Bearer {active_session.access_token}"
+                if active_session.organization_id:
+                    headers["X-Organization-ID"] = active_session.organization_id
 
         req = urllib.request.Request(url, data=req_data, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(req, timeout=3.0) as resp:
+            with self._opener.open(req, timeout=3.0) as resp:
                 resp_text = resp.read().decode("utf-8")
-                return json.loads(resp_text) if resp_text else {}
+                if not resp_text:
+                    return {}
+                try:
+                    return json.loads(resp_text)
+                except Exception as exc:
+                    raise LinguaLensApiError("API request returned malformed JSON response.") from None
+        except urllib.error.HTTPError as exc:
+            # Map status codes to specific errors without exposing clinical body or tokens
+            if exc.code == 401:
+                self._handle_auth_failure(failed_session_generation=session_gen, token_used=token_used)
+                raise LinguaLensAuthError("Authentication failed: HTTP 401 Session expired or invalid token.") from None
+            elif exc.code == 403:
+                raise LinguaLensPermissionError("Permission denied: HTTP 403 Action forbidden for current role.") from None
+            elif exc.code == 409:
+                raise LinguaLensConflictError("Conflict error: HTTP 409 Resource state conflict or concurrent edit.") from None
+            elif exc.code == 429:
+                retry_val = exc.headers.get("Retry-After") if exc.headers else None
+                retry_sec = _parse_retry_after(retry_val)
+                raise LinguaLensRateLimitError(
+                    "Rate limit exceeded: HTTP 429 Too many requests. Retry later.",
+                    retry_after_seconds=retry_sec,
+                ) from None
+            elif exc.code >= 500:
+                raise LinguaLensServerError(f"Server error: HTTP {exc.code} Internal server failure.") from None
+            else:
+                raise LinguaLensApiError(f"API request failed: HTTP {exc.code}.") from None
+        except urllib.error.URLError as exc:
+            raise LinguaLensApiError("API connection failed. Service is currently unavailable.") from None
+        except LinguaLensApiError:
+            raise
         except Exception as exc:
-            raise RuntimeError(f"API request failed: {exc}") from exc
+            raise LinguaLensApiError("API request failed unexpectedly.") from None
+
+
 
     def check_health(self) -> bool:
         """Check if backend API is reachable."""
@@ -172,24 +442,96 @@ class LinguaLensClient:
     # Cases
     def list_cases(self) -> list[dict[str, Any]]:
         if not self.mock_mode:
-            try:
-                return self._http_request("GET", "/cases")
-            except Exception:
-                pass
+            return self._http_request("GET", "/cases")
         return self._mock_data["cases"]
 
-    def create_case(self, child_id: str, birth_year_month: str, primary_language: str = "th", notes: str = "") -> dict[str, Any]:
+    def create_case(
+        self,
+        child_code: str | None = None,
+        age_months: int | str | None = None,
+        language: str = "th",
+        notes: str = "",
+        *,
+        child_id: str | None = None,
+        birth_year_month: str | None = None,
+        primary_language: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a legacy case using the backend's canonical ``/cases`` contract.
+
+        The API accepts ``child_code``, ``age_months``, ``language`` and ``notes``
+        and returns ``case_id``.  The keyword/positional birth-month form is kept
+        only as an explicit offline compatibility path for older GUI/demo callers;
+        it is validated and never translated or sent to the live API.
+        """
+        legacy_shape = (
+            child_id is not None
+            or birth_year_month is not None
+            or primary_language is not None
+            or isinstance(age_months, str)
+        )
+        if legacy_shape:
+            legacy_child_id = child_id if child_id is not None else child_code
+            legacy_birth_month = birth_year_month if birth_year_month is not None else age_months
+            legacy_language = primary_language if primary_language is not None else language
+            if not isinstance(legacy_child_id, str) or not isinstance(legacy_birth_month, str):
+                raise LinguaLensApiError(
+                    "Legacy case creation requires child_id and birth_year_month; no age conversion was performed."
+                )
+            return self._create_case_from_birth_year_month(
+                child_id=legacy_child_id,
+                birth_year_month=legacy_birth_month,
+                primary_language=legacy_language,
+                notes=notes,
+            )
+
+        if not isinstance(child_code, str) or not child_code.strip():
+            raise LinguaLensApiError("Case creation requires a non-empty child_code.")
+        if not isinstance(age_months, int) or isinstance(age_months, bool) or not 0 <= age_months <= 240:
+            raise LinguaLensApiError("Case creation requires age_months as an integer from 0 through 240.")
+        if not isinstance(language, str) or not language.strip():
+            raise LinguaLensApiError("Case creation requires a non-empty language.")
+        if not isinstance(notes, str):
+            raise LinguaLensApiError("Case creation notes must be text.")
+
         payload = {
-            "child_id": child_id,
-            "birth_year_month": birth_year_month,
-            "primary_language": primary_language,
-            "clinical_notes": notes,
+            "child_code": child_code,
+            "age_months": age_months,
+            "language": language,
+            "notes": notes,
         }
         if not self.mock_mode:
-            try:
-                return self._http_request("POST", "/cases", payload)
-            except Exception:
-                pass
+            return self._http_request("POST", "/cases", payload)
+        new_case = {
+            "case_id": f"case-local-{len(self._mock_data['cases']) + 1:03d}",
+            "child_code": child_code,
+            "age_months": age_months,
+            "language": language,
+            "notes": notes,
+            "status": "active",
+            "session_count": 0,
+        }
+        self._mock_data["cases"].append(new_case)
+        self._mock_data["sessions"][new_case["case_id"]] = []
+        return new_case
+
+    def _create_case_from_birth_year_month(
+        self,
+        *,
+        child_id: str,
+        birth_year_month: str,
+        primary_language: str,
+        notes: str,
+    ) -> dict[str, Any]:
+        """Validate the retired birth-month shape without guessing an age."""
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", birth_year_month):
+            raise LinguaLensApiError(
+                "Invalid birth_year_month; expected YYYY-MM with a month from 01 through 12."
+            )
+        if not self.mock_mode:
+            raise LinguaLensUnsupportedOperationError(
+                "The live /cases API requires child_code, age_months, language and notes; "
+                "birth_year_month cannot be converted without an explicit age."
+            )
         new_case = {
             "case_id": f"case-local-{len(self._mock_data['cases']) + 1:03d}",
             "child_id": child_id,
@@ -204,29 +546,51 @@ class LinguaLensClient:
         return new_case
 
     # Sessions
-    def list_sessions(self, case_id: str) -> list[dict[str, Any]]:
+    def get_session_detail(self, session_id: str) -> dict[str, Any]:
+        """Retrieve clinical therapy session details (GET /sessions/{session_id}).
+
+        Note: Distinct from auth get_session() which retrieves ClientSession credentials.
+        """
         if not self.mock_mode:
-            try:
-                case_detail = self._http_request("GET", f"/cases/{case_id}")
-                if "sessions" in case_detail:
-                    return case_detail["sessions"]
-            except Exception:
-                pass
+            sess = self._http_request("GET", f"/sessions/{session_id}")
+            if not isinstance(sess, dict) or "session_id" not in sess:
+                raise LinguaLensApiError("Malformed API response: invalid session detail object.")
+            return sess
+        for s_list in self._mock_data["sessions"].values():
+            for s in s_list:
+                if s.get("session_id") == session_id:
+                    return s
+        raise LinguaLensApiError(f"Session '{session_id}' not found.")
+
+    def list_sessions(self, case_id: str) -> list[dict[str, Any]]:
+        """List sessions for a case by querying /cases/{case_id}/timeline and resolving session details."""
+        if not self.mock_mode:
+            timeline = self._http_request("GET", f"/cases/{case_id}/timeline")
+            if not isinstance(timeline, list):
+                raise LinguaLensApiError("Malformed API response: expected list from case timeline.")
+            sessions = []
+            for idx, event in enumerate(timeline, 1):
+                if not isinstance(event, dict) or "target_id" not in event:
+                    continue
+                session_id = event["target_id"]
+                sess = self.get_session_detail(session_id)
+                sess_copy = dict(sess)
+                sess_copy.setdefault("session_number", idx)
+                sessions.append(sess_copy)
+            return sessions
         return self._mock_data["sessions"].get(case_id, [])
 
     def create_session(self, case_id: str, session_date: str, notes: str = "") -> dict[str, Any]:
-        payload = {"session_date": session_date, "notes": notes}
+        payload = {"session_date": session_date, "session_type": "therapy_session", "notes": notes}
         if not self.mock_mode:
-            try:
-                return self._http_request("POST", f"/cases/{case_id}/sessions", payload)
-            except Exception:
-                pass
+            return self._http_request("POST", f"/cases/{case_id}/sessions", payload)
         existing = self._mock_data["sessions"].setdefault(case_id, [])
         new_sess = {
             "session_id": f"sess-local-{case_id[-3:]}-{len(existing) + 1:02d}",
             "case_id": case_id,
             "session_date": session_date,
             "session_number": len(existing) + 1,
+            "session_type": "therapy_session",
             "status": "Intake",
             "transcript_id": None,
             "feature_set_id": None,
@@ -239,10 +603,16 @@ class LinguaLensClient:
     # Transcripts
     def get_session_transcript(self, session_id: str) -> dict[str, Any] | None:
         if not self.mock_mode:
+            sess = self.get_session_detail(session_id)
+            tr_id = sess.get("transcript_id") if isinstance(sess, dict) else None
+            if not tr_id:
+                return None
             try:
                 return self._http_request("GET", f"/sessions/{session_id}/transcript")
-            except Exception:
-                pass
+            except LinguaLensApiError as exc:
+                if "404" in str(exc):
+                    return None
+                raise
         for tr in self._mock_data["transcripts"].values():
             if tr.get("session_id") == session_id:
                 return tr
@@ -250,8 +620,6 @@ class LinguaLensClient:
 
     def ingest_transcript_text(self, session_id: str, text: str) -> dict[str, Any]:
         """Convert raw dialogue lines or CHAT file text to transcript without synthetic timestamps."""
-        from packages.cha.parser import parse_cha_text
-
         parsed = parse_cha_text(text, file_id=session_id)
         utterances = []
 
@@ -302,10 +670,7 @@ class LinguaLensClient:
             "utterances": utterances,
         }
         if not self.mock_mode:
-            try:
-                return self._http_request("POST", f"/sessions/{session_id}/transcripts/manual", payload)
-            except Exception:
-                pass
+            return self._http_request("POST", f"/sessions/{session_id}/transcripts/manual", payload)
 
         tr_id = f"tr-local-{session_id[-4:]}"
         tr_data = {
@@ -337,6 +702,12 @@ class LinguaLensClient:
         progress_callback: Optional[Any] = None,
     ) -> dict[str, Any]:
         """Ingest audio/video file, extract acoustic profile and speech transcription."""
+        if not self.mock_mode:
+            raise LinguaLensUnsupportedOperationError(
+                "Audio ingestion is unsupported in live thin-client mode. "
+                "Use local mode or backend processing queue."
+            )
+
         from pathlib import Path
         p = Path(audio_path).resolve()
         if not p.exists():
@@ -454,6 +825,10 @@ class LinguaLensClient:
 
     def update_utterance(self, transcript_id: str, utterance_id: str, new_text: str, new_speaker: str) -> dict[str, Any]:
         """Update single utterance text/speaker."""
+        if not self.mock_mode:
+            raise LinguaLensUnsupportedOperationError(
+                "In-place utterance editing is unsupported in live thin-client mode."
+            )
         tr = self._mock_data["transcripts"].get(transcript_id)
         if tr:
             for u in tr["utterances"]:
@@ -468,6 +843,10 @@ class LinguaLensClient:
 
     def auto_refine_speakers(self, transcript_id: str) -> dict[str, Any]:
         """Automatically refine speaker assignments using clinical dialogue turn-taking rules."""
+        if not self.mock_mode:
+            raise LinguaLensUnsupportedOperationError(
+                "Speaker auto-refinement is unsupported in live thin-client mode."
+            )
         tr = self._mock_data["transcripts"].get(transcript_id)
         if tr and "utterances" in tr:
             try:
@@ -482,6 +861,10 @@ class LinguaLensClient:
 
     def swap_speakers(self, transcript_id: str, spk1: str = "CHI", spk2: str = "INV") -> dict[str, Any]:
         """Swap two speaker roles across all utterances in the transcript."""
+        if not self.mock_mode:
+            raise LinguaLensUnsupportedOperationError(
+                "Speaker swapping is unsupported in live thin-client mode."
+            )
         tr = self._mock_data["transcripts"].get(transcript_id)
         if tr and "utterances" in tr:
             for u in tr["utterances"]:
@@ -501,10 +884,7 @@ class LinguaLensClient:
         """Sign-off on transcript review."""
         payload = {"attested_by": therapist_name, "notes": "Attested via LinguaLens TUI"}
         if not self.mock_mode:
-            try:
-                return self._http_request("POST", f"/transcripts/{transcript_id}/attest", payload)
-            except Exception:
-                pass
+            return self._http_request("POST", f"/transcripts/{transcript_id}/attest", payload)
         tr = self._mock_data["transcripts"].get(transcript_id)
         if tr:
             tr["attested"] = True
@@ -520,10 +900,7 @@ class LinguaLensClient:
     # Findings & Comprehensive Features
     def get_findings(self, session_id: str) -> dict[str, Any]:
         if not self.mock_mode:
-            try:
-                return self._http_request("GET", f"/sessions/{session_id}/features")
-            except Exception:
-                pass
+            return self._http_request("GET", f"/sessions/{session_id}/features")
 
         tr = None
         for item in self._mock_data["transcripts"].values():
@@ -691,10 +1068,7 @@ class LinguaLensClient:
     def draft_report(self, session_id: str, prompt_notes: str = "") -> dict[str, Any]:
         payload = {"notes": prompt_notes}
         if not self.mock_mode:
-            try:
-                return self._http_request("POST", f"/sessions/{session_id}/reports/draft", payload)
-            except Exception:
-                pass
+            return self._http_request("POST", f"/sessions/{session_id}/reports/draft", payload)
 
         tr = self.get_session_transcript(session_id)
         if not tr or not tr.get("utterances"):
@@ -747,10 +1121,7 @@ class LinguaLensClient:
             "signed_by": therapist_name,
         }
         if not self.mock_mode:
-            try:
-                return self._http_request("POST", f"/reports/{report_id}/sign-off", payload)
-            except Exception:
-                pass
+            return self._http_request("POST", f"/reports/{report_id}/sign-off", payload)
         rep = self._mock_data["reports"].get(report_id)
         if rep:
             import hashlib
@@ -767,3 +1138,233 @@ class LinguaLensClient:
                     if s["session_id"] == session_id:
                         s["status"] = "Reported"
         return rep or {}
+
+    def get_report(self, report_id: str) -> dict[str, Any] | None:
+        """Get report by ID."""
+        if not self.mock_mode:
+            return self._http_request("GET", f"/reports/{report_id}")
+        return self._mock_data["reports"].get(report_id)
+
+    def get_session_report(self, session_id: str) -> dict[str, Any] | None:
+        """Get report for a given session."""
+        if not self.mock_mode:
+            sess = self.get_session_detail(session_id)
+            rep_id = sess.get("report_id") if isinstance(sess, dict) else None
+            if rep_id:
+                return self.get_report(rep_id)
+            return None
+        for r in self._mock_data["reports"].values():
+            if r.get("session_id") == session_id:
+                return r
+        return None
+
+    # -------------------------------------------------------------------------
+    # Assessment V2 — Stage 1: Child Management, Consent Tracking & Context
+    # -------------------------------------------------------------------------
+
+    def create_child(
+        self,
+        display_code: str,
+        birth_year: int,
+        birth_month: int,
+        language_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Create a new child profile (POST /api/v2/children)."""
+        try:
+            norm = validate_child_input(display_code, birth_year, birth_month, language_context)
+        except ValueError as exc:
+            raise LinguaLensValidationError(str(exc)) from exc
+
+        if not self.mock_mode:
+            return self._http_request("POST", "/api/v2/children", norm)
+
+        if "children" not in self._mock_data:
+            self._mock_data["children"] = []
+        new_child = {
+            "id": f"child-local-{len(self._mock_data['children']) + 1:04d}",
+            "display_code": norm["display_code"],
+            "birth_year": norm["birth_year"],
+            "birth_month": norm["birth_month"],
+            "language_context": norm["language_context"],
+            "version": 1,
+        }
+        self._mock_data["children"].append(new_child)
+        return new_child
+
+    def get_child(self, child_id: str) -> dict[str, Any]:
+        """Retrieve child profile (GET /api/v2/children/{child_id})."""
+        if not self.mock_mode:
+            return self._http_request("GET", f"/api/v2/children/{child_id}")
+
+        for c in self._mock_data.get("children", []):
+            if c.get("id") == child_id or c.get("display_code") == child_id:
+                return c
+        raise LinguaLensApiError(f"Child '{child_id}' not found.")
+
+    def list_children(self) -> list[dict[str, Any]]:
+        """List all child profiles (GET /api/v2/children)."""
+        if not self.mock_mode:
+            return self._http_request("GET", "/api/v2/children")
+        return list(self._mock_data.get("children", []))
+
+    def record_consent(
+        self,
+        child_id: str,
+        purpose: str = "clinical_assessment",
+        scope_version: str = "2026.1",
+        status: str = "active",
+    ) -> dict[str, Any]:
+        """Record or grant consent for a child (POST /api/v2/children/{child_id}/consents)."""
+        try:
+            norm = validate_consent_input(child_id, purpose, scope_version, status)
+        except ValueError as exc:
+            raise LinguaLensValidationError(str(exc)) from exc
+
+        clean_child_id = norm["child_id"]
+        payload = {
+            "purpose": norm["purpose"],
+            "scope_version": norm["scope_version"],
+            "status": norm["status"],
+        }
+        if not self.mock_mode:
+            return self._http_request("POST", f"/api/v2/children/{clean_child_id}/consents", payload)
+
+        # In mock mode, verify child exists first
+        self.get_child(clean_child_id)
+
+        if "consents" not in self._mock_data:
+            self._mock_data["consents"] = {}
+        if clean_child_id not in self._mock_data["consents"]:
+            self._mock_data["consents"][clean_child_id] = []
+
+        now_iso = self._get_now().strftime("%Y-%m-%dT%H:%M:%SZ")
+        purpose_consents = [
+            c for c in self._mock_data["consents"][clean_child_id]
+            if c.get("purpose") == norm["purpose"]
+        ]
+        version_num = max((c.get("version", 0) for c in purpose_consents), default=0) + 1
+        new_consent = {
+            "id": f"consent-local-{version_num:04d}",
+            "child_id": clean_child_id,
+            "purpose": norm["purpose"],
+            "scope_version": norm["scope_version"],
+            "status": norm["status"],
+            "granted_at": now_iso,
+            "withdrawn_at": None if norm["status"] == "active" else now_iso,
+            "version": version_num,
+        }
+        self._mock_data["consents"][clean_child_id].append(new_consent)
+        return new_consent
+
+    def list_consents(self, child_id: str) -> list[dict[str, Any]]:
+        """List all consent records for a child (GET /api/v2/children/{child_id}/consents)."""
+        if not self.mock_mode:
+            return self._http_request("GET", f"/api/v2/children/{child_id}/consents")
+        consents = list(self._mock_data.get("consents", {}).get(child_id, []))
+        return sorted(consents, key=lambda c: c.get("version", 0), reverse=True)
+
+    def get_active_consent(self, child_id: str) -> dict[str, Any] | None:
+        """Find the active clinical-assessment consent for a child per repository semantics.
+
+        Queries consent history ordered by latest version. If the latest record for
+        purpose 'clinical_assessment' has status 'active', returns it; if absent or
+        withdrawn, returns None.
+        """
+        consents = self.list_consents(child_id)
+        if not consents:
+            return None
+        matching = [c for c in consents if c.get("purpose") == "clinical_assessment"]
+        if not matching:
+            return None
+        sorted_consents = sorted(
+            enumerate(matching),
+            key=lambda item: (item[1].get("version", 0), item[0]),
+            reverse=True,
+        )
+        latest = sorted_consents[0][1]
+        if latest.get("status") == "active":
+            return latest
+        return None
+
+    def create_assessment(
+        self,
+        child_id: str,
+        purpose: str = "initial",
+        assigned_clinician_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new clinical assessment context (POST /api/v2/children/{child_id}/assessments)."""
+        try:
+            norm = validate_assessment_input(child_id, purpose, assigned_clinician_id)
+        except ValueError as exc:
+            raise LinguaLensValidationError(str(exc)) from exc
+
+        clean_child_id = norm["child_id"]
+        payload: dict[str, Any] = {"purpose": norm["purpose"]}
+        if norm["assigned_clinician_id"]:
+            payload["assigned_clinician_id"] = norm["assigned_clinician_id"]
+
+        if not self.mock_mode:
+            return self._http_request("POST", f"/api/v2/children/{clean_child_id}/assessments", payload)
+
+        # In mock mode, verify child exists
+        child = self.get_child(clean_child_id)
+
+        # In mock mode, enforce active consent gate
+        active_consent = self.get_active_consent(clean_child_id)
+        if not active_consent:
+            raise LinguaLensConflictError("Active clinical-assessment consent is required.")
+
+        # In mock mode, calculate age canonically from child birth date and current clock
+        try:
+            age_months = calculate_age_in_months(
+                child["birth_year"], child["birth_month"], current_date=self._get_now()
+            )
+        except ValueError as exc:
+            raise LinguaLensApiError(str(exc)) from exc
+
+        # Inherit language_context from child
+        child_lang = child.get("language_context")
+        if isinstance(child_lang, dict):
+            lang_ctx = dict(child_lang)
+        else:
+            lang_ctx = {"primary": "th", "additional": []}
+
+        if "assessments" not in self._mock_data:
+            self._mock_data["assessments"] = {}
+        if clean_child_id not in self._mock_data["assessments"]:
+            self._mock_data["assessments"][clean_child_id] = []
+
+        new_asmt = {
+            "id": f"asmt-local-{len(self._mock_data['assessments'][clean_child_id]) + 1:04d}",
+            "child_id": clean_child_id,
+            "purpose": norm["purpose"],
+            "state": "draft",
+            "age_months": age_months,
+            "language_context": lang_ctx,
+            "assigned_clinician_id": norm["assigned_clinician_id"] or "therapist-mock",
+            "version": 1,
+        }
+        self._mock_data["assessments"][clean_child_id].append(new_asmt)
+        return new_asmt
+
+    def list_assessments(self, child_id: str) -> list[dict[str, Any]]:
+        """List assessments for a child (GET /api/v2/children/{child_id}/assessments)."""
+        if not self.mock_mode:
+            res = self._http_request("GET", f"/api/v2/children/{child_id}/assessments")
+            if not isinstance(res, list):
+                raise LinguaLensApiError(
+                    f"Malformed response from list_assessments: expected list, got {type(res).__name__}"
+                )
+            return res
+        return list(self._mock_data.get("assessments", {}).get(child_id, []))
+
+    def get_assessment(self, assessment_id: str) -> dict[str, Any]:
+        """Retrieve assessment detail (GET /api/v2/assessments/{assessment_id})."""
+        if not self.mock_mode:
+            return self._http_request("GET", f"/api/v2/assessments/{assessment_id}")
+
+        for child_asmts in self._mock_data.get("assessments", {}).values():
+            for a in child_asmts:
+                if a.get("id") == assessment_id:
+                    return a
+        raise LinguaLensApiError(f"Assessment '{assessment_id}' not found.")

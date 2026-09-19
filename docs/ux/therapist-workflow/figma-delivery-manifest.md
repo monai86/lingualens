@@ -57,6 +57,31 @@ hashes, and version freeze are complete. The current state is intentionally
 visible as `working skeleton` so downstream frontend work cannot mistake it for
 a validated clinical interface specification.
 
+## A2 segment-review handoff delta
+
+The local developer handoff now adds the following logical frames to the
+existing `H11` transcript-review family. These are contract frames for the
+frontend/API implementation; they are not claims that the remote Figma file was
+mutated or exported.
+
+| logical frame | purpose | required visible state | FastAPI binding | local implementation |
+|---|---|---|---|---|
+| `H11-S` | Full segment timeline | Ordered offsets, speaker role, text, confidence, uncertainty label, revision/version | `GET /assessments/{id}/transcript-segment-set` | `AssessmentSegmentReviewWorkspace` timeline |
+| `H11-U` | Uncertain-only focus | Filter count, explicit zero-match state, selected segment remains keyboard reachable | Same GET; client-side filter only | `uncertainOnly` view |
+| `H11-E` | Focused edit | Text, speaker, offsets, confidence, uncertainty reason, dirty state, save revision | `POST /assessments/{id}/transcript-segment-sets` | Focused editor and expected revision/version |
+| `H11-R` | Replay available/unavailable | Short-lived player or explicit unavailable message | `POST /transcript-segments/{id}/audio-replay-grant` | Signed grant player / non-fatal fallback |
+| `H11-A` | Attestation | Explicit checkbox, disabled while dirty, server-confirmed state | `POST /transcript-segment-sets/{id}/attest` | Segment attestation panel |
+| `E11` | Revision conflict | No silent merge, reload latest action, preserved server revision | `409 stale_segment_set_version` | Conflict alert + reload |
+
+### Figma mutation and export status
+
+No remote Figma mutation was performed in A2 because the previously recorded
+MCP allowance is exhausted. The manifest, frame inventory, and API-screen map
+are the source-controlled handoff for the next authenticated Figma session.
+The existing `working skeleton` status remains unchanged; no export hash is
+invented and no frame is marked accepted without Presentation-mode and
+accessibility evidence.
+
 ## A1 durable processing-state delta
 
 The local contract now specifies the H10/H11/E07/E09 states for queued,
@@ -67,3 +92,20 @@ Presentation-mode walkthrough, accessibility inspection, synthetic export and
 freeze evidence before those states can be marked accepted. This manifest
 therefore remains `working skeleton`; local documentation must not be treated
 as proof that the Figma nodes were updated.
+
+## Antigravity U1 Handoff & Remote Delivery Boundary
+
+As of 2026-09-12, the remote Figma environment lacks authenticated credentials
+and MCP connectivity in this local execution runtime. In accordance with Section
+5 of the master roadmap:
+- **Remote delivery status**: `blocked` (authentication/MCP unavailable locally).
+- **Local wireframes & specs**: Completed in `docs/ux/therapist-workflow/wireframes-and-screen-specs.md` covering all 5 therapist workflow steps, B/C comparison frames (`H14-NoHistory`, `H14-Incompatible`, `H14-Compatible`), clinician attention cues (`H15`), disposition drafting (`H18`), sign-off guards (`E18`), and immutable signed export (`H19`).
+- **Checklist for next authenticated Figma session**:
+  1. Authenticate with Figma API / MCP using therapist design account.
+  2. Create/update node tree for `H12`–`H19` and `E18` per `wireframes-and-screen-specs.md`.
+  3. Wire interactive prototype transitions for Steps 1–5 including error branches.
+  4. Perform keyboard navigation & WCAG contrast audit on Thai text elements.
+  5. Export 11 planned synthetic figures to `docs/ux/therapist-workflow/exports/`.
+  6. Compute SHA-256 hashes of all exports and update the planned export set table in this manifest.
+  7. Transition status from `working skeleton` to `accepted`.
+

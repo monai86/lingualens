@@ -43,6 +43,16 @@ TABLES = (
     "evidence_runs",
     "evidence_feature_values",
     "evidence_domain_profiles",
+    "transcript_segment_sets",
+    "transcript_segments",
+    "assessment_observations",
+    "assessment_instruments",
+    "assessment_instrument_items",
+    "assessment_comparisons",
+    "assessment_comparison_features",
+    "assessment_clinical_reviews",
+    "assessment_attention_cues",
+    "assessment_reports",
 )
 
 
@@ -148,6 +158,11 @@ def _transfer_assessment_ownership(database_url: URL, role_name: str) -> None:
 
     with psycopg.connect(_psycopg_url(database_url), autocommit=True) as connection:
         for table_name in (*TABLES, "alembic_version"):
+            if connection.execute(
+                "SELECT to_regclass(%s)",
+                (f"public.{table_name}",),
+            ).fetchone()[0] is None:
+                continue
             connection.execute(
                 sql.SQL("ALTER TABLE {} OWNER TO {}")
                 .format(sql.Identifier(table_name), sql.Identifier(role_name))
@@ -250,6 +265,95 @@ def _seed_probe_membership(database_url: URL) -> None:
         )
 
 
+def _seed_secondary_membership(database_url: URL) -> None:
+    """Create an authenticated second tenant for the cross-tenant denial probe."""
+
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            "INSERT INTO organizations "
+            "(organization_id, display_label, active, created_at, updated_at) "
+            "VALUES (%s, %s, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            ("native-check-second-org", "Synthetic Second Organization"),
+        )
+        connection.execute(
+            "INSERT INTO user_profiles "
+            "(user_id, display_label, created_at, updated_at) "
+            "VALUES (%s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            ("native-check-second-therapist", "Synthetic Second Therapist"),
+        )
+        connection.execute(
+            "INSERT INTO organization_memberships "
+            "(membership_id, organization_id, user_id, role, active, created_at, updated_at) "
+            "VALUES (%s, %s, %s, %s, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            (
+                "native-check-second-membership",
+                "native-check-second-org",
+                "native-check-second-therapist",
+                "therapist",
+            ),
+        )
+
+
+def _seed_verified_recording(database_url: URL, assessment_id: str) -> str:
+    """Seed verified metadata without placing media bytes in the native check."""
+
+    recording_id = f"native-check-recording-{uuid4().hex[:12]}"
+    checksum = "sha256:" + ("1" * 64)
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            "SELECT set_config('app.current_organization_id', %s, true)",
+            ("native-check-org",),
+        )
+        connection.execute(
+            "SELECT set_config('app.current_user_id', %s, true)",
+            ("native-check-therapist",),
+        )
+        connection.execute(
+            "INSERT INTO recordings "
+            "(recording_id, organization_id, assessment_id, protocol_version_key, activity_key, "
+            "declared_content_type, declared_size_bytes, declared_checksum, object_key, upload_state, "
+            "expires_at, verified_content_type, verified_size_bytes, verified_checksum, verified_at, "
+            "version, created_at, updated_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'verified', "
+            "CURRENT_TIMESTAMP + INTERVAL '1 hour', %s, %s, %s, CURRENT_TIMESTAMP, 2, "
+            "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            (
+                recording_id,
+                "native-check-org",
+                assessment_id,
+                "thai_guided_language_sample:v0",
+                "free_play",
+                "audio/wav",
+                128,
+                checksum,
+                f"capture/{recording_id}",
+                "audio/wav",
+                128,
+                checksum,
+            ),
+        )
+    return recording_id
+
+
+def _withdraw_probe_consent(database_url: URL, assessment_id: str) -> None:
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            "SELECT set_config('app.current_organization_id', %s, true)",
+            ("native-check-org",),
+        )
+        result = connection.execute(
+            "UPDATE consent_records "
+            "SET status = 'withdrawn', withdrawn_at = CURRENT_TIMESTAMP, "
+            "version = version + 1, updated_at = CURRENT_TIMESTAMP "
+            "WHERE organization_id = %s "
+            "AND child_id = (SELECT child_id FROM assessments WHERE assessment_id = %s) "
+            "AND purpose = 'clinical_assessment' AND status = 'active'",
+            ("native-check-org", assessment_id),
+        )
+        if result.rowcount != 1:
+            raise RuntimeError("Native consent denial probe could not withdraw the synthetic consent.")
+
+
 def _api_environment(database_url: URL) -> dict[str, str]:
     environment = os.environ.copy()
     environment.update(
@@ -275,12 +379,17 @@ def _worker_environment(database_url: URL, organization_id: str) -> dict[str, st
     return environment
 
 
-def _request_headers() -> dict[str, str]:
+def _request_headers(
+    *,
+    user_id: str = "native-check-therapist",
+    role: str = "therapist",
+    organization_id: str = "native-check-org",
+) -> dict[str, str]:
     return {
         "Content-Type": "application/json",
-        "X-Mock-User-Id": "native-check-therapist",
-        "X-Mock-Role": "therapist",
-        "X-Organization-Id": "native-check-org",
+        "X-Mock-User-Id": user_id,
+        "X-Mock-Role": role,
+        "X-Organization-Id": organization_id,
         "X-Request-Id": "0123456789abcdef0123456789abcdef",
     }
 
@@ -291,13 +400,17 @@ def _request_json(
     *,
     method: str = "GET",
     payload: dict[str, object] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> tuple[int, object]:
     body = json.dumps(payload).encode() if payload is not None else None
+    request_headers = _request_headers()
+    if headers is not None:
+        request_headers.update(headers)
     request = Request(
         f"http://127.0.0.1:{port}{path}",
         method=method,
         data=body,
-        headers=_request_headers(),
+        headers=request_headers,
     )
     try:
         with urlopen(request, timeout=10) as response:
@@ -305,6 +418,37 @@ def _request_json(
     except HTTPError as error:
         body = error.read().decode("utf-8", errors="replace")
         raise NativeHTTPError(error.code, body) from error
+
+
+def _expect_denied(
+    port: int,
+    path: str,
+    *,
+    status_code: int,
+    expected_code: str | None = None,
+    method: str = "GET",
+    payload: dict[str, object] | None = None,
+    headers: dict[str, str] | None = None,
+) -> None:
+    try:
+        _request_json(
+            port,
+            path,
+            method=method,
+            payload=payload,
+            headers=headers,
+        )
+    except NativeHTTPError as error:
+        if error.status_code != status_code:
+            raise RuntimeError(
+                f"Expected HTTP {status_code} for {path}, got {error.status_code}: {error.body[:300]}"
+            ) from error
+        if expected_code is not None and expected_code not in error.body:
+            raise RuntimeError(
+                f"Expected error code {expected_code} for {path}, got {error.body[:300]}"
+            ) from error
+        return
+    raise RuntimeError(f"Expected denied request for {path}, but it succeeded.")
 
 
 def _start_api(database_url: URL, port: int):
@@ -370,6 +514,28 @@ def _prepare_transcript_state(database_url: URL, assessment_id: str) -> None:
         )
         if result.rowcount != 1:
             raise RuntimeError("Native v2 synthetic assessment was not found.")
+
+
+def _set_probe_care_team_role(database_url: URL, assessment_id: str, role: str) -> None:
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            "SELECT set_config('app.current_organization_id', %s, true)",
+            ("native-check-org",),
+        )
+        connection.execute(
+            "SELECT set_config('app.current_user_id', %s, true)",
+            ("native-check-therapist",),
+        )
+        result = connection.execute(
+            "UPDATE care_team_assignments "
+            "SET role = %s, updated_at = CURRENT_TIMESTAMP "
+            "WHERE organization_id = %s "
+            "AND child_id = (SELECT child_id FROM assessments WHERE assessment_id = %s) "
+            "AND user_id = %s AND active = true",
+            (role, "native-check-org", assessment_id, "native-check-therapist"),
+        )
+        if result.rowcount != 1:
+            raise RuntimeError("Native care-team role probe could not update the synthetic assignment.")
 
 
 def _probe_v2(port: int, database_url: URL) -> str:
@@ -445,6 +611,28 @@ def _probe_v2(port: int, database_url: URL) -> str:
     if status_code != 201 or not isinstance(transcript, dict):
         raise RuntimeError(f"Native v2 transcript creation returned HTTP {status_code}.")
     transcript_id = transcript["id"]
+    _expect_denied(
+        port,
+        f"/api/v2/assessments/{assessment_id}/transcript-segment-sets",
+        status_code=409,
+        expected_code="transcript_not_reviewable",
+        method="POST",
+        payload={
+            "transcript_revision_id": transcript_id,
+            "source": "manual",
+            "segments": [
+                {
+                    "ordinal": 1,
+                    "start_ms": 0,
+                    "end_ms": 900,
+                    "speaker_role": "child",
+                    "text": "draft .",
+                    "confidence": 0.9,
+                    "uncertainty_reason": "none",
+                }
+            ],
+        },
+    )
     status_code, attested = _request_json(
         port,
         f"/api/v2/transcript-revisions/{transcript_id}/attest",
@@ -454,6 +642,165 @@ def _probe_v2(port: int, database_url: URL) -> str:
     if status_code != 200 or not isinstance(attested, dict) or attested["review_state"] != "attested":
         raise RuntimeError(f"Native v2 transcript attestation returned HTTP {status_code}.")
     return assessment_id
+
+
+def _probe_segment_workflow(
+    port: int,
+    database_url: URL,
+    assessment_id: str,
+    recording_id: str,
+) -> dict[str, str]:
+    """Exercise immutable segment revisions, bounded replay and evidence provenance inputs."""
+
+    status_code, transcript = _request_json(
+        port,
+        f"/api/v2/assessments/{assessment_id}/transcript",
+    )
+    if status_code != 200 or not isinstance(transcript, dict):
+        raise RuntimeError(f"Native transcript read returned HTTP {status_code}.")
+
+    first_segments = [
+        {
+            "ordinal": 1,
+            "start_ms": 0,
+            "end_ms": 1200,
+            "speaker_role": "child",
+            "text": "red car .",
+            "confidence": 0.98,
+            "uncertainty_reason": "none",
+        },
+        {
+            "ordinal": 2,
+            "start_ms": 1200,
+            "end_ms": 2200,
+            "speaker_role": "unknown",
+            "text": "red .",
+            "confidence": 0.42,
+            "uncertainty_reason": "speaker_uncertain",
+        },
+    ]
+    status_code, draft_v1 = _request_json(
+        port,
+        f"/api/v2/assessments/{assessment_id}/transcript-segment-sets",
+        method="POST",
+        payload={
+            "transcript_revision_id": transcript["id"],
+            "source": "manual",
+            "segments": first_segments,
+        },
+    )
+    if (
+        status_code != 201
+        or not isinstance(draft_v1, dict)
+        or draft_v1.get("revision") != 1
+        or draft_v1.get("review_state") != "draft"
+    ):
+        raise RuntimeError(f"Native segment draft v1 returned HTTP {status_code}.")
+
+    _set_probe_care_team_role(database_url, assessment_id, "observer")
+    try:
+        _expect_denied(
+            port,
+            f"/api/v2/assessments/{assessment_id}/transcript-segment-sets",
+            status_code=403,
+            expected_code="segment_role_not_permitted",
+            method="POST",
+            payload={
+                "transcript_revision_id": transcript["id"],
+                "source": "manual",
+                "segments": first_segments,
+            },
+        )
+    finally:
+        _set_probe_care_team_role(database_url, assessment_id, "assigned_clinician")
+
+    status_code, attested_v1 = _request_json(
+        port,
+        f"/api/v2/transcript-segment-sets/{draft_v1['id']}/attest",
+        method="POST",
+        payload={"expected_version": draft_v1["version"]},
+    )
+    if (
+        status_code != 200
+        or not isinstance(attested_v1, dict)
+        or attested_v1.get("review_state") != "attested"
+    ):
+        raise RuntimeError(f"Native segment attestation v1 returned HTTP {status_code}.")
+
+    status_code, replay = _request_json(
+        port,
+        f"/api/v2/transcript-segments/{attested_v1['segments'][0]['id']}/audio-replay-grant",
+        method="POST",
+    )
+    if (
+        status_code != 200
+        or not isinstance(replay, dict)
+        or replay.get("available") is not False
+        or replay.get("start_ms") != 0
+        or replay.get("end_ms") != 1200
+        or replay.get("url") is not None
+    ):
+        raise RuntimeError("Native replay grant did not fail closed for unavailable audio.")
+
+    edited_segments = [
+        {**first_segments[0]},
+        {
+            **first_segments[1],
+            "speaker_role": "child",
+            "uncertainty_reason": "none",
+        },
+    ]
+    status_code, draft_v2 = _request_json(
+        port,
+        f"/api/v2/assessments/{assessment_id}/transcript-segment-sets",
+        method="POST",
+        payload={
+            "transcript_revision_id": transcript["id"],
+            "source": "manual",
+            "recording_id": recording_id,
+            "expected_revision": draft_v1["revision"],
+            "expected_version": attested_v1["version"],
+            "segments": edited_segments,
+        },
+    )
+    if (
+        status_code != 201
+        or not isinstance(draft_v2, dict)
+        or draft_v2.get("revision") != 2
+        or draft_v2.get("recording_id") != recording_id
+        or draft_v2.get("segments", [None, None])[1]["uncertainty_reason"] != "none"
+    ):
+        raise RuntimeError(f"Native segment edit v2 returned HTTP {status_code}.")
+
+    status_code, attested_v2 = _request_json(
+        port,
+        f"/api/v2/transcript-segment-sets/{draft_v2['id']}/attest",
+        method="POST",
+        payload={"expected_version": draft_v2["version"]},
+    )
+    if (
+        status_code != 200
+        or not isinstance(attested_v2, dict)
+        or attested_v2.get("review_state") != "attested"
+    ):
+        raise RuntimeError(f"Native segment attestation v2 returned HTTP {status_code}.")
+
+    status_code, current = _request_json(
+        port,
+        f"/api/v2/assessments/{assessment_id}/transcript-segment-set",
+    )
+    if (
+        status_code != 200
+        or not isinstance(current, dict)
+        or current.get("id") != draft_v2["id"]
+        or current.get("review_state") != "attested"
+    ):
+        raise RuntimeError(f"Native current segment set returned HTTP {status_code}.")
+    return {
+        "id": str(current["id"]),
+        "sha256": str(current["segments_sha256"]),
+        "transcript_id": str(transcript["id"]),
+    }
 
 
 def _start_worker(database_url: URL, organization_id: str):
@@ -564,6 +911,7 @@ def main() -> int:
         _configure_application_role(admin_url, database_name, role_name, role_password)
         _transfer_assessment_ownership(owner_url, role_name)
         _seed_probe_membership(limited_url)
+        _seed_secondary_membership(owner_url)
 
         port = _free_port()
         process, log_file = _start_api(limited_url, port)
@@ -588,6 +936,9 @@ def main() -> int:
         port = _free_port()
         process, log_file = _start_api(limited_url, port)
         _wait_for_api(process, log_file, port)
+
+        recording_id = _seed_verified_recording(limited_url, assessment_id)
+        segment_context = _probe_segment_workflow(port, limited_url, assessment_id, recording_id)
 
         status_code, queued = _request_json(
             port,
@@ -616,8 +967,12 @@ def main() -> int:
             or not isinstance(evidence, dict)
             or evidence.get("not_diagnostic") is not True
             or evidence.get("decision_support_only") is not True
+            or evidence.get("segment_set_id") != segment_context["id"]
+            or evidence.get("segment_set_sha256") != segment_context["sha256"]
         ):
-            raise RuntimeError(f"Native evidence read returned HTTP {status_code} or an unsafe profile.")
+            raise RuntimeError(
+                f"Native evidence read returned HTTP {status_code}, unsafe profile, or missing segment provenance."
+            )
 
         status_code, repeated = _request_json(
             port,
@@ -633,6 +988,69 @@ def main() -> int:
         ):
             raise RuntimeError("Native evidence enqueue was not idempotent.")
 
+        # second-tenant denial: an authenticated therapist from another tenant
+        # must not learn whether this assessment has a current segment set.
+        _expect_denied(
+            port,
+            f"/api/v2/assessments/{assessment_id}/transcript-segment-set",
+            status_code=404,
+            headers=_request_headers(
+                user_id="native-check-second-therapist",
+                organization_id="native-check-second-org",
+            ),
+        )
+        # unassigned-role denial: a non-clinical role is rejected before data access.
+        _expect_denied(
+            port,
+            f"/api/v2/assessments/{assessment_id}/transcript-segment-set",
+            status_code=403,
+            expected_code="forbidden",
+            headers=_request_headers(role="observer"),
+        )
+
+        status_code, current_transcript = _request_json(
+            port,
+            f"/api/v2/assessments/{assessment_id}/transcript",
+        )
+        if status_code != 200 or not isinstance(current_transcript, dict):
+            raise RuntimeError(f"Native current transcript read returned HTTP {status_code}.")
+        status_code, superseded = _request_json(
+            port,
+            f"/api/v2/assessments/{assessment_id}/transcript-revisions",
+            method="POST",
+            payload={
+                "source": "manual",
+                "content": "@UTF8\n@Begin\n*CHI:\tred .\n@End\n",
+                "expected_revision": current_transcript["revision"],
+                "expected_version": current_transcript["version"],
+            },
+        )
+        if status_code != 201 or not isinstance(superseded, dict) or superseded.get("review_state") != "draft":
+            raise RuntimeError(f"Native transcript supersession returned HTTP {status_code}.")
+        _expect_denied(
+            port,
+            f"/api/v2/assessments/{assessment_id}/transcript-segment-set",
+            status_code=404,
+            expected_code="segment_set_not_found",
+        )
+        _expect_denied(
+            port,
+            f"/api/v2/assessments/{assessment_id}/evidence-runs",
+            status_code=409,
+            expected_code="transcript_not_reviewable",
+            method="POST",
+            payload={},
+        )
+
+        _withdraw_probe_consent(limited_url, assessment_id)
+        # consent denial: revocation blocks the current segment read even for the assigned therapist.
+        _expect_denied(
+            port,
+            f"/api/v2/assessments/{assessment_id}/transcript-segment-set",
+            status_code=409,
+            expected_code="consent_revoked",
+        )
+
         _stop_api(worker_process, worker_log_file)
         worker_process = None
         worker_log_file = None
@@ -643,8 +1061,9 @@ def main() -> int:
         _run_rls(owner_url)
         print(
             "assessment-v2 native runtime check passed "
-            "(migrations=0007, enqueue=202, worker=evidence_recorded, "
-            "evidence=200, idempotency=202, rls=passed, cleanup=passed)"
+            "(migrations=0012, segments=v2-attested, replay=bounded-unavailable, "
+            "enqueue=202, worker=evidence_recorded, provenance=bound, idempotency=202, "
+            "staleness=blocked, tenant=denied, consent=denied, role=denied, rls=passed, cleanup=passed)"
         )
         return 0
     except Exception:

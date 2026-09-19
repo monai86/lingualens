@@ -7,10 +7,13 @@ from hashlib import sha256
 from app.assessment_v2 import evidence_worker
 from app.assessment_v2.db.repositories import EvidenceWorkItem
 from app.assessment_v2.domain.models import (
+    TranscriptSegmentSpeakerRole,
+    TranscriptSegmentUncertaintyReason,
     TranscriptRevisionSnapshot,
     TranscriptReviewState,
     TranscriptSource,
 )
+from app.assessment_v2.domain.segments import TranscriptSegmentSnapshot, TranscriptSegmentSetSnapshot
 from app.assessment_v2.evidence import EvidenceProvenance, EvidenceState
 from app.assessment_v2.evidence_adapter import AdaptedEvidence
 
@@ -50,6 +53,38 @@ def _item() -> EvidenceWorkItem:
         attempt_count=1,
         max_attempts=3,
         transcript=transcript,
+        segment_set=TranscriptSegmentSetSnapshot(
+            id="segment_set_opaque_01",
+            organization_id=transcript.organization_id,
+            assessment_id=transcript.assessment_id,
+            transcript_revision_id=transcript.id,
+            transcript_content_sha256=transcript.content_sha256,
+            recording_id=None,
+            revision=1,
+            source=TranscriptSource.MANUAL,
+            review_state=TranscriptReviewState.ATTESTED,
+            segments_sha256="b" * 64,
+            segments=(
+                TranscriptSegmentSnapshot(
+                    id="segment_opaque_01",
+                    organization_id=transcript.organization_id,
+                    segment_set_id="segment_set_opaque_01",
+                    ordinal=1,
+                    start_ms=0,
+                    end_ms=900,
+                    speaker_role=TranscriptSegmentSpeakerRole.CHILD,
+                    text="hello .",
+                    confidence=0.99,
+                    uncertainty_reason=TranscriptSegmentUncertaintyReason.NONE,
+                    created_at=datetime(2026, 9, 8, 12, 0, tzinfo=timezone.utc),
+                ),
+            ),
+            created_by_user_id="therapist_opaque_01",
+            created_at=datetime(2026, 9, 8, 12, 0, tzinfo=timezone.utc),
+            attested_by_user_id="therapist_opaque_01",
+            attested_at=datetime(2026, 9, 8, 12, 1, tzinfo=timezone.utc),
+            version=2,
+        ),
     )
 
 
@@ -109,8 +144,8 @@ def test_worker_persists_one_result_for_an_attested_revision(monkeypatch) -> Non
     repository = FakeRepository(_item(), [], [])
     monkeypatch.setattr(
         evidence_worker,
-        "extract_reviewed_transcript",
-        lambda transcript, *, protocol_version_key: object(),
+        "extract_reviewed_segment_set",
+        lambda transcript, segment_set, *, protocol_version_key: object(),
     )
     monkeypatch.setattr(
         evidence_worker,
@@ -135,7 +170,7 @@ def test_worker_commits_the_lease_before_extraction(monkeypatch) -> None:
         repository.events.append("extract")
         return object()
 
-    monkeypatch.setattr(evidence_worker, "extract_reviewed_transcript", extract)
+    monkeypatch.setattr(evidence_worker, "extract_reviewed_segment_set", extract)
     monkeypatch.setattr(
         evidence_worker,
         "adapt_analysis_result",
@@ -152,8 +187,8 @@ def test_worker_preserves_insufficient_data_as_a_completed_job(monkeypatch) -> N
     repository = FakeRepository(_item(), [], [])
     monkeypatch.setattr(
         evidence_worker,
-        "extract_reviewed_transcript",
-        lambda transcript, *, protocol_version_key: object(),
+        "extract_reviewed_segment_set",
+        lambda transcript, segment_set, *, protocol_version_key: object(),
     )
     monkeypatch.setattr(
         evidence_worker,
@@ -174,7 +209,7 @@ def test_worker_marks_retryable_extraction_failure_without_logging_input(monkeyp
     def interrupted(*_args, **_kwargs):
         raise RuntimeError("provider detail must stay out of worker output")
 
-    monkeypatch.setattr(evidence_worker, "extract_reviewed_transcript", interrupted)
+    monkeypatch.setattr(evidence_worker, "extract_reviewed_segment_set", interrupted)
 
     result = _worker(repository).run_once()
 
@@ -188,8 +223,8 @@ def test_worker_reports_cancelled_when_lease_is_no_longer_owned(monkeypatch) -> 
     repository = FakeRepository(_item(), [], [], complete_result=None)
     monkeypatch.setattr(
         evidence_worker,
-        "extract_reviewed_transcript",
-        lambda transcript, *, protocol_version_key: object(),
+        "extract_reviewed_segment_set",
+        lambda transcript, segment_set, *, protocol_version_key: object(),
     )
     monkeypatch.setattr(
         evidence_worker,

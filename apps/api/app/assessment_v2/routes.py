@@ -8,15 +8,18 @@ from fastapi import APIRouter, Depends, Header, Request, status
 
 from app.assessment_v2.dependencies import get_assessment_service
 from app.assessment_v2.domain.models import (
+    AttestTranscriptSegmentSet,
     AttestTranscript,
     CreateChild,
     CreateRecording,
     CreateTranscriptRevision,
+    CreateTranscriptSegmentSet,
     RecordConsent,
     RecordingQualityStatus,
     StartAssessment,
     TransitionAssessment,
 )
+from app.assessment_v2.domain.segments import TranscriptSegment
 from app.assessment_v2.schemas import (
     AssessmentCreateRequest,
     AssessmentResponse,
@@ -48,11 +51,40 @@ from app.assessment_v2.schemas import (
     RecordingQualityResponse,
     RecordingResponse,
     TranscriptAttestRequest,
+    TranscriptSegmentReplayGrantResponse,
+    TranscriptSegmentResponse,
+    TranscriptSegmentSetCreateRequest,
+    TranscriptSegmentSetResponse,
     TranscriptRevisionCreateRequest,
     TranscriptRevisionResponse,
     UploadGrantResponse,
     UploadIntentResponse,
+    ComparisonCreateRequest,
+    FeatureComparisonItemResponse,
+    ComparisonResponse,
+    ChildAssessmentHistoryItemResponse,
+    AttentionCueReviewRequest,
+    AttentionCueResponse,
+    ClinicalDispositionRequest,
+    ClinicalReviewResponse,
+    FollowUpPlanSchema,
+    ReportDraftCreateRequest,
+    ReportDraftUpdateRequest,
+    ReportSignOffRequest,
+    ReportAmendmentCreateRequest,
+    ReportResponse,
+    ReportExportResponse,
 )
+from app.assessment_v2.clinical_review import (
+    AttentionCue,
+    ClinicalReviewSession,
+    FollowUpPlan,
+)
+from app.assessment_v2.db.models import (
+    AssessmentComparisonRecord,
+    AssessmentReportRecord,
+)
+from app.assessment_v2.reports import ReportStatus
 from app.assessment_v2.services import AssessmentService
 
 
@@ -220,12 +252,58 @@ def _transcript_response(value) -> TranscriptRevisionResponse:
     )
 
 
+def _transcript_segment_response(value) -> TranscriptSegmentResponse:
+    return TranscriptSegmentResponse(
+        id=value.id,
+        ordinal=value.ordinal,
+        start_ms=value.start_ms,
+        end_ms=value.end_ms,
+        speaker_role=value.speaker_role,
+        text=value.text,
+        confidence=value.confidence,
+        uncertainty_reason=value.uncertainty_reason,
+        created_at=value.created_at,
+    )
+
+
+def _transcript_segment_set_response(value) -> TranscriptSegmentSetResponse:
+    return TranscriptSegmentSetResponse(
+        id=value.id,
+        assessment_id=value.assessment_id,
+        transcript_revision_id=value.transcript_revision_id,
+        transcript_content_sha256=value.transcript_content_sha256,
+        recording_id=value.recording_id,
+        revision=value.revision,
+        source=value.source,
+        review_state=value.review_state,
+        segments_sha256=value.segments_sha256,
+        segments=[_transcript_segment_response(segment) for segment in value.segments],
+        created_at=value.created_at,
+        attested_at=value.attested_at,
+        version=value.version,
+    )
+
+
+def _transcript_segment_replay_response(value) -> TranscriptSegmentReplayGrantResponse:
+    return TranscriptSegmentReplayGrantResponse(
+        segment_id=value.segment_id,
+        start_ms=value.start_ms,
+        end_ms=value.end_ms,
+        available=value.available,
+        url=value.url,
+        expires_at=value.expires_at,
+        expires_in_seconds=value.expires_in_seconds,
+    )
+
+
 def _evidence_response(value) -> EvidenceProfileResponse:
     profile = value.profile
     return EvidenceProfileResponse(
         evidence_run_id=value.id,
         assessment_id=value.assessment_id,
         transcript_revision_id=value.transcript_revision_id,
+        segment_set_id=value.segment_set_id,
+        segment_set_sha256=value.segment_set_sha256,
         state=value.state,
         generated_at=profile.generated_at,
         provenance=EvidenceProvenanceResponse(**value.provenance.to_dict()),
@@ -477,6 +555,96 @@ def attest_transcript(
         _correlation_id(request),
     )
     return _transcript_response(value)
+
+
+@router.get(
+    "/assessments/{assessment_id}/transcript-segment-set",
+    response_model=TranscriptSegmentSetResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def get_current_transcript_segment_set(
+    assessment_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> TranscriptSegmentSetResponse:
+    return _transcript_segment_set_response(
+        service.get_current_transcript_segment_set(assessment_id)
+    )
+
+
+@router.post(
+    "/assessments/{assessment_id}/transcript-segment-sets",
+    response_model=TranscriptSegmentSetResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=_V2_ERROR_RESPONSES,
+)
+def create_transcript_segment_set(
+    assessment_id: str,
+    payload: TranscriptSegmentSetCreateRequest,
+    request: Request,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> TranscriptSegmentSetResponse:
+    value = service.create_transcript_segment_set(
+        assessment_id,
+        CreateTranscriptSegmentSet(
+            assessment_id=assessment_id,
+            transcript_revision_id=payload.transcript_revision_id,
+            segments=tuple(
+                TranscriptSegment(
+                    ordinal=segment.ordinal,
+                    start_ms=segment.start_ms,
+                    end_ms=segment.end_ms,
+                    speaker_role=segment.speaker_role,
+                    text=segment.text,
+                    confidence=segment.confidence,
+                    uncertainty_reason=segment.uncertainty_reason,
+                )
+                for segment in payload.segments
+            ),
+            source=payload.source,
+            recording_id=payload.recording_id,
+            expected_revision=payload.expected_revision,
+            expected_version=payload.expected_version,
+            client_checksum=payload.client_checksum,
+        ),
+        _correlation_id(request),
+    )
+    return _transcript_segment_set_response(value)
+
+
+@router.post(
+    "/transcript-segment-sets/{transcript_segment_set_id}/attest",
+    response_model=TranscriptSegmentSetResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def attest_transcript_segment_set(
+    transcript_segment_set_id: str,
+    payload: TranscriptAttestRequest,
+    request: Request,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> TranscriptSegmentSetResponse:
+    value = service.attest_transcript_segment_set(
+        transcript_segment_set_id,
+        AttestTranscriptSegmentSet(
+            transcript_segment_set_id=transcript_segment_set_id,
+            expected_version=payload.expected_version,
+        ),
+        _correlation_id(request),
+    )
+    return _transcript_segment_set_response(value)
+
+
+@router.post(
+    "/transcript-segments/{transcript_segment_id}/audio-replay-grant",
+    response_model=TranscriptSegmentReplayGrantResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def create_transcript_segment_audio_replay_grant(
+    transcript_segment_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> TranscriptSegmentReplayGrantResponse:
+    return _transcript_segment_replay_response(
+        service.create_transcript_segment_audio_replay_grant(transcript_segment_id)
+    )
 
 
 @router.get(
@@ -768,3 +936,394 @@ def cancel_processing_run(
             _correlation_id(request),
         )
     )
+
+
+def _comparison_response(record: AssessmentComparisonRecord) -> ComparisonResponse:
+    features = [
+        FeatureComparisonItemResponse(
+            feature_key=f.feature_key,
+            unit=f.unit,
+            status=f.status,
+            incompatibility_reasons=f.incompatibility_reasons_json or [],
+            baseline_value=f.baseline_value,
+            current_value=f.current_value,
+            absolute_delta=f.absolute_delta,
+            percent_change=f.percent_change,
+            percent_change_limitation=f.percent_change_limitation,
+            numerical_trend=f.numerical_trend,
+            clinical_interpretation=f.clinical_interpretation,
+        )
+        for f in getattr(record, "features", [])
+    ]
+    return ComparisonResponse(
+        comparison_id=record.comparison_id,
+        baseline_assessment_id=record.baseline_assessment_id,
+        current_assessment_id=record.current_assessment_id,
+        baseline_evidence_run_id=record.baseline_evidence_run_id,
+        current_evidence_run_id=record.current_evidence_run_id,
+        baseline_evidence_sha256=record.baseline_evidence_sha256,
+        current_evidence_sha256=record.current_evidence_sha256,
+        policy_version=record.policy_version,
+        status=record.status,
+        is_stale=record.is_stale,
+        created_at=record.created_at,
+        features=features,
+    )
+
+
+@router.post(
+    "/assessments/{assessment_id}/comparisons",
+    response_model=ComparisonResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=_V2_ERROR_RESPONSES,
+)
+def create_assessment_comparison(
+    assessment_id: str,
+    payload: ComparisonCreateRequest,
+    request: Request,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ComparisonResponse:
+    record = service.compare_assessments(
+        assessment_id=assessment_id,
+        baseline_assessment_id=payload.baseline_assessment_id,
+        policy_version=payload.policy_version,
+        correlation_id=_correlation_id(request),
+    )
+    return _comparison_response(record)
+
+
+@router.get(
+    "/assessments/{assessment_id}/comparisons",
+    response_model=list[ComparisonResponse],
+    responses=_V2_ERROR_RESPONSES,
+)
+def list_assessment_comparisons(
+    assessment_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> list[ComparisonResponse]:
+    records = service.list_assessment_comparisons(assessment_id)
+    return [_comparison_response(r) for r in records]
+
+
+@router.get(
+    "/assessments/{assessment_id}/comparisons/{comparison_id}",
+    response_model=ComparisonResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def get_assessment_comparison(
+    assessment_id: str,
+    comparison_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ComparisonResponse:
+    record = service.get_assessment_comparison(assessment_id, comparison_id)
+    return _comparison_response(record)
+
+
+@router.get(
+    "/children/{child_id}/assessments/history",
+    response_model=list[ChildAssessmentHistoryItemResponse],
+    responses=_V2_ERROR_RESPONSES,
+)
+def list_child_assessment_history(
+    child_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> list[ChildAssessmentHistoryItemResponse]:
+    items = service.list_child_assessment_history(child_id)
+    return [
+        ChildAssessmentHistoryItemResponse(
+            assessment_id=item["assessment_id"],
+            created_at=item["created_at"],
+            purpose=item["purpose"],
+            state=item["state"],
+            age_months=item["age_months"],
+            protocol_version_key=item.get("protocol_version_key"),
+            language=item.get("language", "th"),
+            evidence_run_id=item.get("evidence_run_id"),
+            is_comparable=item["is_comparable"],
+        )
+        for item in items
+    ]
+
+
+def _cue_response(cue: AttentionCue) -> AttentionCueResponse:
+    return AttentionCueResponse(
+        cue_id=cue.cue_id,
+        cue_type=cue.cue_type,
+        title=cue.title,
+        description=cue.description,
+        policy_version=cue.policy_version,
+        evidence_run_id=cue.evidence_run_id,
+        supporting_feature_keys=cue.supporting_feature_keys,
+        conflicting_feature_keys=cue.conflicting_feature_keys,
+        limitations=cue.limitations,
+        status=cue.status,
+        reviewer_id=cue.clinician_feedback.reviewer_id if cue.clinician_feedback else None,
+        reviewed_at=cue.clinician_feedback.reviewed_at if cue.clinician_feedback else None,
+        rationale=cue.clinician_feedback.rationale if cue.clinician_feedback else None,
+    )
+
+
+def _clinical_review_response(session: ClinicalReviewSession) -> ClinicalReviewResponse:
+    fp = None
+    if session.follow_up:
+        fp = FollowUpPlanSchema(
+            target_date=session.follow_up.target_date,
+            recommended_protocol=session.follow_up.recommended_protocol,
+            focus_areas=session.follow_up.focus_areas,
+            monitoring_notes=session.follow_up.monitoring_notes,
+        )
+    return ClinicalReviewResponse(
+        review_id=session.review_id,
+        assessment_id=session.assessment_id,
+        child_id=session.child_id,
+        evidence_run_id=session.evidence_run_id,
+        version=session.version,
+        status="completed" if session.disposition else "in_progress",
+        cues=[_cue_response(c) for c in session.cues],
+        disposition=session.disposition,
+        disposition_notes=session.disposition_notes,
+        follow_up_plan=fp,
+        reviewed_by=session.reviewed_by,
+        reviewed_at=session.reviewed_at,
+        is_stale=session.is_stale,
+    )
+
+
+def _report_response(rec: AssessmentReportRecord) -> ReportResponse:
+    return ReportResponse(
+        report_id=rec.report_id,
+        assessment_id=rec.assessment_id,
+        child_id=rec.child_id,
+        evidence_run_id=rec.evidence_run_id,
+        comparison_id=rec.comparison_id,
+        review_id=rec.review_id,
+        amends_report_id=rec.amends_report_id,
+        amendment_sequence=rec.amendment_sequence,
+        version=rec.version,
+        status=ReportStatus(rec.status),
+        title=rec.title,
+        purpose=rec.purpose,
+        content_markdown=rec.content_markdown,
+        limitations=list(rec.limitations_json or []),
+        signed_by=rec.signed_by,
+        signed_at=rec.signed_at,
+        signed_snapshot_hash=rec.signed_snapshot_hash,
+        is_stale=rec.is_stale,
+        created_at=rec.created_at,
+        updated_at=rec.updated_at,
+    )
+
+
+@router.get(
+    "/assessments/{assessment_id}/clinical-review",
+    response_model=ClinicalReviewResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def get_or_create_clinical_review(
+    assessment_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ClinicalReviewResponse:
+    session = service.get_or_create_clinical_review(assessment_id)
+    return _clinical_review_response(session)
+
+
+@router.post(
+    "/assessments/{assessment_id}/clinical-review/cues/{cue_id}",
+    response_model=AttentionCueResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def review_attention_cue(
+    assessment_id: str,
+    cue_id: str,
+    payload: AttentionCueReviewRequest,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> AttentionCueResponse:
+    cue = service.review_attention_cue(
+        assessment_id=assessment_id,
+        cue_id=cue_id,
+        status=payload.status,
+        rationale=payload.rationale,
+    )
+    return _cue_response(cue)
+
+
+@router.put(
+    "/assessments/{assessment_id}/clinical-review/disposition",
+    response_model=ClinicalReviewResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def update_clinical_disposition(
+    assessment_id: str,
+    payload: ClinicalDispositionRequest,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ClinicalReviewResponse:
+    follow_up = None
+    if payload.follow_up_plan:
+        follow_up = FollowUpPlan(
+            target_date=payload.follow_up_plan.target_date,
+            recommended_protocol=payload.follow_up_plan.recommended_protocol,
+            focus_areas=payload.follow_up_plan.focus_areas,
+            monitoring_notes=payload.follow_up_plan.monitoring_notes,
+        )
+    session = service.update_clinical_disposition(
+        assessment_id=assessment_id,
+        disposition=payload.disposition,
+        disposition_notes=payload.disposition_notes,
+        follow_up=follow_up,
+        expected_version=payload.expected_version,
+    )
+    return _clinical_review_response(session)
+
+
+@router.post(
+    "/assessments/{assessment_id}/reports/draft",
+    response_model=ReportResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=_V2_ERROR_RESPONSES,
+)
+def create_report_draft(
+    assessment_id: str,
+    payload: ReportDraftCreateRequest,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ReportResponse:
+    rec = service.create_report_draft(
+        assessment_id=assessment_id,
+        purpose=payload.purpose,
+        comparison_id=payload.comparison_id,
+    )
+    return _report_response(rec)
+
+
+@router.get(
+    "/assessments/{assessment_id}/reports/current",
+    response_model=ReportResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def get_current_report(
+    assessment_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ReportResponse:
+    rec = service.get_current_report(assessment_id)
+    return _report_response(rec)
+
+
+@router.get(
+    "/assessments/{assessment_id}/reports/{report_id}",
+    response_model=ReportResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def get_report(
+    assessment_id: str,
+    report_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ReportResponse:
+    rec = service.get_report(assessment_id, report_id)
+    return _report_response(rec)
+
+
+@router.put(
+    "/assessments/{assessment_id}/reports/{report_id}",
+    response_model=ReportResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def update_report_draft(
+    assessment_id: str,
+    report_id: str,
+    payload: ReportDraftUpdateRequest,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ReportResponse:
+    rec = service.update_report_draft(
+        assessment_id=assessment_id,
+        report_id=report_id,
+        title=payload.title,
+        purpose=payload.purpose,
+        content_markdown=payload.content_markdown,
+        limitations=payload.limitations,
+        expected_version=payload.expected_version,
+    )
+    return _report_response(rec)
+
+
+@router.post(
+    "/assessments/{assessment_id}/reports/{report_id}/sign",
+    response_model=ReportResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def sign_off_report(
+    assessment_id: str,
+    report_id: str,
+    payload: ReportSignOffRequest,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ReportResponse:
+    rec = service.sign_off_report(
+        assessment_id=assessment_id,
+        report_id=report_id,
+        expected_version=payload.expected_version,
+    )
+    return _report_response(rec)
+
+
+@router.post(
+    "/assessments/{assessment_id}/reports/{report_id}/amend",
+    response_model=ReportResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=_V2_ERROR_RESPONSES,
+)
+def create_report_amendment(
+    assessment_id: str,
+    report_id: str,
+    payload: ReportAmendmentCreateRequest,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ReportResponse:
+    rec = service.create_report_amendment(
+        assessment_id=assessment_id,
+        report_id=report_id,
+        title=payload.title,
+        purpose=payload.purpose,
+        content_markdown=payload.content_markdown,
+    )
+    return _report_response(rec)
+
+
+@router.get(
+    "/assessments/{assessment_id}/reports/{report_id}/export",
+    response_model=ReportExportResponse,
+    responses=_V2_ERROR_RESPONSES,
+)
+def export_report(
+    assessment_id: str,
+    report_id: str,
+    format: str = "markdown",
+    service: AssessmentService = Depends(get_assessment_service),
+) -> ReportExportResponse:
+    exp = service.export_report(
+        assessment_id=assessment_id,
+        report_id=report_id,
+        export_format=format,
+    )
+    return ReportExportResponse(
+        report_id=exp["report_id"],
+        format=exp["format"],
+        content_type=exp["content_type"],
+        filename=exp["filename"],
+        content=exp.get("content"),
+        base64_content=exp.get("base64_content"),
+        report_hash=exp.get("report_hash"),
+        signed_by=exp.get("signed_by"),
+        export_timestamp=exp["export_timestamp"],
+    )
+
+
+@router.get(
+    "/assessments/{assessment_id}/reports/{report_id}/history",
+    response_model=list[ReportResponse],
+    responses=_V2_ERROR_RESPONSES,
+)
+def get_report_lineage(
+    assessment_id: str,
+    report_id: str,
+    service: AssessmentService = Depends(get_assessment_service),
+) -> list[ReportResponse]:
+    records = service.get_report_lineage(assessment_id, report_id)
+    return [_report_response(r) for r in records]
+

@@ -36,6 +36,11 @@ _V2_TABLES = (
     "evidence_runs",
     "evidence_feature_values",
     "evidence_domain_profiles",
+    "transcript_segment_sets",
+    "transcript_segments",
+    "assessment_clinical_reviews",
+    "assessment_attention_cues",
+    "assessment_reports",
 )
 _TENANT_TABLES = (
     "organization_memberships",
@@ -52,6 +57,11 @@ _TENANT_TABLES = (
     "evidence_runs",
     "evidence_feature_values",
     "evidence_domain_profiles",
+    "transcript_segment_sets",
+    "transcript_segments",
+    "assessment_clinical_reviews",
+    "assessment_attention_cues",
+    "assessment_reports",
 )
 _CAPTURE_TENANT_TABLES = (
     "assessment_protocol_selections",
@@ -64,6 +74,13 @@ _EVIDENCE_TENANT_TABLES = (
     "evidence_runs",
     "evidence_feature_values",
     "evidence_domain_profiles",
+    "transcript_segment_sets",
+    "transcript_segments",
+)
+_CLINICAL_REVIEW_REPORTS_TENANT_TABLES = (
+    "assessment_clinical_reviews",
+    "assessment_attention_cues",
+    "assessment_reports",
 )
 
 
@@ -297,6 +314,37 @@ def test_evidence_tenant_policies_are_organization_scoped(
             ).mappings().all()
 
         for table_name in _EVIDENCE_TENANT_TABLES:
+            table_policies = [row for row in rows if row["tablename"] == table_name]
+            assert table_policies
+            assert any(
+                "organization_id" in (row["qual"] or "")
+                and "current_setting" in (row["qual"] or "")
+                and "organization_id" in (row["with_check"] or "")
+                and "current_setting" in (row["with_check"] or "")
+                for row in table_policies
+            )
+    finally:
+        engine.dispose()
+
+
+def test_clinical_review_reports_tenant_policies_are_organization_scoped(
+    rls_database: tuple[str, str, str, str],
+) -> None:
+    """Verify clinical reviews, attention cues, and reports policies fail closed by tenant."""
+
+    owner_url, _, _, _ = rls_database
+    engine = create_engine(owner_url)
+    table_literals = ", ".join(f"'{table_name}'" for table_name in _CLINICAL_REVIEW_REPORTS_TENANT_TABLES)
+    try:
+        with engine.connect() as connection:
+            rows = connection.execute(
+                text(
+                    "SELECT tablename, qual, with_check FROM pg_policies "
+                    "WHERE schemaname = 'public' AND tablename IN (" + table_literals + ")"
+                )
+            ).mappings().all()
+
+        for table_name in _CLINICAL_REVIEW_REPORTS_TENANT_TABLES:
             table_policies = [row for row in rows if row["tablename"] == table_name]
             assert table_policies
             assert any(

@@ -32,7 +32,7 @@ from app.assessment_v2.domain.models import (
     TransitionAssessment,
 )
 from app.core.security import CurrentUser
-from app.assessment_v2.services import ClinicalPolicyError
+from app.assessment_v2.services import AssessmentService, ClinicalPolicyError
 
 
 @pytest.fixture
@@ -449,6 +449,121 @@ def test_consent_is_append_only_and_withdrawal_removes_active_access(session: Se
     assert session.scalar(select(func.count()).select_from(ConsentRecord)) == 2
     assert repo.has_active_consent(therapist, child.id, ConsentPurpose.CLINICAL_ASSESSMENT) is False
     assert session.scalar(select(func.count()).select_from(AuditEventRecord)) == 3
+
+
+def test_consent_versioning_per_purpose_sequence_and_child_isolation(session: Session) -> None:
+    repo = AssessmentRepository(session)
+    therapist = scope("therapist_01")
+    synchronize(repo, therapist)
+    child_1 = create_child(repo, therapist)
+    child_2 = repo.create_child(
+        therapist,
+        CreateChild(
+            display_code="LL-0002",
+            birth_year=2021,
+            birth_month=7,
+            language_context={"primary": "th", "additional": []},
+        ),
+        "child-create-2",
+    )
+
+    # Sequence for Child 1:
+    # 1. clinical active -> version 1
+    c1 = repo.add_consent(
+        therapist,
+        child_1.id,
+        RecordConsent(
+            purpose=ConsentPurpose.CLINICAL_ASSESSMENT,
+            scope_version="clinical-v1",
+            status=ConsentStatus.ACTIVE,
+        ),
+        correlation_id="c1",
+    )
+    assert c1.version == 1
+    assert c1.purpose == ConsentPurpose.CLINICAL_ASSESSMENT
+    assert c1.status == ConsentStatus.ACTIVE
+    assert repo.has_active_consent(therapist, child_1.id, ConsentPurpose.CLINICAL_ASSESSMENT) is True
+    assert repo.has_active_consent(therapist, child_1.id, ConsentPurpose.RESEARCH_REUSE) is False
+
+    # 2. research active -> version 1 (isolated by purpose!)
+    c2 = repo.add_consent(
+        therapist,
+        child_1.id,
+        RecordConsent(
+            purpose=ConsentPurpose.RESEARCH_REUSE,
+            scope_version="research-v1",
+            status=ConsentStatus.ACTIVE,
+        ),
+        correlation_id="c2",
+    )
+    assert c2.version == 1
+    assert c2.purpose == ConsentPurpose.RESEARCH_REUSE
+    assert c2.status == ConsentStatus.ACTIVE
+    assert repo.has_active_consent(therapist, child_1.id, ConsentPurpose.CLINICAL_ASSESSMENT) is True
+    assert repo.has_active_consent(therapist, child_1.id, ConsentPurpose.RESEARCH_REUSE) is True
+
+    # 3. clinical withdrawn -> version 2
+    c3 = repo.add_consent(
+        therapist,
+        child_1.id,
+        RecordConsent(
+            purpose=ConsentPurpose.CLINICAL_ASSESSMENT,
+            scope_version="clinical-v1",
+            status=ConsentStatus.WITHDRAWN,
+        ),
+        correlation_id="c3",
+    )
+    assert c3.version == 2
+    assert c3.purpose == ConsentPurpose.CLINICAL_ASSESSMENT
+    assert c3.status == ConsentStatus.WITHDRAWN
+    assert repo.has_active_consent(therapist, child_1.id, ConsentPurpose.CLINICAL_ASSESSMENT) is False
+    assert repo.has_active_consent(therapist, child_1.id, ConsentPurpose.RESEARCH_REUSE) is True
+
+    # 4. clinical active -> version 3
+    c4 = repo.add_consent(
+        therapist,
+        child_1.id,
+        RecordConsent(
+            purpose=ConsentPurpose.CLINICAL_ASSESSMENT,
+            scope_version="clinical-v1",
+            status=ConsentStatus.ACTIVE,
+        ),
+        correlation_id="c4",
+    )
+    assert c4.version == 3
+    assert c4.purpose == ConsentPurpose.CLINICAL_ASSESSMENT
+    assert c4.status == ConsentStatus.ACTIVE
+    assert repo.has_active_consent(therapist, child_1.id, ConsentPurpose.CLINICAL_ASSESSMENT) is True
+    assert repo.has_active_consent(therapist, child_1.id, ConsentPurpose.RESEARCH_REUSE) is True
+
+    # Child 2 isolation: Child 2 clinical active -> version 1
+    c2_1 = repo.add_consent(
+        therapist,
+        child_2.id,
+        RecordConsent(
+            purpose=ConsentPurpose.CLINICAL_ASSESSMENT,
+            scope_version="clinical-v1",
+            status=ConsentStatus.ACTIVE,
+        ),
+        correlation_id="c2_1",
+    )
+    assert c2_1.version == 1
+    assert c2_1.child_id == child_2.id
+    assert repo.has_active_consent(therapist, child_2.id, ConsentPurpose.CLINICAL_ASSESSMENT) is True
+
+    # Validate through AssessmentService
+    service = AssessmentService(repo, user(therapist), storage=None, authorized_role="therapist")
+    consents_1 = service.list_consents(child_1.id)
+    assert len(consents_1) == 4
+    clinical_v1 = [c.version for c in consents_1 if c.purpose == ConsentPurpose.CLINICAL_ASSESSMENT]
+    assert clinical_v1 == [3, 2, 1]
+    assert sorted(clinical_v1) == [1, 2, 3]
+    research_v1 = [c.version for c in consents_1 if c.purpose == ConsentPurpose.RESEARCH_REUSE]
+    assert research_v1 == [1]
+
+    consents_2 = service.list_consents(child_2.id)
+    assert len(consents_2) == 1
+    assert consents_2[0].version == 1
 
 
 def test_transition_uses_optimistic_version_and_rolls_back_stale_write(session: Session) -> None:

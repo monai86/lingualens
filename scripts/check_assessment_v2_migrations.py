@@ -33,8 +33,18 @@ EXPECTED_TABLES = {
     "evidence_runs",
     "evidence_feature_values",
     "evidence_domain_profiles",
+    "transcript_segment_sets",
+    "transcript_segments",
+    "assessment_observations",
+    "assessment_instruments",
+    "assessment_instrument_items",
+    "assessment_comparisons",
+    "assessment_comparison_features",
+    "assessment_clinical_reviews",
+    "assessment_attention_cues",
+    "assessment_reports",
 }
-HEAD_REVISION = "0007_durable_evidence_jobs"
+HEAD_REVISION = "0012_clinical_review_reports"
 PROTOCOL_VERSION_KEY = "thai_guided_language_sample:v0"
 EXPECTED_PURPOSES = "initial,developmental_follow_up,post_intervention_follow_up,additional_evidence"
 

@@ -41,6 +41,7 @@ NC='\033[0;0m' # No Color
 echo -e "${BLUE}=== Starting Project Verification Script ===${NC}"
 
 echo -e "${BLUE}[0/7] Checking repository source-of-truth consistency...${NC}"
+find . -name ".DS_Store" -delete 2>/dev/null || true
 "$PYTHON_BIN" scripts/check_repo_consistency.py
 
 echo -e "${BLUE}[1/7] Running local secret scan...${NC}"
@@ -102,8 +103,11 @@ for app in "${apps[@]}"; do
     if [ -d "$app" ]; then
         (
             cd "$app"
-            echo "  Installing locked Node modules for $app..."
-            npm ci
+            if [ ! -d "node_modules" ]; then
+                echo "  Installing locked Node modules for $app..."
+                find . -name ".DS_Store" -delete 2>/dev/null || true
+                npm ci
+            fi
             
             echo "  Running tests for $app..."
             if grep -q '"test":' package.json; then

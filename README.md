@@ -309,8 +309,10 @@ For local setup without Docker, install PostgreSQL 16 natively and provide an
 admin connection to the local `postgres` database. The native check creates a
 unique temporary v2 database, starts FastAPI directly, probes `/api/v2`, runs
 the PostgreSQL RLS suite, and removes only its temporary database and role. The
-gate also exercises transcript attestation, `202` evidence enqueue, the native
-capture/evidence worker, evidence read, and duplicate-enqueue idempotency:
+gate also exercises transcript attestation, immutable segment draft v1 →
+edited/attested v2, bounded replay behavior, `202` evidence enqueue with segment
+provenance, the native capture/evidence worker, evidence read, transcript
+staleness, tenant/consent/role denials, and duplicate-enqueue idempotency:
 
 ```bash
 PYTHONPATH=apps/api:src python scripts/check_api_migrations.py
@@ -376,6 +378,16 @@ The therapist API also exposes `GET /api/sessions/{session_id}/qa` so the
 Transcript tab can use backend CHAT/CLAN readiness checks before unlocking
 Reference Comparison; mock mode remains a lightweight local QA preview and does
 not pretend to validate CLAN readiness.
+
+### Terminal TUI and Desktop GUI Companion Clients (`packages/tui/`, `packages/gui/`)
+
+The terminal TUI (`packages/tui/`) and desktop companion GUI (`packages/gui/`) provide clinician
+companion workflows. In live mode (`mock_mode=False`), all client operations communicate strictly
+with the backend REST API (`apps/api`) or fail closed with structured, sanitized exceptions
+(`LinguaLensApiError`). Live mode never mutates local mock state, and unsupported operations fail
+explicitly without fabricating local success. Explicit local mock mode (`mock_mode=True`) is
+reserved for offline demonstrations and research prototyping.
+
 
 The reference pipeline also writes
 `data/reference/english_child_reference_coverage.csv` and

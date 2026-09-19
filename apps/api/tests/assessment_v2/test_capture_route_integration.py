@@ -433,6 +433,31 @@ def test_real_dependency_stack_runs_reviewed_transcript_worker_after_attestation
     )
     assert attested.status_code == 200
 
+    segment_set = real_capture_client.post(
+        "/api/v2/assessments/route_assessment_01/transcript-segment-sets",
+        json={
+            "transcript_revision_id": revision["id"],
+            "source": "manual",
+            "segments": [
+                {
+                    "ordinal": 1,
+                    "start_ms": 0,
+                    "end_ms": 1200,
+                    "speaker_role": "child",
+                    "text": "red car .",
+                    "confidence": 0.98,
+                    "uncertainty_reason": "none",
+                }
+            ],
+        },
+    )
+    assert segment_set.status_code == 201
+    segment_attested = real_capture_client.post(
+        f"/api/v2/transcript-segment-sets/{segment_set.json()['id']}/attest",
+        json={"expected_version": segment_set.json()["version"]},
+    )
+    assert segment_attested.status_code == 200
+
     evidence = real_capture_client.post(
         "/api/v2/assessments/route_assessment_01/evidence-runs"
     )
@@ -458,10 +483,13 @@ def test_real_dependency_stack_runs_reviewed_transcript_worker_after_attestation
     assert evidence_profile.status_code == 200
     body = evidence_profile.json()
     feature_values = {feature["key"]: feature["value"] for feature in body["features"]}
-    assert feature_values["child_utterance_count"] == 3
-    assert feature_values["child_token_count"] == 5
+    assert feature_values["child_utterance_count"] == 1
+    assert feature_values["child_token_count"] == 2
     assert body["not_diagnostic"] is True
     assert body["decision_support_only"] is True
+    assert body["segment_set_id"] == segment_set.json()["id"]
+    assert body["segment_set_sha256"] == segment_set.json()["segments_sha256"]
+    assert body["provenance"]["input_ref"] == f"transcript-segment-set:{segment_set.json()['id']}"
     assert content not in evidence.text
     assert content not in evidence_profile.text
 

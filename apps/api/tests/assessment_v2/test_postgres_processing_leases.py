@@ -26,11 +26,21 @@ from app.assessment_v2.db.models import (
     ProcessingRunRecord,
     ProtocolActivityRecord,
     ProtocolVersionRecord,
+    TranscriptSegmentRecord,
+    TranscriptSegmentSetRecord,
     TranscriptRevisionRecord,
     UserProfileRecord,
 )
 from app.assessment_v2.db.repositories import AssessmentRepository
-from app.assessment_v2.domain.models import ProcessingRunStage, ProcessingRunState
+from app.assessment_v2.domain.models import (
+    ProcessingRunStage,
+    ProcessingRunState,
+    TranscriptSegmentSpeakerRole,
+    TranscriptSegmentUncertaintyReason,
+    TranscriptReviewState,
+    TranscriptSource,
+)
+from app.assessment_v2.domain.segments import TranscriptSegment, compute_transcript_segments_sha256
 
 
 pytestmark = pytest.mark.assessment_postgres
@@ -205,6 +215,66 @@ def lease_fixture() -> Iterator[tuple[object, str, str]]:
             )
         )
         session.flush()
+        segment_set_id = f"lease_segment_set_{suffix}"
+        lease_segments = (
+            TranscriptSegment(
+                ordinal=1,
+                start_ms=0,
+                end_ms=900,
+                speaker_role=TranscriptSegmentSpeakerRole.CHILD,
+                text="hello",
+                confidence=0.9,
+            ),
+            TranscriptSegment(
+                ordinal=2,
+                start_ms=900,
+                end_ms=1_700,
+                speaker_role=TranscriptSegmentSpeakerRole.THERAPIST,
+                text="tell me more",
+                confidence=0.8,
+            ),
+        )
+        segment_set_sha256 = compute_transcript_segments_sha256(lease_segments)
+        session.add(
+            TranscriptSegmentSetRecord(
+                transcript_segment_set_id=segment_set_id,
+                organization_id=organization_id,
+                assessment_id=assessment_id,
+                transcript_revision_id=transcript_id,
+                transcript_content_sha256=sha256(
+                    "@UTF8\n@Begin\n*CHI:\thello .\n@End\n".encode()
+                ).hexdigest(),
+                recording_id=None,
+                revision=1,
+                source=TranscriptSource.MANUAL.value,
+                review_state=TranscriptReviewState.ATTESTED.value,
+                segments_sha256=segment_set_sha256,
+                created_by_user_id=user_id,
+                attested_by_user_id=user_id,
+                attested_at=now,
+                version=2,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.flush()
+        session.add_all(
+            TranscriptSegmentRecord(
+                transcript_segment_id=f"lease_segment_{suffix}_{segment.ordinal}",
+                organization_id=organization_id,
+                transcript_segment_set_id=segment_set_id,
+                ordinal=segment.ordinal,
+                start_ms=segment.start_ms,
+                end_ms=segment.end_ms,
+                speaker_role=segment.speaker_role.value,
+                text=segment.text,
+                confidence=segment.confidence,
+                uncertainty_reason=segment.uncertainty_reason.value,
+                created_at=now,
+            )
+            for segment in lease_segments
+        )
+        session.flush()
         session.add(
             ProcessingRunRecord(
                     processing_run_id=f"lease_run_{suffix}",
@@ -215,7 +285,9 @@ def lease_fixture() -> Iterator[tuple[object, str, str]]:
                     evidence_run_id=None,
                     stage=ProcessingRunStage.EVIDENCE_EXTRACTION.value,
                     state=ProcessingRunState.QUEUED.value,
-                    idempotency_key=f"evidence:v1:{'b' * 64}",
+                    segment_set_id=segment_set_id,
+                    segment_set_sha256=segment_set_sha256,
+                    idempotency_key=f"evidence:v3:{'b' * 64}",
                     attempt_count=0,
                     max_attempts=3,
                     available_at=now,
@@ -246,6 +318,16 @@ def lease_fixture() -> Iterator[tuple[object, str, str]]:
             session.execute(
                 delete(ProcessingRunRecord).where(
                     ProcessingRunRecord.organization_id == organization_id
+                )
+            )
+            session.execute(
+                delete(TranscriptSegmentRecord).where(
+                    TranscriptSegmentRecord.organization_id == organization_id
+                )
+            )
+            session.execute(
+                delete(TranscriptSegmentSetRecord).where(
+                    TranscriptSegmentSetRecord.organization_id == organization_id
                 )
             )
             session.execute(

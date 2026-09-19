@@ -23,6 +23,16 @@ EXPECTED_TABLES = {
     "evidence_runs",
     "evidence_feature_values",
     "evidence_domain_profiles",
+    "transcript_segment_sets",
+    "transcript_segments",
+    "assessment_observations",
+    "assessment_instruments",
+    "assessment_instrument_items",
+    "assessment_comparisons",
+    "assessment_comparison_features",
+    "assessment_clinical_reviews",
+    "assessment_attention_cues",
+    "assessment_reports",
 }
 
 GLOBAL_CATALOG_TABLES = {"organizations", "user_profiles", "protocol_versions", "protocol_activities"}

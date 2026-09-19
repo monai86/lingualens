@@ -73,6 +73,8 @@ test("loads the assessment evidence profile from FastAPI", async () => {
     evidence_run_id: "evidence_run_opaque_01",
     assessment_id: "assessment_opaque_01",
     transcript_revision_id: "transcript_revision_opaque_01",
+    segment_set_id: "segment_set_opaque_01",
+    segment_set_sha256: "b".repeat(64),
     state: "completed",
     generated_at: "2026-09-07T08:02:00Z",
     provenance: {
@@ -171,6 +173,94 @@ test("loads and mutates reviewed transcript revisions through FastAPI", async ()
   expect(fetchSpy).toHaveBeenNthCalledWith(
     4,
     "http://localhost:8000/api/v2/assessments/assessment_opaque_01/evidence-runs",
+    expect.objectContaining({ method: "POST" }),
+  );
+});
+
+test("loads, revises, attests, and replays transcript segments through FastAPI", async () => {
+  const segmentSet = {
+    id: "segment_set_opaque_01",
+    assessment_id: "assessment_opaque_01",
+    transcript_revision_id: "transcript_revision_opaque_01",
+    transcript_content_sha256: "a".repeat(64),
+    recording_id: "recording_opaque_01",
+    revision: 1,
+    source: "asr_draft",
+    review_state: "draft",
+    segments_sha256: "b".repeat(64),
+    segments: [{
+      id: "segment_opaque_01",
+      ordinal: 1,
+      start_ms: 0,
+      end_ms: 1200,
+      speaker_role: "child" as const,
+      text: "hello .",
+      confidence: 0.91,
+      uncertainty_reason: "none" as const,
+      created_at: "2026-09-07T08:00:00Z",
+    }],
+    created_at: "2026-09-07T08:00:00Z",
+    attested_at: null,
+    version: 1,
+  };
+  const replay = {
+    segment_id: "segment_opaque_01",
+    start_ms: 0,
+    end_ms: 1200,
+    available: true,
+    url: "https://signed.example/replay",
+    expires_at: "2026-09-07T08:05:00Z",
+    expires_in_seconds: 300,
+  };
+  const fetchSpy = vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(new Response(JSON.stringify(segmentSet), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ ...segmentSet, revision: 2, version: 1 }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ ...segmentSet, review_state: "attested", version: 2 }), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify(replay), { status: 200 }));
+  const client = createAssessmentV2Client();
+
+  await expect(client.getCurrentTranscriptSegmentSet("assessment_opaque_01")).resolves.toEqual(segmentSet);
+  await expect(client.createTranscriptSegmentSet("assessment_opaque_01", {
+      transcript_revision_id: "transcript_revision_opaque_01",
+      source: "asr_draft",
+      segments: segmentSet.segments.map(({ id: _id, created_at: _createdAt, ...segment }) => segment),
+    recording_id: "recording_opaque_01",
+    expected_revision: 1,
+    expected_version: 1,
+  })).resolves.toMatchObject({ revision: 2 });
+  await expect(client.attestTranscriptSegmentSet("segment_set_opaque_01", 1)).resolves.toMatchObject({
+    review_state: "attested",
+  });
+  await expect(client.createSegmentReplayGrant("segment_opaque_01")).resolves.toEqual(replay);
+
+  expect(fetchSpy).toHaveBeenNthCalledWith(
+    1,
+    "http://localhost:8000/api/v2/assessments/assessment_opaque_01/transcript-segment-set",
+    expect.objectContaining({ cache: "no-store" }),
+  );
+  expect(fetchSpy).toHaveBeenNthCalledWith(
+    2,
+    "http://localhost:8000/api/v2/assessments/assessment_opaque_01/transcript-segment-sets",
+    expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({
+        transcript_revision_id: "transcript_revision_opaque_01",
+        source: "asr_draft",
+        segments: segmentSet.segments.map(({ id: _id, created_at: _createdAt, ...segment }) => segment),
+        recording_id: "recording_opaque_01",
+        expected_revision: 1,
+        expected_version: 1,
+      }),
+    }),
+  );
+  expect(fetchSpy).toHaveBeenNthCalledWith(
+    3,
+    "http://localhost:8000/api/v2/transcript-segment-sets/segment_set_opaque_01/attest",
+    expect.objectContaining({ method: "POST", body: JSON.stringify({ expected_version: 1 }) }),
+  );
+  expect(fetchSpy).toHaveBeenNthCalledWith(
+    4,
+    "http://localhost:8000/api/v2/transcript-segments/segment_opaque_01/audio-replay-grant",
     expect.objectContaining({ method: "POST" }),
   );
 });

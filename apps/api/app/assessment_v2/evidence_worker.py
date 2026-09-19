@@ -7,7 +7,7 @@ from typing import Protocol
 
 from app.assessment_v2.db.repositories import EvidenceWorkItem, RepositoryError
 from app.assessment_v2.evidence_adapter import AdaptedEvidence, adapt_analysis_result
-from app.assessment_v2.reviewed_transcript_worker import extract_reviewed_transcript
+from app.assessment_v2.reviewed_transcript_worker import extract_reviewed_segment_set
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,8 +48,11 @@ class EvidenceProcessingWorker:
         if callable(commit_transaction):
             commit_transaction()
         try:
-            analysis = extract_reviewed_transcript(
+            if item.segment_set is None:
+                raise RepositoryError("segment_provenance_missing")
+            analysis = extract_reviewed_segment_set(
                 item.transcript,
+                item.segment_set,
                 protocol_version_key=item.protocol_version_key,
             )
             adapted = adapt_analysis_result(

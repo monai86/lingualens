@@ -1,10 +1,10 @@
 # LinguaLens Current Handoff
 
-Last verified: 2026-09-09 (A1 parent-recovery completion after final-budget review)
-Handoff base: `codex/durable-evidence-processing` at `7a37fe8a`
-Working branch: `codex/durable-evidence-processing` in
-`.worktrees/assessment-web-capture-v2` — carries the uncommitted A1 durable
-evidence-processing candidate after the authorized checkpoint
+Last verified: 2026-09-09 (A2 Task 8 full candidate gate)
+Handoff base: `5fb37457167b079d63d5ffe10d63a1cd2cd88706`
+Working branch: `codex/assessment-v2-segment-review` in
+`.worktrees/assessment-v2-segment-review` — carries the uncommitted A2 segment
+review candidate; no owner checkpoint commit has been requested in this task
 
 เอกสารนี้เป็น snapshot สำหรับส่งต่องาน ไม่ใช่ architecture authority หากข้อมูล
 ขัดกัน ให้ยึด `docs/PROJECT_SOURCE_OF_TRUTH.md`, `AGENTS.md` และโค้ดบน `main`
@@ -25,30 +25,32 @@ LinguaLens มี canonical therapist product เพียงชุดเดี�
 ไม่ใช่ diagnostic tool และยังไม่ผ่าน production security/legal/Thai clinical
 validation gates
 
-Owner-approved direction is now the A1 durable evidence-processing slice:
-therapists attest a transcript, enqueue a backend-owned run, follow the same run
-after reload, and read a descriptive profile only after the native worker
-persists it. The Web client is thin; capture and evidence share PostgreSQL
-`processing_runs` and one tenant-scoped native worker. GUI/TUI are preserved and
-remain outside A1 parity work.
+Owner-approved direction is now the A2 segment-review slice on top of the A1
+durable evidence boundary: therapists attest a transcript, review immutable
+timestamped segments, edit uncertain segments as new revisions, attest the
+current segment set, request bounded replay when storage is available, and read
+descriptive evidence only after segment-bound processing succeeds. FastAPI owns
+state and policy; the Web client is thin; GUI/TUI are preserved as compatibility
+surfaces. The system remains research/education decision support, not diagnosis.
 
 ## Verified local candidate state
 
-- Checkpoint commit `7a37fe8a` contains the prior Evidence V2 candidate and A1
-  implementation plan; no A1 implementation commit has been made.
-- Focused backend processing/worker/capture runtime suite: parent-recovery
-  regressions pass; complete Assessment V2 suite: 326 passed, 10 deselected,
-  2 warnings.
-- Frontend suite: 540 passed; the cancel-request acknowledgement regression,
-  typecheck, lint and production build passed; dedicated
+- A2 implementation remains uncommitted on the owner worktree; base A1 commit is
+  `5fb37457167b079d63d5ffe10d63a1cd2cd88706`.
+- Assessment V2 suite: 369 passed, 10 skipped, 3 existing warnings; migration
+  smoke reaches `0009_segment_evidence_provenance` and downgrades cleanly.
+- Frontend suite: 544 passed; typecheck and lint passed; isolated-port
   Playwright transcript/processing smoke passed 1 test.
 - Native PostgreSQL gate: 10 tests passed, including migration preservation
-  under the supported RLS app role, migrations through
-  `0007_durable_evidence_jobs`, API enqueue `202`, native worker success,
-  evidence read, duplicate enqueue idempotency, lease/RLS/parent-contention
-  tests, and temporary database cleanup.
-- Repository-wide checker passed: core 1139 passed, 10 skipped, 3 deselected;
-  Assessment V2 326 passed, 10 deselected; `git diff --check` passed.
+  through `0009`, segment v1 → v2 revision/attestation, bounded unavailable
+  replay, evidence provenance, transcript staleness, tenant/consent/role
+  denial, worker success, lease/RLS checks, and temporary database cleanup.
+- Full candidate gate: core non-audio tests, migration smoke, assessment-v2
+  suite (369 passed, 10 deselected), frontend suite (544 passed), and Next
+  production build passed. The isolated-port Playwright smoke passed 1 test;
+  the native PostgreSQL/RLS walkthrough passed 10 tests.
+- The final-strict assurance review remains pending for the complete A2
+  candidate; do not claim a clean audit or final-strict `ship` status.
 
 The separate frontend dependency audit currently reports 8 advisories from the
 existing lockfile tree (2 moderate, 5 high, 1 critical) in `@vitest/mocker`,
@@ -69,11 +71,11 @@ private Storage policy, backup, legal, or clinical readiness
 | #7 | `4771ab0b` | Extraction Phase 2: synchronous reviewed-transcript execution seam |
 | A1 checkpoint | `7a37fe8a` | Evidence V2 checkpoint and durable-processing plan |
 
-The current A1 candidate extends the separate Assessment V2 boundary with
-`0007_durable_evidence_jobs`, backend-owned queue state, lease/reclaim,
+The preceding A1 checkpoint established the separate Assessment V2 boundary
+with `0007_durable_evidence_jobs`, backend-owned queue state, lease/reclaim,
 retry/cancel actions, a shared native capture/evidence worker, and a Web polling
-client. It preserves consent, care-team authorization, therapist attestation,
-provenance, and the non-diagnostic boundary. No GUI/TUI business rule changed.
+client. The current A2 candidate extends that boundary with immutable segment
+review and segment-bound evidence provenance. No GUI/TUI business rule changed.
 
 ## Last verification evidence
 
@@ -152,32 +154,28 @@ packaging/deployment change and verify API startup on Render before merge
 
 ## Recommended next work
 
-### Priority 1: finish A1 durable evidence processing parent recovery
+### Priority 1: owner checkpoint and final-strict preparation
 
-The final-strict parent review was completed but returned `fix-first`, so no
-additional reviewer call is available. Parent recovery fixed the four behavior
-blockers, refreshed the native/repository-wide gates, and is ready for owner
-review of the uncommitted candidate. The A1 contract is:
+Tasks 6-8 are implemented and verified in the uncommitted
+`codex/assessment-v2-segment-review` worktree. The local candidate is ready for
+owner checkpoint review; final-strict preparation remains:
 
-- therapist attestation is required before enqueue
-- `POST /api/v2/assessments/{assessment_id}/evidence-runs` returns `202`
-- `processing_runs` is the durable queue; one tenant-scoped worker handles
-  capture and evidence stages
-- reload reads the current server run; retry/cancel actions use backend-provided
-  permissions and `expected_version`
-- evidence is read only after a worker-owned transaction persists it
+- preserve the existing frontend dependency-audit baseline (8 advisories; no
+  forced update)
+- start the new A2 final-strict assurance unit only when the owner requests the
+  independent review boundary
+- keep the candidate uncommitted until the owner explicitly authorizes the
+  checkpoint
 
-Remaining owner action: review the new candidate identity and authorize or
-decline a checkpoint commit. The current worktree must stay uncommitted until
-the owner separately authorizes any A1 commit; do not claim final-strict
-`ship`.
+Do not commit, merge, deploy, or mutate a shared Supabase database until the
+owner explicitly authorizes the checkpoint. GUI/TUI business rules remain
+unchanged.
 
 ### Priority 2: later slices
 
-After A1 is accepted, plan A2 for timestamped transcript segments and
-uncertain-only review, B for compatible longitudinal comparison, C for
+After A2 acceptance, plan B for compatible longitudinal comparison, C for
 clinician disposition/report sign-off, and D for Web/GUI/TUI thin-client parity.
-Keep business rules in FastAPI and preserve the GUI/TUI surfaces during A1.
+Keep business rules in FastAPI and preserve the GUI/TUI surfaces.
 
 ### Supabase security evidence (deferred by owner; UI assessment now complete)
 
@@ -238,17 +236,19 @@ handoff notes, logs, or issue trackers
 ## Commands for the next engineer
 
 ```bash
-# Work only in the A1 linked worktree
-cd /Users/porschecaa/lingualens/.worktrees/assessment-web-capture-v2
+# Work only in the A2 linked worktree
+cd /Users/porschecaa/lingualens/.worktrees/assessment-v2-segment-review
 git status --short --branch
 
 # Read current authority and boundaries
 sed -n '1,260p' docs/PROJECT_SOURCE_OF_TRUTH.md
 sed -n '1,240p' docs/CURRENT_HANDOFF.md
 
-# A1 backend and native gates
+# A2 backend and native gates
 PYTHONPATH=apps/api:src python3.13 -m pytest apps/api/tests/assessment_v2 -m "not assessment_postgres" -q
-PYTHONPATH=apps/api:src python3.13 scripts/check_assessment_v2_native.py
+PYTHONPATH=apps/api:src python3.13 scripts/check_assessment_v2_migrations.py
+LINGUALENS_NATIVE_ADMIN_DATABASE_URL=postgresql+psycopg://<local-admin>:<password>@127.0.0.1:5432/postgres \
+  PYTHONPATH=apps/api:src python3.13 scripts/check_assessment_v2_native.py
 bash scripts/check_project.sh
 
 # Active API
@@ -265,10 +265,9 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 npm run dev
 
 ```text
 Read `AGENTS.md`, `docs/PROJECT_SOURCE_OF_TRUTH.md`, and this handoff.
-Continue A1 only in `.worktrees/assessment-web-capture-v2`. Final-budget review
-returned `fix-first` with B1-B4; parent recovery fixed and verified capture lease
-reclaim, scheduler fairness, current-contract filtering and cancel-request UI
-coverage. Keep the worktree uncommitted until owner authorization. Do not
-migrate a shared Supabase database, deploy, merge, or change GUI/TUI business
-rules.
+Continue A2 only in `.worktrees/assessment-v2-segment-review`. Tasks 6-7 are
+green: immutable segment review, replay safety, evidence provenance and native
+PostgreSQL/RLS walkthrough are verified. Task 8 is complete locally; keep the
+worktree uncommitted until owner authorization, and do not migrate a shared
+Supabase database, deploy, merge, or change GUI/TUI business rules.
 ```

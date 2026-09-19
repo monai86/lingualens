@@ -18,6 +18,8 @@ from app.assessment_v2.domain.models import (
     RecordingQualityStatus,
     RecordingUploadState,
     TranscriptReviewState,
+    TranscriptSegmentSpeakerRole,
+    TranscriptSegmentUncertaintyReason,
     TranscriptSource,
 )
 from app.assessment_v2.evidence import (
@@ -145,6 +147,105 @@ class TranscriptRevisionResponse(_StrictModel):
     version: int = Field(strict=True, ge=1)
 
 
+class TranscriptSegmentCreateRequest(_StrictModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
+
+    ordinal: int = Field(strict=True, ge=1, le=100_000)
+    start_ms: int = Field(strict=True, ge=0, le=86_400_000)
+    end_ms: int = Field(strict=True, ge=1, le=86_400_000)
+    speaker_role: TranscriptSegmentSpeakerRole
+    text: str = Field(min_length=1, max_length=20_000)
+    confidence: float | None = Field(default=None, strict=True, ge=0, le=1)
+    uncertainty_reason: TranscriptSegmentUncertaintyReason = (
+        TranscriptSegmentUncertaintyReason.NONE
+    )
+
+    @model_validator(mode="after")
+    def validate_offsets(self) -> "TranscriptSegmentCreateRequest":
+        if not self.text.strip():
+            raise ValueError("text must be a non-empty value")
+        if any(character in self.text for character in "\r\n"):
+            raise ValueError("text must not contain newline characters")
+        if self.end_ms <= self.start_ms:
+            raise ValueError("end_ms must be greater than start_ms")
+        return self
+
+
+class TranscriptSegmentSetCreateRequest(_StrictModel):
+    transcript_revision_id: str = Field(min_length=1, max_length=64)
+    source: TranscriptSource
+    segments: list[TranscriptSegmentCreateRequest] = Field(min_length=1, max_length=100_000)
+    recording_id: str | None = Field(default=None, min_length=1, max_length=64)
+    expected_revision: int | None = Field(default=None, strict=True, ge=1)
+    expected_version: int | None = Field(default=None, strict=True, ge=1)
+    client_checksum: str | None = Field(default=None, strict=True, min_length=64, max_length=64)
+
+    @field_validator("client_checksum")
+    @classmethod
+    def validate_client_checksum(cls, value: str | None) -> str | None:
+        if value is not None and re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise ValueError("client_checksum must be a lowercase SHA-256 digest")
+        return value
+
+    @model_validator(mode="after")
+    def validate_expected_current_pair(self) -> "TranscriptSegmentSetCreateRequest":
+        if (self.expected_revision is None) != (self.expected_version is None):
+            raise ValueError("expected_revision and expected_version must be provided together")
+        ordinals = [segment.ordinal for segment in self.segments]
+        if ordinals != list(range(1, len(ordinals) + 1)):
+            raise ValueError("segment ordinals must be contiguous starting at 1")
+        return self
+
+
+class TranscriptSegmentResponse(_StrictModel):
+    id: str = Field(min_length=1, max_length=64)
+    ordinal: int = Field(strict=True, ge=1)
+    start_ms: int = Field(strict=True, ge=0)
+    end_ms: int = Field(strict=True, ge=1)
+    speaker_role: TranscriptSegmentSpeakerRole
+    text: str = Field(min_length=1, max_length=20_000)
+    confidence: float | None = Field(default=None, strict=True, ge=0, le=1)
+    uncertainty_reason: TranscriptSegmentUncertaintyReason
+    created_at: datetime
+
+
+class TranscriptSegmentSetResponse(_StrictModel):
+    id: str = Field(min_length=1, max_length=64)
+    assessment_id: str = Field(min_length=1, max_length=64)
+    transcript_revision_id: str = Field(min_length=1, max_length=64)
+    transcript_content_sha256: str = Field(strict=True, min_length=64, max_length=64)
+    recording_id: str | None = Field(default=None, min_length=1, max_length=64)
+    revision: int = Field(strict=True, ge=1)
+    source: TranscriptSource
+    review_state: TranscriptReviewState
+    segments_sha256: str = Field(strict=True, min_length=64, max_length=64)
+    segments: list[TranscriptSegmentResponse] = Field(min_length=1, max_length=100_000)
+    created_at: datetime
+    attested_at: datetime | None
+    version: int = Field(strict=True, ge=1)
+
+
+class TranscriptSegmentReplayGrantResponse(_StrictModel):
+    segment_id: str = Field(min_length=1, max_length=64)
+    start_ms: int = Field(strict=True, ge=0)
+    end_ms: int = Field(strict=True, ge=1)
+    available: bool
+    url: str | None = Field(default=None, min_length=1, max_length=4096)
+    expires_at: datetime | None = None
+    expires_in_seconds: int | None = Field(default=None, strict=True, ge=1, le=900)
+
+    @model_validator(mode="after")
+    def validate_replay_grant(self) -> "TranscriptSegmentReplayGrantResponse":
+        if self.end_ms <= self.start_ms:
+            raise ValueError("end_ms must be greater than start_ms")
+        if self.available:
+            if self.url is None or self.expires_at is None or self.expires_in_seconds is None:
+                raise ValueError("available replay requires a signed URL and expiry")
+        elif self.url is not None or self.expires_at is not None or self.expires_in_seconds is not None:
+            raise ValueError("unavailable replay cannot expose a signed grant")
+        return self
+
+
 class EvidenceProvenanceResponse(_StrictModel):
     input_ref: str = Field(min_length=1, max_length=256)
     input_sha256: str = Field(strict=True, min_length=64, max_length=64)
@@ -179,6 +280,8 @@ class EvidenceProfileResponse(_StrictModel):
     evidence_run_id: str = Field(min_length=1, max_length=64)
     assessment_id: str = Field(min_length=1, max_length=64)
     transcript_revision_id: str = Field(min_length=1, max_length=64)
+    segment_set_id: str | None = Field(default=None, min_length=1, max_length=64)
+    segment_set_sha256: str | None = Field(default=None, min_length=64, max_length=64)
     state: EvidenceState
     generated_at: datetime
     provenance: EvidenceProvenanceResponse
@@ -360,3 +463,177 @@ class DownloadIntentResponse(_StrictModel):
 class DeleteRecordingResponse(_StrictModel):
     id: str = Field(min_length=1, max_length=64)
     deleted: bool
+
+
+# Longitudinal comparison schemas (B2)
+from app.assessment_v2.longitudinal import (
+    CompatibilityStatus,
+    IncompatibilityReason,
+    NumericalTrend,
+)
+
+
+class ComparisonCreateRequest(_StrictModel):
+    baseline_assessment_id: str = Field(min_length=1, max_length=64)
+    policy_version: str = Field(default="longitudinal_v1", min_length=1, max_length=64)
+
+
+class FeatureComparisonItemResponse(_StrictModel):
+    feature_key: str = Field(min_length=1, max_length=128)
+    unit: str | None = Field(default=None, max_length=64)
+    status: CompatibilityStatus
+    incompatibility_reasons: list[IncompatibilityReason]
+    baseline_value: float | int | None = None
+    current_value: float | int | None = None
+    absolute_delta: float | None = None
+    percent_change: float | None = None
+    percent_change_limitation: str | None = Field(default=None, max_length=64)
+    numerical_trend: NumericalTrend
+    clinical_interpretation: str = Field(min_length=1, max_length=64)
+
+
+class ComparisonResponse(_StrictModel):
+    comparison_id: str = Field(min_length=1, max_length=64)
+    baseline_assessment_id: str = Field(min_length=1, max_length=64)
+    current_assessment_id: str = Field(min_length=1, max_length=64)
+    baseline_evidence_run_id: str = Field(min_length=1, max_length=64)
+    current_evidence_run_id: str = Field(min_length=1, max_length=64)
+    baseline_evidence_sha256: str = Field(min_length=64, max_length=64)
+    current_evidence_sha256: str = Field(min_length=64, max_length=64)
+    policy_version: str = Field(min_length=1, max_length=64)
+    status: CompatibilityStatus
+    is_stale: bool
+    features: list[FeatureComparisonItemResponse]
+    created_at: datetime
+
+
+class ChildAssessmentHistoryItemResponse(_StrictModel):
+    assessment_id: str = Field(min_length=1, max_length=64)
+    created_at: datetime
+    purpose: str = Field(min_length=1, max_length=64)
+    state: str = Field(min_length=1, max_length=64)
+    age_months: int = Field(ge=0, le=240)
+    protocol_version_key: str | None = Field(default=None, max_length=128)
+    language: str = Field(min_length=1, max_length=64)
+    evidence_run_id: str | None = Field(default=None, max_length=64)
+    is_comparable: bool
+
+
+# Clinical Review & Reports Schemas (C1 & C2)
+from app.assessment_v2.clinical_review import (
+    AttentionCueType,
+    ClinicalDispositionType,
+    CueStatus,
+)
+from app.assessment_v2.reports import ReportStatus
+
+
+class AttentionCueReviewRequest(_StrictModel):
+    status: CueStatus
+    rationale: str | None = Field(default=None, max_length=2048)
+
+
+class FollowUpPlanSchema(_StrictModel):
+    target_date: str | None = Field(default=None, max_length=64)
+    recommended_protocol: str | None = Field(default=None, max_length=128)
+    focus_areas: list[str] = Field(default_factory=list)
+    monitoring_notes: str | None = Field(default=None, max_length=2048)
+
+
+class ClinicalDispositionRequest(_StrictModel):
+    disposition: ClinicalDispositionType
+    disposition_notes: str | None = Field(default=None, max_length=4096)
+    follow_up_plan: FollowUpPlanSchema | None = None
+    expected_version: int | None = Field(default=None, ge=1)
+
+
+class AttentionCueResponse(_StrictModel):
+    cue_id: str = Field(min_length=1, max_length=64)
+    cue_type: AttentionCueType
+    title: str = Field(min_length=1, max_length=255)
+    description: str
+    policy_version: str = Field(min_length=1, max_length=64)
+    evidence_run_id: str = Field(min_length=1, max_length=64)
+    supporting_feature_keys: list[str]
+    conflicting_feature_keys: list[str]
+    limitations: list[str]
+    status: CueStatus
+    reviewer_id: str | None = None
+    reviewed_at: datetime | None = None
+    rationale: str | None = None
+
+
+class ClinicalReviewResponse(_StrictModel):
+    review_id: str = Field(min_length=1, max_length=64)
+    assessment_id: str = Field(min_length=1, max_length=64)
+    child_id: str = Field(min_length=1, max_length=64)
+    evidence_run_id: str = Field(min_length=1, max_length=64)
+    version: int = Field(ge=1)
+    status: str = Field(min_length=1, max_length=32)
+    cues: list[AttentionCueResponse]
+    disposition: ClinicalDispositionType | None = None
+    disposition_notes: str | None = None
+    follow_up_plan: FollowUpPlanSchema | None = None
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    is_stale: bool
+
+
+class ReportDraftCreateRequest(_StrictModel):
+    purpose: str | None = Field(default=None, max_length=1024)
+    comparison_id: str | None = Field(default=None, max_length=64)
+
+
+class ReportDraftUpdateRequest(_StrictModel):
+    title: str = Field(min_length=1, max_length=255)
+    purpose: str = Field(min_length=1, max_length=1024)
+    content_markdown: str = Field(min_length=1)
+    limitations: list[str] | None = None
+    expected_version: int | None = Field(default=None, ge=1)
+
+
+class ReportSignOffRequest(_StrictModel):
+    expected_version: int | None = Field(default=None, ge=1)
+
+
+class ReportAmendmentCreateRequest(_StrictModel):
+    title: str = Field(min_length=1, max_length=255)
+    purpose: str = Field(min_length=1, max_length=1024)
+    content_markdown: str = Field(min_length=1)
+
+
+class ReportResponse(_StrictModel):
+    report_id: str = Field(min_length=1, max_length=64)
+    assessment_id: str = Field(min_length=1, max_length=64)
+    child_id: str = Field(min_length=1, max_length=64)
+    evidence_run_id: str = Field(min_length=1, max_length=64)
+    comparison_id: str | None = None
+    review_id: str = Field(min_length=1, max_length=64)
+    amends_report_id: str | None = None
+    amendment_sequence: int = Field(ge=0)
+    version: int = Field(ge=1)
+    status: ReportStatus
+    title: str = Field(min_length=1, max_length=255)
+    purpose: str
+    content_markdown: str
+    limitations: list[str]
+    signed_by: str | None = None
+    signed_at: datetime | None = None
+    signed_snapshot_hash: str | None = None
+    is_stale: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReportExportResponse(_StrictModel):
+    report_id: str = Field(min_length=1, max_length=64)
+    format: str = Field(min_length=1, max_length=16)
+    content_type: str = Field(min_length=1, max_length=64)
+    filename: str = Field(min_length=1, max_length=255)
+    content: str | None = None
+    base64_content: str | None = None
+    report_hash: str | None = None
+    signed_by: str | None = None
+    export_timestamp: datetime
+
+

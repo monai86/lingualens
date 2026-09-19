@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.assessment_v2.domain.segments import TranscriptSegment
 
 
 class AssessmentPurpose(StrEnum):
@@ -77,6 +81,22 @@ class TranscriptReviewState(StrEnum):
     SUPERSEDED = "superseded"
 
 
+class TranscriptSegmentSpeakerRole(StrEnum):
+    CHILD = "child"
+    THERAPIST = "therapist"
+    CAREGIVER = "caregiver"
+    UNKNOWN = "unknown"
+
+
+class TranscriptSegmentUncertaintyReason(StrEnum):
+    NONE = "none"
+    LOW_ASR_CONFIDENCE = "low_asr_confidence"
+    UNINTELLIGIBLE_AUDIO = "unintelligible_audio"
+    SPEAKER_UNCERTAIN = "speaker_uncertain"
+    TIMESTAMP_UNCERTAIN = "timestamp_uncertain"
+    MANUAL_REVIEW = "manual_review"
+
+
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -114,6 +134,7 @@ class AssessmentSnapshot:
     version: int
     age_months: int
     language_context: dict[str, object]
+    created_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +246,8 @@ class ProcessingRunSnapshot:
     error_code: str | None
     assessment_id: str | None = None
     transcript_revision_id: str | None = None
+    segment_set_id: str | None = None
+    segment_set_sha256: str | None = None
     max_attempts: int = 3
     result_available: bool = False
     can_retry: bool = False
@@ -236,6 +259,12 @@ class ProcessingRunSnapshot:
             raise ValueError("max_attempts must be positive")
         if self.version < 1:
             raise ValueError("version must be positive")
+        if (self.segment_set_id is None) != (self.segment_set_sha256 is None):
+            raise ValueError("segment set provenance must include both id and checksum")
+        if self.segment_set_id is not None:
+            _require_non_empty(self.segment_set_id, "segment set id")
+            if _SHA256.fullmatch(self.segment_set_sha256 or "") is None:
+                raise ValueError("segment set checksum must be a lowercase SHA-256 digest")
 
         has_recording_target = self.recording_id is not None
         has_evidence_target = (
@@ -269,6 +298,8 @@ class ProcessingRunSnapshot:
             raise ValueError("capture processing run cannot expose a result")
         if self.can_retry or self.can_cancel:
             raise ValueError("capture processing run cannot expose retry or cancel actions")
+        if self.segment_set_id is not None:
+            raise ValueError("capture processing run cannot carry segment provenance")
 
 
 @dataclass(frozen=True, slots=True)
@@ -438,5 +469,46 @@ class AttestTranscript:
 
     def __post_init__(self) -> None:
         _require_non_empty(self.transcript_revision_id, "transcript revision id")
+        if self.expected_version < 1:
+            raise ValueError("expected_version must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class CreateTranscriptSegmentSet:
+    assessment_id: str
+    transcript_revision_id: str
+    segments: tuple[TranscriptSegment, ...]
+    source: TranscriptSource
+    recording_id: str | None = None
+    expected_revision: int | None = None
+    expected_version: int | None = None
+    client_checksum: str | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.assessment_id, "assessment id")
+        _require_non_empty(self.transcript_revision_id, "transcript revision id")
+        if not isinstance(self.segments, tuple) or not self.segments:
+            raise ValueError("segments must be a non-empty tuple")
+        if not isinstance(self.source, TranscriptSource):
+            raise ValueError("source must be a supported transcript source")
+        if self.recording_id is not None:
+            _require_non_empty(self.recording_id, "recording id")
+        if (self.expected_revision is None) != (self.expected_version is None):
+            raise ValueError("expected_revision and expected_version must be provided together")
+        if self.expected_revision is not None and self.expected_revision < 1:
+            raise ValueError("expected_revision must be positive")
+        if self.expected_version is not None and self.expected_version < 1:
+            raise ValueError("expected_version must be positive")
+        if self.client_checksum is not None and _SHA256.fullmatch(self.client_checksum) is None:
+            raise ValueError("client_checksum must be a 64-character lowercase SHA-256 digest")
+
+
+@dataclass(frozen=True, slots=True)
+class AttestTranscriptSegmentSet:
+    transcript_segment_set_id: str
+    expected_version: int
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.transcript_segment_set_id, "transcript segment set id")
         if self.expected_version < 1:
             raise ValueError("expected_version must be positive")

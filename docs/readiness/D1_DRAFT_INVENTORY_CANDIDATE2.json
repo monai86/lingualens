@@ -1,0 +1,457 @@
+{
+  "schemaVersion": "solweaver-draft-inventory-v2",
+  "assuranceUnitId": "lingualens/assessment-v2/desktop-stage1",
+  "draftCandidateVersion": "candidate-2-draft",
+  "base": "5fb37457167b079d63d5ffe10d63a1cd2cd88706",
+  "createdAt": "2026-09-13T15:25:00Z",
+  "recordCount": 23,
+  "dependencyCount": 23,
+  "candidateFiles": [
+    {
+      "path": "CHANGELOG.md",
+      "bytes": 17837,
+      "sha256": "c1d04007f84e78fe2b001a46a171a12ffd55e5f651398029ec0d04909ca11d5e",
+      "git_status": " M",
+      "role": "candidate_documentation",
+      "hunk_ownership": "Full file identity preserved; D1 hunk ownership scoped to Desktop Assessment V2 Stage 1 documentation and unreleased notes.",
+      "gitStatus": " M"
+    },
+    {
+      "path": "README.md",
+      "bytes": 30984,
+      "sha256": "f8d8ebaf661fe9e05b203d22e6ab2a21ff324a65853142e42a111b91e5d57fd6",
+      "git_status": " M",
+      "role": "candidate_documentation",
+      "hunk_ownership": "Full file identity preserved; D1 hunk ownership scoped to Desktop Assessment V2 Stage 1 documentation and unreleased notes.",
+      "gitStatus": " M"
+    },
+    {
+      "path": "docs/readiness/GUI_TUI_V2_PARITY.md",
+      "bytes": 35474,
+      "sha256": "acf316b336a4bb3930df754ab3543eff9c0d9c89938a3541eadaa4d594178a24",
+      "git_status": "??",
+      "role": "candidate_documentation",
+      "gitStatus": "??"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-12-antigravity-d1-r1-continuation.md",
+      "bytes": 14422,
+      "sha256": "35a705abcf23502f62aa57be3e683bb7a199852fc9330c6665c870c2d9ffb40d",
+      "git_status": "??",
+      "role": "candidate_documentation",
+      "gitStatus": "??"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-12-d1-auth-session-implementation.md",
+      "bytes": 6777,
+      "sha256": "37f571c764ec5b7df951c95e5e3c7ea6de81b41fa4c043533a223cd2ca971922",
+      "git_status": "??",
+      "role": "candidate_documentation",
+      "gitStatus": "??"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-12-d1-failure-boundary-implementation.md",
+      "bytes": 6643,
+      "sha256": "adddc892210df3d62364729e71c0161e044a2aa46f68e412ca9d1ca958ed3378",
+      "git_status": "??",
+      "role": "candidate_documentation",
+      "gitStatus": "??"
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-12-stage1-desktop-consumer-implementation.md",
+      "bytes": 18592,
+      "sha256": "9270f70efda2a5f97135fd2bce039204ade51fe072acf8d86f8092b1d1aaad30",
+      "git_status": "??",
+      "role": "candidate_documentation",
+      "gitStatus": "??"
+    },
+    {
+      "path": "packages/gui/app.py",
+      "bytes": 259872,
+      "sha256": "ca0727ae3f425b33485dd797b6c2bd450c164d6093f5000ac9ba3cd73d76936d",
+      "git_status": " M",
+      "role": "candidate_production",
+      "gitStatus": " M"
+    },
+    {
+      "path": "packages/tui/client.py",
+      "bytes": 64115,
+      "sha256": "1497c84219e8a71d01022e6ebbb06e3dbc02bca35fdc8cb46dbc56fd8287aa5a",
+      "git_status": " M",
+      "role": "candidate_production",
+      "gitStatus": " M"
+    },
+    {
+      "path": "packages/tui/ui.py",
+      "bytes": 10458,
+      "sha256": "396fba0cf8907cda83216fa4fe6a6ead996431736125ba4e6c932277613d0bb8",
+      "git_status": " M",
+      "role": "candidate_production",
+      "gitStatus": " M"
+    },
+    {
+      "path": "packages/tui/validation.py",
+      "bytes": 6315,
+      "sha256": "48b2b7ca30369bca7fa4fe8053d1ef849558c403f980329b2e399b2afe9da5d2",
+      "git_status": "??",
+      "role": "candidate_production",
+      "gitStatus": "??"
+    },
+    {
+      "path": "packages/tui/workflow.py",
+      "bytes": 42482,
+      "sha256": "1f9d17c0a5117b63ce1b41636461de2147b584f67257e611c4591949eb98b152",
+      "git_status": " M",
+      "role": "candidate_production",
+      "gitStatus": " M"
+    },
+    {
+      "path": "tests/test_canonical_v2_b6_constraints.py",
+      "bytes": 30007,
+      "sha256": "211f20ca801b39f7789e2dd9a7fdf6ae30691904b1c88f7441e8181e5be32048",
+      "git_status": "??",
+      "role": "candidate_test",
+      "gitStatus": "??"
+    },
+    {
+      "path": "tests/test_gui.py",
+      "bytes": 135324,
+      "sha256": "4f24c4c628390b49708678b521607088e8b056d865b2e9e08aefcb181a7b0435",
+      "git_status": " M",
+      "role": "candidate_test",
+      "gitStatus": " M"
+    },
+    {
+      "path": "tests/test_gui_b3b_error_boundary.py",
+      "bytes": 18592,
+      "sha256": "75942d5eaed46a20a61c9a5c2a801a44e4842e5c18167c4798b8751ff21dc322",
+      "git_status": "??",
+      "role": "candidate_test",
+      "gitStatus": "??"
+    },
+    {
+      "path": "tests/test_gui_b5_assessment_list.py",
+      "bytes": 18662,
+      "sha256": "c1fb4efef40931cebc5c134f98585afd8a68f3e2318fba7c69f999743beb24fe",
+      "git_status": "??",
+      "role": "candidate_test",
+      "gitStatus": "??"
+    },
+    {
+      "path": "tests/test_gui_tui_b1_context_isolation.py",
+      "bytes": 22946,
+      "sha256": "bb0b9ca73676aa01febd20e5b735cca930cd2922a3aea85982de9187ea7f0f99",
+      "git_status": "??",
+      "role": "candidate_test",
+      "gitStatus": "??"
+    },
+    {
+      "path": "tests/test_gui_tui_b2_auth_cleanup.py",
+      "bytes": 27537,
+      "sha256": "c8858cc1e2e90aa0bf61aba1caa4e521eafef8608f7de882f4f17c3cff6508a4",
+      "git_status": "??",
+      "role": "candidate_test",
+      "gitStatus": "??"
+    },
+    {
+      "path": "tests/test_tui.py",
+      "bytes": 45979,
+      "sha256": "cf00a3ac2fb951073f4089ccf975fc8f64a6c3e9c6e4e6830a043d91f8d730c4",
+      "git_status": " M",
+      "role": "candidate_test",
+      "gitStatus": " M"
+    },
+    {
+      "path": "tests/test_tui_canonical_integration.py",
+      "bytes": 17870,
+      "sha256": "8cfffaf0f437c5dbc15f3a2e1b59f11e55656b74b6d2e82c1f62dba1e1312e86",
+      "git_status": "??",
+      "role": "candidate_test",
+      "gitStatus": "??"
+    },
+    {
+      "path": "tests/test_tui_legacy_b3a_contract.py",
+      "bytes": 11617,
+      "sha256": "a16a89f4a1adefaf4364b5186c81e88910077babb3e8842bc47a777dd0b83f8e",
+      "git_status": "??",
+      "role": "candidate_test",
+      "gitStatus": "??"
+    },
+    {
+      "path": "tests/test_tui_legacy_b4_contract.py",
+      "bytes": 6519,
+      "sha256": "ba8b42b6a5a80652f2440074ffd6ff9c33cac2e27f7d9e8e8494e6027a22d8ab",
+      "git_status": "??",
+      "role": "candidate_test",
+      "gitStatus": "??"
+    },
+    {
+      "path": "tests/test_tui_transport.py",
+      "bytes": 29534,
+      "sha256": "40b0463b9d684df750105e1f04cc9dda3b7c3c5ce83f9718db4d19c2f13af5c3",
+      "git_status": "??",
+      "role": "candidate_test",
+      "gitStatus": "??"
+    }
+  ],
+  "dependencies": [
+    {
+      "path": "apps/api/app/assessment_v2/db/base.py",
+      "bytes": 228,
+      "sha256": "2d21799ba964d4ba368090e391138e685d59c0df86b37efe87bf347d796e10ac",
+      "git_status": "clean",
+      "role": "orm_declarative_base",
+      "rationale": "SQLAlchemy declarative base imported by ORM models backing Assessment V2 repository.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "apps/api/app/assessment_v2/db/models.py",
+      "bytes": 74369,
+      "sha256": "9b51f39cbb38ff0714c1b5251b18689b4d3d3cdbc43367822246937cbbe0c567",
+      "git_status": " M",
+      "role": "orm_models",
+      "rationale": "SQLAlchemy ORM models (AssessmentRecord, ChildRecord, ConsentRecord) backing canonical repository.",
+      "gitStatus": " M"
+    },
+    {
+      "path": "apps/api/app/assessment_v2/db/repositories.py",
+      "bytes": 211542,
+      "sha256": "d28d9dc47ca3e902bea835e8bcb58f97826d185c703593665b6c4cffc19d0878",
+      "git_status": " M",
+      "role": "canonical_repository",
+      "rationale": "AssessmentRepository implementing child, consent, assessment CRUD, tenant scoping, and optimistic locking.",
+      "gitStatus": " M"
+    },
+    {
+      "path": "apps/api/app/assessment_v2/db/session.py",
+      "bytes": 2155,
+      "sha256": "b783e248db29e000cf0d41fedddfa9312270a6a3c8c9c37735902cb283e74d3a",
+      "git_status": "clean",
+      "role": "database_session",
+      "rationale": "Engine and session maker used by repository and backend integration tests.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "apps/api/app/assessment_v2/dependencies.py",
+      "bytes": 2968,
+      "sha256": "9936c7bbbcdcdf16d2a37ba421f81e8657e5c866769fe20c8e4e93012dcb163c",
+      "git_status": "clean",
+      "role": "canonical_dependency_injection",
+      "rationale": "FastAPI Depends providers (get_assessment_service, get_session) used by route handlers.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "apps/api/app/assessment_v2/domain/models.py",
+      "bytes": 15955,
+      "sha256": "48c613db426ba3def403877e1968e230268d10f380e8d6763c40682419afd92f",
+      "git_status": " M",
+      "role": "canonical_domain_models",
+      "rationale": "Domain entity definitions, enums (AssessmentPurpose, ConsentPurpose, AssessmentState), and value objects.",
+      "gitStatus": " M"
+    },
+    {
+      "path": "apps/api/app/assessment_v2/errors.py",
+      "bytes": 1841,
+      "sha256": "4b7e06f8aa985095bc0d97cd5019f5b49a7c020a0b0aa4f2761492cd96a8dcda",
+      "git_status": "clean",
+      "role": "error_hierarchy",
+      "rationale": "Standard exception hierarchy mapped to HTTP status codes by API error handlers.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "apps/api/app/assessment_v2/routes.py",
+      "bytes": 42162,
+      "sha256": "891e0127e1f5c7ee63ad9abd5fcf3207e5b00248aa9d6990bb7d3bff23adaff7",
+      "git_status": " M",
+      "role": "canonical_api_routes",
+      "rationale": "FastAPI APIRouter handling /v2/children and /v2/assessments endpoints exercised by integration tests.",
+      "gitStatus": " M"
+    },
+    {
+      "path": "apps/api/app/assessment_v2/schemas.py",
+      "bytes": 24445,
+      "sha256": "77918a8b5b86d0e482b4e6d4e6a01aa1d15f6a30c432d906765ebde5d7e049d6",
+      "git_status": " M",
+      "role": "canonical_schemas",
+      "rationale": "Pydantic V2 schemas for request validation and response serialization (AssessmentResponse, etc.).",
+      "gitStatus": " M"
+    },
+    {
+      "path": "apps/api/app/assessment_v2/services.py",
+      "bytes": 62559,
+      "sha256": "18563e0a9e40fb4dc58158e37c814ff9e20897947524677762cbc2150e84011f",
+      "git_status": " M",
+      "role": "canonical_services",
+      "rationale": "AssessmentService enforcing clinical policies, consent prerequisites, and role-based permissions.",
+      "gitStatus": " M"
+    },
+    {
+      "path": "apps/api/app/core/config.py",
+      "bytes": 23517,
+      "sha256": "798218f77ed457cf602f7f582d17e6ecaf60a5acc0cead7b452721d3d6fe4bd3",
+      "git_status": "clean",
+      "role": "core_config",
+      "rationale": "Application configuration settings loaded at startup.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "apps/api/app/core/security.py",
+      "bytes": 7998,
+      "sha256": "b5ff0f1247beace9e21bb8f33c86905188dbb68cc6e0b77d9c32c4bbc312655e",
+      "git_status": "clean",
+      "role": "core_security",
+      "rationale": "CurrentUser model, authorization scope definitions, and token handling.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "apps/api/app/main.py",
+      "bytes": 6052,
+      "sha256": "83197a328a7c3577dddca780aa31dff058c9ff62b52578c1c115ed59c11029d4",
+      "git_status": "clean",
+      "role": "app_entrypoint",
+      "rationale": "FastAPI application instance mounting the Assessment V2 router and exception handlers.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "apps/api/app/schemas/clinical.py",
+      "role": "clinical_schemas_assessment_v2",
+      "scopeRationale": "Clinical schema models imported by tests/test_tui_legacy_b3a_contract.py and tests/test_tui_legacy_b4_contract.py.",
+      "gitStatus": "  ",
+      "bytes": 34420,
+      "sha256": "8a1e40b26a027eca68359f8a95accb3bd5becb175b6ab63d277d6c9386af6885"
+    },
+    {
+      "path": "apps/api/tests/assessment_v2/test_repository.py",
+      "bytes": 22468,
+      "sha256": "3bbac780e2557128bd48d32012156c840bcff6ce49b104a9ff549fd3f4f11adf",
+      "git_status": " M",
+      "role": "d1_repository_regression_test",
+      "rationale": "Contains D1 regression test test_consent_versioning_per_purpose_sequence_and_child_isolation verifying consent versioning and child isolation.",
+      "gitStatus": " M"
+    },
+    {
+      "path": "apps/api/tests/assessment_v2/test_routes.py",
+      "bytes": 12056,
+      "sha256": "38aee6c660a7a558c6978386e133771c57bdf2d34c8deafeaf3a0dc037f5629e",
+      "git_status": "clean",
+      "role": "backend_contract_routes_test",
+      "rationale": "Verifies Assessment V2 route contract, HTTP status propagation, and error envelopes.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "apps/api/tests/assessment_v2/test_schemas.py",
+      "bytes": 11583,
+      "sha256": "9e285f2b810ac3fad19e53bbf7497b30ffd0479c11e31d2a6382f03f150d1ab5",
+      "git_status": "clean",
+      "role": "backend_contract_schemas_test",
+      "rationale": "Verifies strict Pydantic schemas, language normalization, and field constraints.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "apps/api/tests/assessment_v2/test_services.py",
+      "bytes": 15022,
+      "sha256": "689643ad5656950b87fdffc4b387fbe6dd99ff57df0e762fd1866cd311eb3049",
+      "git_status": "clean",
+      "role": "backend_contract_services_test",
+      "rationale": "Verifies AssessmentService clinical policies, consent checking, and role permissions.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "packages/cha/parser.py",
+      "bytes": 6707,
+      "sha256": "2ad35a38f940ee3ed33563f59b0d8379e3f339d770d75c7a869cdadcf6cf9e71",
+      "git_status": "clean",
+      "role": "runtime_import_chat_parser",
+      "rationale": "CHAT transcription parser imported by packages/tui/client.py.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "packages/reports/clinical_report_template.py",
+      "bytes": 10819,
+      "sha256": "6a996df59890986c67fd4f600083f1e0ecd7543bd1efe771496f7bd61b32a649",
+      "git_status": "clean",
+      "role": "runtime_import_report_template",
+      "rationale": "Bilingual clinical report HTML generator imported by packages/gui/app.py.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "pyproject.toml",
+      "bytes": 271,
+      "sha256": "141135e1b23173dfe875ad56e0482f824354d278be2d61609a6c96fcb599ac56",
+      "git_status": "clean",
+      "role": "project_metadata_and_deps",
+      "rationale": "Python project metadata and declared tool dependencies.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "pytest.ini",
+      "bytes": 201,
+      "sha256": "49d1080b702b244360e78789d71e9c379a83e82ec8f24f90cd5a410680b23e4f",
+      "git_status": "clean",
+      "role": "pytest_configuration",
+      "rationale": "Pytest configuration markers and options governing test discovery.",
+      "gitStatus": "  "
+    },
+    {
+      "path": "requirements.txt",
+      "bytes": 1060,
+      "sha256": "0b32a58bddfafc7a21cbcd9db181fd8b1bf513a7d173b26816f15651b4515729",
+      "git_status": "clean",
+      "role": "dependency_declarations",
+      "rationale": "Direct pip requirements for the Python runtime environment.",
+      "gitStatus": "  "
+    }
+  ],
+  "assuranceMetadata": [
+    {
+      "path": "docs/ANTIGRAVITY_HANDOFF_PROGRESS.md",
+      "role": "assurance_working_journal",
+      "git_status": "??",
+      "scope_rationale": "Mutable working log and progress journal tracking assurance unit execution. Explicitly excluded from candidate manifest to prevent circular hash invalidation.",
+      "bytes": 170871,
+      "sha256": "6ad4eb5691662ff7c7202aaaddd07e88d608215c190e5a394c9b01c6748bb2cf"
+    },
+    {
+      "path": "docs/readiness/D1_DRAFT_CONSISTENCY_CHECK.md",
+      "role": "assurance_metadata_consistency_check",
+      "git_status": "??",
+      "scope_rationale": "Assurance metadata recording verification of test file count, command provenance, AST import coverage, and Call 1 artifact preservation.",
+      "bytes": 13626,
+      "sha256": "b539a0a84af0f415327632a10680e14310aee65eb784ed92be82e1e096f7fa2e"
+    },
+    {
+      "path": "docs/readiness/D1_DRAFT_INVENTORY_CANDIDATE2.json",
+      "role": "assurance_metadata_draft_inventory",
+      "git_status": "??",
+      "scope_rationale": "Draft inventory cataloging candidate files, read-only dependencies, and assurance metadata. Excluded from candidate manifest to prevent circular hash invalidation.",
+      "bytes": 17633,
+      "sha256": "f643355ec6e5945787782f16dcda5a302045b29ee7c9fa4989eaed0138e0a082"
+    },
+    {
+      "path": "docs/readiness/D1_DRAFT_PACKET_CANDIDATE2.md",
+      "role": "assurance_metadata_draft_packet",
+      "git_status": "??",
+      "scope_rationale": "Draft candidate packet documenting findings closure, verification receipts taxonomy, and parity matrix. Excluded from candidate manifest to prevent circular hash invalidation.",
+      "bytes": 30000,
+      "sha256": "a5862a59e4e721add9c163e94750e384b7980f66ddb8baaa1c2ceecc4d0ab5b6"
+    }
+  ],
+  "explicitExclusions": [
+    {
+      "path": "docs/superpowers/plans/2026-09-12-b1-implementation.md",
+      "reason": "Belongs to Slice B1 (Longitudinal Comparison Contract & Policy), not Assurance Unit D1."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-12-b2-implementation.md",
+      "reason": "Belongs to Slice B2 (Longitudinal Database Layer & Repository), not Assurance Unit D1."
+    },
+    {
+      "path": "docs/superpowers/plans/2026-09-12-u1-e1-implementation.md",
+      "reason": "Belongs to Slice U1/E1 (Web App Usability & Evidence Workspace), not Assurance Unit D1."
+    },
+    {
+      "path": ".local/",
+      "reason": "Ephemeral execution logs, pytest caches, and verification receipts; ignored by git."
+    }
+  ]
+}

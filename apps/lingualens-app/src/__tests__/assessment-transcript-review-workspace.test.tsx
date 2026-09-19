@@ -196,7 +196,7 @@ test("does not generate evidence while an attested transcript has unsaved edits"
   const editor = await screen.findByRole("textbox", { name: "เนื้อหา transcript" });
   fireEvent.change(editor, { target: { value: "*CHI: unsaved content .\n" } });
 
-  const evidenceButton = screen.getByRole("button", { name: "สร้างหลักฐานเชิงพรรณนา" });
+  const evidenceButton = await screen.findByRole("button", { name: "สร้างหลักฐานเชิงพรรณนา" });
   expect(evidenceButton).toBeDisabled();
   expect(screen.getByText("บันทึกฉบับร่างก่อนสร้างหลักฐาน")).toBeInTheDocument();
   expect(client.queueEvidence).not.toHaveBeenCalled();

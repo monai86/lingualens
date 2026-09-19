@@ -27,6 +27,12 @@ def test_native_runtime_check_exists_and_does_not_depend_on_docker() -> None:
     assert "_wait_for_evidence_success" in source
     assert "not_diagnostic" in source
     assert "decision_support_only" in source
+    assert "transcript-segment-sets" in source
+    assert "audio-replay-grant" in source
+    assert "segment_set_sha256" in source
+    assert "second-tenant" in source
+    assert "consent denial" in source
+    assert "unassigned-role denial" in source
 
 
 def test_native_runtime_check_uses_an_ephemeral_database_and_cleans_it_up() -> None:

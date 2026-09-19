@@ -75,8 +75,10 @@ PYTHONPATH=apps/api:src python -m app.assessment_v2.worker_runtime
 The native PostgreSQL/FastAPI check is the primary local runtime gate and does
 not require Docker, Redis, or Celery. It creates a uniquely named temporary
 database, starts local FastAPI and worker processes, exercises transcript
-attestation → `202` evidence enqueue → durable worker → evidence read, runs the
-PostgreSQL lease/RLS suite, and removes only its temporary database and role.
+attestation → immutable segment v1/v2 review → bounded replay → `202` evidence
+enqueue with segment provenance → durable worker → evidence read, verifies
+transcript staleness and tenant/consent/role denials, runs the PostgreSQL
+lease/RLS suite, and removes only its temporary database and role.
 Docker Compose remains an optional container-packaging smoke test:
 
 ```bash
@@ -95,10 +97,13 @@ Migration `0005_transcript_revisions` adds the append-only reviewed-transcript
 boundary, `0006_evidence_profiles` adds tenant-scoped evidence runs, measured
 features, and developmental domain profiles, and `0007_durable_evidence_jobs`
 adds assessment/transcript targets, leases, retry/cancel metadata, and result
-linkage to `processing_runs`. Only an attested transcript revision may be used
-by the evidence enqueue path. The therapist review page is
+linkage to `processing_runs`. `0008_transcript_segments` adds immutable,
+checksum-bound timestamped segment sets and `0009_segment_evidence_provenance`
+binds evidence jobs/results to the current attested segment set. Only an
+attested transcript revision and current attested segment set may be used by
+the evidence enqueue path. The therapist review page is
 `/assessments/{assessmentId}/transcript`; saving creates an append-only
-revision and explicit attestation is required before enqueue. The enqueue
+transcript/segment revision and explicit attestation is required before enqueue. The enqueue
 endpoint is `POST /api/v2/assessments/{assessment_id}/evidence-runs` and
 returns `202` with the durable run. The web client polls the current-run and
 run-detail endpoints, while `python -m app.assessment_v2.worker_runtime`

@@ -41,6 +41,8 @@ def test_evidence_tables_store_tenant_scoped_runs_features_and_domains() -> None
         "organization_id",
         "assessment_id",
         "transcript_revision_id",
+        "segment_set_id",
+        "segment_set_sha256",
         "state",
         "input_ref",
         "input_sha256",
@@ -92,6 +94,8 @@ def test_evidence_tables_require_tenant_composite_links_and_enum_checks() -> Non
             "organization_id",
             "assessment_id",
             "transcript_revision_id",
+            "segment_set_id",
+            "segment_set_sha256",
             "pipeline_version",
             "feature_schema_version",
         ),
@@ -106,6 +110,7 @@ def test_evidence_tables_require_tenant_composite_links_and_enum_checks() -> Non
     assert {
         ("organization_id", "assessment_id"),
         ("organization_id", "transcript_revision_id"),
+        ("organization_id", "segment_set_id"),
     }.issubset(_foreign_key_columns("evidence_runs"))
     assert {("organization_id", "evidence_run_id")} <= _foreign_key_columns(
         "evidence_feature_values"
@@ -119,6 +124,10 @@ def test_evidence_tables_require_tenant_composite_links_and_enum_checks() -> Non
         for constraint in AssessmentBase.metadata.tables["evidence_runs"].constraints
         if isinstance(constraint, CheckConstraint)
     }
+    assert any(
+        "segment_set_id IS NULL" in check and "segment_set_sha256" in check
+        for check in run_checks
+    )
     feature_checks = {
         str(constraint.sqltext)
         for constraint in AssessmentBase.metadata.tables["evidence_feature_values"].constraints
@@ -164,7 +173,7 @@ def test_evidence_migration_creates_and_downgrades_its_three_tables(monkeypatch)
                 }
                 revision = connection.execute("select version_num from alembic_version").fetchone()
             assert {"evidence_runs", "evidence_feature_values", "evidence_domain_profiles"} <= tables
-            assert revision == ("0007_durable_evidence_jobs",)
+            assert revision == ("0012_clinical_review_reports",)
 
             downgrade_assessment_database("0005_transcript_revisions")
             with sqlite3.connect(database_path) as connection:
