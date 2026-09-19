@@ -62,8 +62,8 @@ export function AssessmentLongitudinalWorkspace({
         const hist = await client.getChildAssessmentHistory(childId);
         setHistory(hist);
         const priors = hist.filter((h) => h.assessment_id !== assessmentId && h.is_comparable);
-        if (priors.length > 0 && !selectedBaselineId) {
-          setSelectedBaselineId(priors[0].assessment_id);
+        if (priors.length > 0) {
+          setSelectedBaselineId((current) => current ?? priors[0].assessment_id);
         }
       }
 
@@ -122,7 +122,7 @@ export function AssessmentLongitudinalWorkspace({
         </div>
         <div className="mt-4 rounded-lg bg-slate-50 p-4 border border-slate-200 text-sm text-slate-700 dark:bg-slate-800/60 dark:border-slate-700 dark:text-slate-300">
           <p className="font-medium text-slate-900 dark:text-white">
-            This is the child's initial recorded assessment. Longitudinal comparison will be available on subsequent assessments under matching protocols.
+            This is the child&apos;s initial recorded assessment. Longitudinal comparison will be available on subsequent assessments under matching protocols.
           </p>
           <p className="mt-1 text-xs text-slate-500">
             การประเมินนี้เป็นครั้งแรกของเด็ก การเปรียบเทียบเชิงพัฒนาการจะเปิดให้ใช้งานในครั้งถัดไปเมื่อใช้ชุดเครื่องมือและภาษาที่เข้ากันได้

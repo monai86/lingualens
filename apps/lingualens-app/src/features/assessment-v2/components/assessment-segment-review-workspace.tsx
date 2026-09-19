@@ -391,7 +391,7 @@ export function AssessmentSegmentReviewWorkspace({
               return (
                 <li key={segment.id}>
                   <article
-                    aria-selected={selected}
+                    data-selected={selected ? "true" : undefined}
                     className={`rounded-xl border p-4 transition-colors ${selected ? "border-[color:var(--color-accent)] bg-[color:var(--color-accent-soft)]" : "border-[color:var(--color-border)] bg-white"}`}
                   >
                     <div className="flex items-start gap-3">
