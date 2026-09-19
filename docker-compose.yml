@@ -4,12 +4,22 @@ services:
     working_dir: /workspace/apps/api
     volumes:
       - .:/workspace
-    command: sh -c "pip install -r ../../requirements.txt -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     environment:
-      - PYTHONPATH=/workspace/apps/api
+      - PYTHONPATH=/workspace/apps/api:/workspace
       - THERAPIST_APP_V2_DEBUG_FEATURE_OVERRIDE=false
+      - LINGUALENS_ASSESSMENT_DATABASE_URL=postgresql+psycopg://lingualens_assessment_app:local-assessment-only@postgres:5432/lingualens_assessment_v2
+      - LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP=true
+      - LINGUALENS_STORAGE_MODE=supabase_private
+      - LINGUALENS_SUPABASE_STORAGE_URL=${LINGUALENS_SUPABASE_STORAGE_URL:-}
+      - LINGUALENS_SUPABASE_STORAGE_SERVICE_ROLE_KEY=${LINGUALENS_SUPABASE_STORAGE_SERVICE_ROLE_KEY:-}
+      - LINGUALENS_SUPABASE_STORAGE_BUCKET=${LINGUALENS_SUPABASE_STORAGE_BUCKET:-}
+      - LINGUALENS_SUPABASE_STORAGE_TUS_ENDPOINT=${LINGUALENS_SUPABASE_STORAGE_TUS_ENDPOINT:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   worker:
     image: python:3.11-slim
@@ -18,8 +28,35 @@ services:
       - .:/workspace
     command: sh -c "pip install -r ../../requirements.txt -r requirements.txt && python -c 'from app.tasks.worker import run_worker; print(run_worker())'"
     environment:
-      - PYTHONPATH=/workspace/apps/api
+      - PYTHONPATH=/workspace/apps/api:/workspace
       - THERAPIST_APP_V2_DEBUG_FEATURE_OVERRIDE=false
+
+  capture-worker:
+    profiles: ["capture-pilot"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app
+    command: python -m app.assessment_v2.worker_runtime
+    environment:
+      - PYTHONPATH=/app
+      - LINGUALENS_MOCK_MODE=true
+      - LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP=false
+      - LINGUALENS_ASSESSMENT_DATABASE_URL=postgresql+psycopg://lingualens_assessment_app:local-assessment-only@postgres:5432/lingualens_assessment_v2
+      - LINGUALENS_STORAGE_MODE=supabase_private
+      - LINGUALENS_SUPABASE_STORAGE_URL=${LINGUALENS_SUPABASE_STORAGE_URL:-}
+      - LINGUALENS_SUPABASE_STORAGE_SERVICE_ROLE_KEY=${LINGUALENS_SUPABASE_STORAGE_SERVICE_ROLE_KEY:-}
+      - LINGUALENS_SUPABASE_STORAGE_BUCKET=${LINGUALENS_SUPABASE_STORAGE_BUCKET:-}
+      - LINGUALENS_SUPABASE_STORAGE_TUS_ENDPOINT=${LINGUALENS_SUPABASE_STORAGE_TUS_ENDPOINT:-}
+      - LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS=${LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "ffprobe -version >/dev/null 2>&1 && ffmpeg -version >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   frontend:
     image: node:20-slim
@@ -42,6 +79,13 @@ services:
       - POSTGRES_DB=therapist_app_v2
     ports:
       - "5432:5432"
+    volumes:
+      - ./scripts/postgres/init-assessment-v2.sql:/docker-entrypoint-initdb.d/20-assessment-v2.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U therapist -d therapist_app_v2"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
 
   redis:
     image: redis:7-alpine

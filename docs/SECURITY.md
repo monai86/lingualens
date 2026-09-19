@@ -10,6 +10,14 @@ separate security review before any real child data or audio is entered.
 - Keep audio/video objects in private encrypted storage.
 - Return only short-lived signed URLs to the browser; never expose permanent storage keys.
 - Require granted consent before secure upload or backend audio processing.
+- Keep the additive assessment foundation on its own database URL and Alembic
+  history; never import, rewrite, or delete v1 records during v2 rollout.
+- Treat Supabase Auth as the identity source, FastAPI as the authoritative
+  organization/role/care-team/consent policy layer, and PostgreSQL RLS as
+  defense in depth. The v2 service is not a diagnostic engine and exposes no
+  ASD probability.
+- Set PostgreSQL tenant context transaction-locally and verify that pooled
+  connections do not retain a previous organization context.
 - Keep audit-log reads admin-only through a backend/service-role path.
 - Log workflow events without transcript text, audio bytes, direct identifiers, or storage keys.
 - Log request paths as route templates or sanitized paths only. Disable

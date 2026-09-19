@@ -1,0 +1,149 @@
+{
+  "schemaVersion": "solweaver-candidate-manifest-v1",
+  "base": "5fb37457167b079d63d5ffe10d63a1cd2cd88706",
+  "frozenCandidateId": "sha256:f9c7feed15661d71f5c72a8ab4095efb35cfa56c5de772286d52385698a6d0db",
+  "identityRecipe": "sha256(UTF-8(\"solweaver-candidate-v1\\n\" + base + \"\\n\" + records sorted by exact path (UTF-8 byte order), each serialized as status + \"\\t\" + path + \"\\t\" + decimal bytes + \"\\t\" + sha256 + \"\\n\"))",
+  "scopeComplete": true,
+  "scopeCommand": "git status --porcelain=v1 --untracked-files=all (filtered to D1 Candidate 2 boundary: 23 files)",
+  "recordCount": 23,
+  "files": [
+    {
+      "status": " M",
+      "path": "CHANGELOG.md",
+      "bytes": 17837,
+      "sha256": "c1d04007f84e78fe2b001a46a171a12ffd55e5f651398029ec0d04909ca11d5e"
+    },
+    {
+      "status": " M",
+      "path": "README.md",
+      "bytes": 30984,
+      "sha256": "f8d8ebaf661fe9e05b203d22e6ab2a21ff324a65853142e42a111b91e5d57fd6"
+    },
+    {
+      "status": "??",
+      "path": "docs/readiness/GUI_TUI_V2_PARITY.md",
+      "bytes": 35474,
+      "sha256": "acf316b336a4bb3930df754ab3543eff9c0d9c89938a3541eadaa4d594178a24"
+    },
+    {
+      "status": "??",
+      "path": "docs/superpowers/plans/2026-09-12-antigravity-d1-r1-continuation.md",
+      "bytes": 14422,
+      "sha256": "35a705abcf23502f62aa57be3e683bb7a199852fc9330c6665c870c2d9ffb40d"
+    },
+    {
+      "status": "??",
+      "path": "docs/superpowers/plans/2026-09-12-d1-auth-session-implementation.md",
+      "bytes": 6777,
+      "sha256": "37f571c764ec5b7df951c95e5e3c7ea6de81b41fa4c043533a223cd2ca971922"
+    },
+    {
+      "status": "??",
+      "path": "docs/superpowers/plans/2026-09-12-d1-failure-boundary-implementation.md",
+      "bytes": 6643,
+      "sha256": "adddc892210df3d62364729e71c0161e044a2aa46f68e412ca9d1ca958ed3378"
+    },
+    {
+      "status": "??",
+      "path": "docs/superpowers/plans/2026-09-12-stage1-desktop-consumer-implementation.md",
+      "bytes": 18592,
+      "sha256": "9270f70efda2a5f97135fd2bce039204ade51fe072acf8d86f8092b1d1aaad30"
+    },
+    {
+      "status": " M",
+      "path": "packages/gui/app.py",
+      "bytes": 259872,
+      "sha256": "ca0727ae3f425b33485dd797b6c2bd450c164d6093f5000ac9ba3cd73d76936d"
+    },
+    {
+      "status": " M",
+      "path": "packages/tui/client.py",
+      "bytes": 64115,
+      "sha256": "1497c84219e8a71d01022e6ebbb06e3dbc02bca35fdc8cb46dbc56fd8287aa5a"
+    },
+    {
+      "status": " M",
+      "path": "packages/tui/ui.py",
+      "bytes": 10458,
+      "sha256": "396fba0cf8907cda83216fa4fe6a6ead996431736125ba4e6c932277613d0bb8"
+    },
+    {
+      "status": "??",
+      "path": "packages/tui/validation.py",
+      "bytes": 6315,
+      "sha256": "48b2b7ca30369bca7fa4fe8053d1ef849558c403f980329b2e399b2afe9da5d2"
+    },
+    {
+      "status": " M",
+      "path": "packages/tui/workflow.py",
+      "bytes": 42482,
+      "sha256": "1f9d17c0a5117b63ce1b41636461de2147b584f67257e611c4591949eb98b152"
+    },
+    {
+      "status": "??",
+      "path": "tests/test_canonical_v2_b6_constraints.py",
+      "bytes": 30007,
+      "sha256": "211f20ca801b39f7789e2dd9a7fdf6ae30691904b1c88f7441e8181e5be32048"
+    },
+    {
+      "status": " M",
+      "path": "tests/test_gui.py",
+      "bytes": 135324,
+      "sha256": "4f24c4c628390b49708678b521607088e8b056d865b2e9e08aefcb181a7b0435"
+    },
+    {
+      "status": "??",
+      "path": "tests/test_gui_b3b_error_boundary.py",
+      "bytes": 18592,
+      "sha256": "75942d5eaed46a20a61c9a5c2a801a44e4842e5c18167c4798b8751ff21dc322"
+    },
+    {
+      "status": "??",
+      "path": "tests/test_gui_b5_assessment_list.py",
+      "bytes": 18662,
+      "sha256": "c1fb4efef40931cebc5c134f98585afd8a68f3e2318fba7c69f999743beb24fe"
+    },
+    {
+      "status": "??",
+      "path": "tests/test_gui_tui_b1_context_isolation.py",
+      "bytes": 22946,
+      "sha256": "bb0b9ca73676aa01febd20e5b735cca930cd2922a3aea85982de9187ea7f0f99"
+    },
+    {
+      "status": "??",
+      "path": "tests/test_gui_tui_b2_auth_cleanup.py",
+      "bytes": 27537,
+      "sha256": "c8858cc1e2e90aa0bf61aba1caa4e521eafef8608f7de882f4f17c3cff6508a4"
+    },
+    {
+      "status": " M",
+      "path": "tests/test_tui.py",
+      "bytes": 45979,
+      "sha256": "cf00a3ac2fb951073f4089ccf975fc8f64a6c3e9c6e4e6830a043d91f8d730c4"
+    },
+    {
+      "status": "??",
+      "path": "tests/test_tui_canonical_integration.py",
+      "bytes": 15874,
+      "sha256": "77477e4a1bc7e8401f3557cb157be06eb83b58949a36958c2a243d84393b8add"
+    },
+    {
+      "status": "??",
+      "path": "tests/test_tui_legacy_b3a_contract.py",
+      "bytes": 11617,
+      "sha256": "a16a89f4a1adefaf4364b5186c81e88910077babb3e8842bc47a777dd0b83f8e"
+    },
+    {
+      "status": "??",
+      "path": "tests/test_tui_legacy_b4_contract.py",
+      "bytes": 6519,
+      "sha256": "ba8b42b6a5a80652f2440074ffd6ff9c33cac2e27f7d9e8e8494e6027a22d8ab"
+    },
+    {
+      "status": "??",
+      "path": "tests/test_tui_transport.py",
+      "bytes": 29534,
+      "sha256": "40b0463b9d684df750105e1f04cc9dda3b7c3c5ce83f9718db4d19c2f13af5c3"
+    }
+  ]
+}

@@ -44,6 +44,11 @@ This project is a **research prototype and educational demo**. It supports scree
   The experimental audio-to-CHAT implementation remains in
   `src/audio_pipeline/`. `src/therapist_backend/` is retained only as a legacy
   research compatibility API.
+- **Durable Assessment V2 Processing**: Assessment V2 uses the PostgreSQL
+  `processing_runs` table as its durable queue. One native worker process
+  handles capture and evidence stages with bounded retry, lease reclaim, and
+  explicit cancellation. Redis/Celery are not part of this path; Docker
+  Compose is optional packaging verification.
 - **Human Review Gate**: Generated transcripts require clinician review before preliminary feature outputs or AI-assisted explanation are interpreted.
 - **Decision-Support AI Output**: All AI output is strictly designed for screening support (e.g., concern level, review priority, clinician review support) and must never be interpreted as an automated clinical conclusion.
 - **Feature-Based ML Review**: lingualens can persist transparent review
@@ -124,8 +129,9 @@ rotation runbook reference; see `docs/SECRET_ROTATION_RUNBOOK.md`.
 For the reduced one-day pilot scope, see
 `docs/ONE_DAY_PILOT_SCOPE.md` and `docs/ONE_DAY_PILOT_RUNBOOK.md`. The pilot
 adds backend organization/care-team guards and local-private upload intents, but
-does not activate production Auth, Supabase Storage, durable workers, legal
-review, or clinical validation.
+  does not activate production Auth, managed Supabase Storage, legal review, or
+  clinical validation. Assessment V2's local/native worker is a research
+  prototype path and is not production approval.
 Phase 1 tenant hardening now adds SQL organization settings, membership and
 care-team assignment tables, identity/retention/consent/notification/job-attempt
 scaffolds, organization-scoped clinical child records, broader backend route
@@ -205,7 +211,7 @@ docs live under `apps/lingualens-app/.claude/CLAUDE.md`, and the app imports
 
 ```bash
 cd apps/api
-PYTHONPATH=. uvicorn app.main:app --reload --port 8000
+PYTHONPATH=.:../..:../../src uvicorn app.main:app --reload --port 8000
 
 cd ../../apps/lingualens-app
 npm ci
@@ -248,6 +254,97 @@ The former `therapist-clinician-app/` Vite/Capacitor surface, removed demo
 frontends, and removed benchmark entrypoints are not repository source.
 Generated folders from previous local builds may be deleted.
 
+### Assessment v2 Foundation (additive)
+
+The current therapist product and existing clients continue to use `/api/v1`.
+The new assessment-centric workflow is exposed additively at `/api/v2` and
+supports child, consent, assessment lifecycle, and the Capture V2 slice:
+protocol selection, consent-gated activities, private signed uploads, durable
+processing runs, worker-owned checksum verification, and basic non-diagnostic
+audio quality states. The reviewed-transcript boundary, therapist review page,
+persisted evidence read model, and explicit reviewed-transcript extraction
+worker and durable evidence queue are now mounted additively; reference-band
+comparison is not mounted yet. The v2 database starts
+empty: no v1 records, audio, storage keys, or JSON data are imported or
+rewritten.
+
+The maintained web app now exposes `/assessments` as the first additive v2
+therapist entry point. It covers child selection, consent confirmation,
+protocol activities, browser audio capture, private upload handoff, quality
+polling, and resuming an existing `ready_for_capture` or `capturing`
+assessment. Existing `/api/v1` session screens remain unchanged. Set
+`NEXT_PUBLIC_ASSESSMENT_API_BASE_URL` only when the v2 API is hosted at a
+different origin; otherwise it is derived from `NEXT_PUBLIC_API_BASE_URL`. After
+capture, therapists can open `/assessments/{assessmentId}/transcript` to review,
+save, and attest the transcript. The evidence action returns `202` after a
+durable enqueue; the web client follows the backend-owned run through
+`GET /api/v2/assessments/{assessment_id}/evidence-processing-run` and
+`GET /api/v2/processing-runs/{processing_run_id}` before opening
+`/assessments/{assessmentId}/evidence` to read the backend-owned descriptive
+evidence profile, its developmental domains, measured features, provenance, and
+limitations.
+
+Transcript review and evidence are separate backend boundaries. Transcript
+revisions are append-only and require therapist attestation before an evidence
+run can be persisted. A new transcript revision keeps prior evidence for audit
+but marks the dependent current run `stale`; the web workspace shows that state
+and does not calculate a replacement result in the browser. The current read
+model is descriptive decision support only: it does not diagnose ASD or a
+developmental condition, expose a probability, or claim Thai clinical
+reference-band validity.
+
+The two boundaries are intentionally separate:
+
+```text
+LINGUALENS_DATABASE_URL             -> v1 Alembic history -> existing product
+LINGUALENS_ASSESSMENT_DATABASE_URL  -> v2 Alembic history -> fresh foundation
+```
+
+Supabase Auth establishes identity, FastAPI applies organization, role,
+care-team, consent, and workflow policy, and PostgreSQL RLS provides defense in
+depth. The v2 service is research decision support only: it does not diagnose
+ASD or any developmental condition and does not expose an ASD probability.
+
+For local setup without Docker, install PostgreSQL 16 natively and provide an
+admin connection to the local `postgres` database. The native check creates a
+unique temporary v2 database, starts FastAPI directly, probes `/api/v2`, runs
+the PostgreSQL RLS suite, and removes only its temporary database and role. The
+gate also exercises transcript attestation, immutable segment draft v1 →
+edited/attested v2, bounded replay behavior, `202` evidence enqueue with segment
+provenance, the native capture/evidence worker, evidence read, transcript
+staleness, tenant/consent/role denials, and duplicate-enqueue idempotency:
+
+```bash
+PYTHONPATH=apps/api:src python scripts/check_api_migrations.py
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
+LINGUALENS_NATIVE_ADMIN_DATABASE_URL=postgresql+psycopg://<local-admin>:<password>@127.0.0.1:5432/postgres \
+  PYTHONPATH=apps/api:src python scripts/check_assessment_v2_native.py
+```
+
+Docker Compose is optional and remains available as a container-packaging smoke
+test. It verifies that the v2 history runs in the API service, confirms the API
+can create a child through `/api/v2`, and verifies the runtime role is
+`NOSUPERUSER`/`NOBYPASSRLS`.
+
+Capture and evidence processing are run from durable `processing_runs` records
+by the same tenant-scoped native worker process. The capture worker requires
+private Supabase Storage configuration for real objects,
+`LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS` for tenant-scoped PostgreSQL RLS
+polling, and `ffprobe`/`ffmpeg` for quality checks; missing media tools produce
+an explicit unavailable quality state. Local Compose includes a capture-worker
+image with those tools and runs a polling worker with
+`python -m app.assessment_v2.worker_runtime` when the `capture-pilot` profile is
+enabled. Upload-intent responses expose only a short-lived signed provider URL;
+bucket names, object keys, and TUS metadata remain server-side.
+Capture V2 treats the database-backed `processing_runs` table as its durable
+queue; the legacy Redis queue remains separate and is not part of this worker's
+contract. The workflow remains research/education decision support; it does not
+diagnose ASD or expose numeric risk.
+
+Clients remain on `/api/v1` until a later migration plan. Rollback is additive:
+stop mounting `/api/v2` and disable `LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP`;
+do not alter the v1 URL or migration history.
+
 ---
 
 ## Python ML and Audio Research Layer (`packages/` + `src/`)
@@ -281,6 +378,16 @@ The therapist API also exposes `GET /api/sessions/{session_id}/qa` so the
 Transcript tab can use backend CHAT/CLAN readiness checks before unlocking
 Reference Comparison; mock mode remains a lightweight local QA preview and does
 not pretend to validate CLAN readiness.
+
+### Terminal TUI and Desktop GUI Companion Clients (`packages/tui/`, `packages/gui/`)
+
+The terminal TUI (`packages/tui/`) and desktop companion GUI (`packages/gui/`) provide clinician
+companion workflows. In live mode (`mock_mode=False`), all client operations communicate strictly
+with the backend REST API (`apps/api`) or fail closed with structured, sanitized exceptions
+(`LinguaLensApiError`). Live mode never mutates local mock state, and unsupported operations fail
+explicitly without fabricating local success. Explicit local mock mode (`mock_mode=True`) is
+reserved for offline demonstrations and research prototyping.
+
 
 The reference pipeline also writes
 `data/reference/english_child_reference_coverage.csv` and

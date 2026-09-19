@@ -2,6 +2,7 @@ import logging
 
 from fastapi.testclient import TestClient
 
+from app.assessment_v2.correlation import sanitize_correlation_id
 from app.core.logging import sanitize_log_path
 from app.main import app
 
@@ -32,6 +33,12 @@ def test_sanitize_log_path_redacts_unknown_sensitive_segments():
     assert sanitized == "/api/v1/audio/private/[redacted]/[redacted]/[redacted]/[redacted]"
 
 
+def test_sanitize_log_path_keeps_v2_route_words_and_redacts_child_id():
+    sanitized = sanitize_log_path("/api/v2/children/child-secret/assessments")
+
+    assert sanitized == "/api/v2/children/[redacted]/assessments"
+
+
 def test_request_log_record_keeps_sensitive_path_values_out_of_structured_fields(caplog):
     caplog.set_level(logging.INFO, logger="therapist_app_v2.request")
 
@@ -41,3 +48,12 @@ def test_request_log_record_keeps_sensitive_path_values_out_of_structured_fields
     assert records
     assert "C-CHILD-SECRET" not in getattr(records[-1], "path")
     assert "C-CHILD-SECRET" not in "\n".join(record.getMessage() for record in records)
+
+
+def test_assessment_correlation_ids_are_opaque_and_bounded():
+    assert sanitize_correlation_id("0123456789abcdef0123456789abcdef") == (
+        "0123456789abcdef0123456789abcdef"
+    )
+    sanitized = sanitize_correlation_id("child-Somchai-identifier")
+    assert len(sanitized) == 32
+    assert sanitized != "child-Somchai-identifier"

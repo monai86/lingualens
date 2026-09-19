@@ -18,7 +18,7 @@ ENV_FILE="$FRONTEND_DIR/.env.local"
 echo -e "${BLUE}[1/4] Configuring local environment variables...${NC}"
 cat <<EOT > "$ENV_FILE"
 # Configured by start_local.sh
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
 EOT
 echo -e "${GREEN}✓ Local environment configured at $ENV_FILE${NC}"
 
@@ -41,7 +41,7 @@ else
 fi
 
 # Run uvicorn in the background and save PID
-(cd apps/api && PYTHONPATH=. uvicorn app.main:app --host 127.0.0.1 --port 8000) > backend.log 2>&1 &
+(cd apps/api && PYTHONPATH=.:../..:../../src uvicorn app.main:app --host 127.0.0.1 --port 8000) > backend.log 2>&1 &
 BACKEND_PID=$!
 
 # Trap Ctrl+C (SIGINT) and SIGTERM to kill the backend PID when this script is stopped
