@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 import pylangacq as pla
 
@@ -198,6 +198,120 @@ def count_pronoun_reversals(raw_text: str) -> int:
     return count
 
 
+def extract_conversational_features_v2_from_turns(
+    turns: Sequence[tuple[str, Sequence[str]]],
+) -> dict[str, float]:
+    """Extract v2 features from ordered ``(speaker, tokens)`` utterances.
+
+    ``speaker`` is normalized to ``CHI`` or ``ADULT`` by the caller. Response
+    rates use every utterance as an opportunity: an utterance counts as a
+    response only when the immediately following utterance is from the other
+    speaker class. This avoids the near-constant values produced by collapsing
+    same-speaker utterances into alternating runs first.
+    """
+    normalized_turns = [
+        ("CHI" if speaker == "CHI" else "ADULT", tuple(tokens))
+        for speaker, tokens in turns
+    ]
+    total_chi = sum(1 for speaker, _ in normalized_turns if speaker == "CHI")
+    total_adult = len(normalized_turns) - total_chi
+    total_all = total_chi + total_adult
+
+    speaker_balance = round(total_chi / total_all, 4) if total_all > 0 else 0.0
+
+    # Speaker transitions
+    transitions = 0
+    total_pairs = len(normalized_turns) - 1
+    if total_pairs > 0:
+        for (left_speaker, _), (right_speaker, _) in zip(normalized_turns, normalized_turns[1:]):
+            if left_speaker != right_speaker:
+                transitions += 1
+        turn_alternation_rate = round(transitions / total_pairs, 4)
+    else:
+        turn_alternation_rate = 0.0
+
+    # Contiguous runs
+    chi_runs = []
+    curr_spk = None
+    curr_len = 0
+    for spk, _ in normalized_turns:
+        if spk == curr_spk:
+            curr_len += 1
+        else:
+            if curr_spk == "CHI":
+                chi_runs.append(curr_len)
+            curr_spk = spk
+            curr_len = 1
+    if curr_spk == "CHI":
+        chi_runs.append(curr_len)
+
+    child_run_length_mean = round(sum(chi_runs) / len(chi_runs), 4) if chi_runs else 0.0
+
+    # Immediate-next-utterance response rates. Same-speaker continuations and
+    # terminal utterances remain in the denominator as non-responses.
+    adult_followed_by_chi = 0
+    chi_followed_by_adult = 0
+    for (left_speaker, _), (right_speaker, _) in zip(normalized_turns, normalized_turns[1:]):
+        if left_speaker == "ADULT" and right_speaker == "CHI":
+            adult_followed_by_chi += 1
+        if left_speaker == "CHI" and right_speaker == "ADULT":
+            chi_followed_by_adult += 1
+
+    child_response_rate = round(adult_followed_by_chi / total_adult, 4) if total_adult > 0 else 0.0
+    adult_response_rate = round(chi_followed_by_adult / total_chi, 4) if total_chi > 0 else 0.0
+
+    # Repetition dynamics
+    exact_echo_count = 0
+    eligible_echo_pairs = 0
+    jaccard_scores = []
+
+    exact_self_count = 0
+    eligible_self_pairs = 0
+
+    for (left_spk, left_toks), (right_spk, right_toks) in zip(normalized_turns, normalized_turns[1:]):
+
+        # Adult -> CHI
+        if left_spk != "CHI" and right_spk == "CHI":
+            eligible_echo_pairs += 1
+            if left_toks and right_toks and left_toks == right_toks:
+                exact_echo_count += 1
+            s_left, s_right = set(left_toks), set(right_toks)
+            if s_left and s_right:
+                jaccard_scores.append(len(s_left & s_right) / len(s_left | s_right))
+            else:
+                jaccard_scores.append(0.0)
+
+        # CHI -> CHI
+        if left_spk == "CHI" and right_spk == "CHI":
+            eligible_self_pairs += 1
+            if left_toks and right_toks and left_toks == right_toks:
+                exact_self_count += 1
+
+    partner_repetition_exact_ratio = round(exact_echo_count / eligible_echo_pairs, 4) if eligible_echo_pairs > 0 else 0.0
+    partner_repetition_overlap_mean = round(sum(jaccard_scores) / len(jaccard_scores), 4) if jaccard_scores else 0.0
+    self_repetition_exact_ratio = round(exact_self_count / eligible_self_pairs, 4) if eligible_self_pairs > 0 else 0.0
+
+    return {
+        "speaker_balance_ratio": speaker_balance,
+        "turn_alternation_rate": turn_alternation_rate,
+        "child_run_length_mean": child_run_length_mean,
+        "child_response_rate": child_response_rate,
+        "adult_response_rate": adult_response_rate,
+        "partner_repetition_exact_ratio": partner_repetition_exact_ratio,
+        "partner_repetition_overlap_mean": partner_repetition_overlap_mean,
+        "self_repetition_exact_ratio": self_repetition_exact_ratio,
+    }
+
+
+def extract_conversational_features_v2(all_utts) -> dict[str, float]:
+    """Extract features-conversation-v2 from CHAT utterances."""
+    turns = [
+        (getattr(utterance, "participant", ""), content_tokens(utterance))
+        for utterance in all_utts
+    ]
+    return extract_conversational_features_v2_from_turns(turns)
+
+
 def extract_chat_features(cha_path: Path) -> Optional[dict]:
     """Extract child-level feature values from one CHAT file.
 
@@ -259,6 +373,7 @@ def extract_chat_features(cha_path: Path) -> Optional[dict]:
 
     age_months = age_to_months(chi.age)
     echolalia_count = count_echolalia(all_utts)
+    v2_conv = extract_conversational_features_v2(all_utts)
 
     return {
         "participant_id": cha_path.stem,
@@ -280,4 +395,5 @@ def extract_chat_features(cha_path: Path) -> Optional[dict]:
         "pronoun_reversal_count": pronoun_reversal_count,
         "pronoun_reversal_ratio": round(pronoun_reversal_count / total_utterances, 4),
         "restricted_interest_words": restricted_interest_words,
+        **v2_conv,
     }

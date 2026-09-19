@@ -1,0 +1,9 @@
+synthetic_case_id,utterance_index,speaker,text,is_synthetic,algorithm_is_partner_response,algorithm_is_exact_echo,algorithm_jaccard_overlap,algorithm_is_self_repeat,human_label
+synthetic-dialogue-01,1,ADULT,Please choose the blue block,true,false,false,0.0,false,not_applicable
+synthetic-dialogue-01,2,CHI,blue block,true,true,false,0.6667,false,review_pending
+synthetic-dialogue-01,3,CHI,blue block,true,false,false,0.0,true,review_pending
+synthetic-dialogue-01,4,ADULT,Now place it beside the cup,true,false,false,0.0,false,not_applicable
+synthetic-dialogue-02,1,ADULT,What is rolling on the mat,true,false,false,0.0,false,not_applicable
+synthetic-dialogue-02,2,CHI,the red ball,true,true,false,0.2,false,review_pending
+synthetic-dialogue-02,3,ADULT,Can you roll the red ball,true,false,false,0.0,false,not_applicable
+synthetic-dialogue-02,4,CHI,roll the red ball,true,true,false,0.8,false,review_pending

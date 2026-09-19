@@ -1,0 +1,7 @@
+collinearity_test,within_eigsti_auroc,within_eigsti_bacc,cross_nadig_auroc,cross_nadig_bacc
+mlu_only (morphemes),0.6267,0.5688,0.4879,0.5097
+mluw_only (words),0.6261,0.5688,0.4879,0.5097
+echolalia_count_only,0.6273,0.5688,0.4879,0.5097
+echolalia_ratio_only,0.6044,0.5375,0.4831,0.5314
+unintelligible_count_only,0.6264,0.5625,0.4734,0.4203
+unintelligible_ratio_only,0.6189,0.575,0.5217,0.5097

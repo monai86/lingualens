@@ -38,7 +38,7 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0;0m' # No Color
 
-echo -e "${BLUE}=== Starting Project Verification Script ===${NC}"
+echo -e "${BLUE}=== Starting Focused Local Project Verification ===${NC}"
 
 echo -e "${BLUE}[0/7] Checking repository source-of-truth consistency...${NC}"
 "$PYTHON_BIN" scripts/check_repo_consistency.py
@@ -118,5 +118,6 @@ for app in "${apps[@]}"; do
     fi
 done
 
-echo -e "\n${GREEN}=== Success: All project verifications passed! ===${NC}"
+echo -e "\n${GREEN}=== Focused local project verification passed. ===${NC}"
+echo -e "${YELLOW}This check does not run dependency audits, the Python version matrix, frontend lint/typecheck, UI audit, full Playwright suites, or the benchmark gate. Use the complete CI candidate gates before release or deployment.${NC}"
 exit 0

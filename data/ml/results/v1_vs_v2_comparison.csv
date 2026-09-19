@@ -1,0 +1,121 @@
+experiment,training_corpus,test_corpus,comparison,n_participants,n_pos,n_neg,model,feature_set,n_features,AUROC,AUROC_95CI,AUPRC,balanced_accuracy,bacc_95CI,sensitivity,sens_95CI,specificity,spec_95CI,F1,Brier
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Elastic-Net,V1_only,13,0.6234,"(0.434, 0.785)",0.6525,0.5688,"(0.424, 0.705)",0.5875,"(0.4, 0.769)",0.55,"(0.318, 0.769)",0.5767,0.2581
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Random Forest,V1_only,13,0.564,"(0.389, 0.731)",0.5366,0.5312,"(0.393, 0.664)",0.575,"(0.38, 0.757)",0.4875,"(0.294, 0.678)",0.5509,0.2614
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,HistGradientBoosting,V1_only,13,0.5454,"(0.402, 0.688)",0.5176,0.5625,"(0.46, 0.669)",0.625,"(0.46, 0.787)",0.5,"(0.368, 0.633)",0.5882,0.3987
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Dummy,V1_only,13,0.375,"(0.277, 0.481)",0.4531,0.375,"(0.277, 0.481)",0.375,"(0.214, 0.546)",0.375,"(0.24, 0.525)",0.375,0.625
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Elastic-Net,V2_only,8,0.4798,"(0.309, 0.64)",0.6035,0.475,"(0.338, 0.613)",0.3625,"(0.169, 0.567)",0.5875,"(0.371, 0.779)",0.4085,0.2764
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Random Forest,V2_only,8,0.3498,"(0.21, 0.512)",0.4242,0.3812,"(0.273, 0.504)",0.425,"(0.253, 0.62)",0.3375,"(0.2, 0.486)",0.4072,0.3054
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,HistGradientBoosting,V2_only,8,0.3805,"(0.255, 0.524)",0.4469,0.4062,"(0.307, 0.518)",0.4625,"(0.32, 0.617)",0.35,"(0.211, 0.506)",0.4379,0.5513
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Dummy,V2_only,8,0.375,"(0.277, 0.481)",0.4531,0.375,"(0.277, 0.481)",0.375,"(0.214, 0.546)",0.375,"(0.24, 0.525)",0.375,0.625
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Elastic-Net,V1_plus_V2,21,0.608,"(0.439, 0.761)",0.6359,0.5875,"(0.444, 0.715)",0.5375,"(0.35, 0.711)",0.6375,"(0.423, 0.829)",0.5658,0.2733
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Random Forest,V1_plus_V2,21,0.5622,"(0.397, 0.728)",0.525,0.5625,"(0.437, 0.686)",0.6875,"(0.492, 0.853)",0.4375,"(0.267, 0.614)",0.6111,0.2607
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,HistGradientBoosting,V1_plus_V2,21,0.5138,"(0.384, 0.646)",0.5026,0.525,"(0.418, 0.631)",0.575,"(0.432, 0.713)",0.475,"(0.307, 0.647)",0.5476,0.4273
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Dummy,V1_plus_V2,21,0.375,"(0.277, 0.481)",0.4531,0.375,"(0.277, 0.481)",0.375,"(0.214, 0.546)",0.375,"(0.24, 0.525)",0.375,0.625
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Elastic-Net,age_only,1,0.8536,"(0.683, 0.967)",0.89,0.7625,"(0.605, 0.89)",0.6875,"(0.438, 0.889)",0.8375,"(0.633, 0.985)",0.7432,0.1553
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Random Forest,age_only,1,0.8007,"(0.624, 0.923)",0.8558,0.6875,"(0.534, 0.817)",0.6375,"(0.4, 0.842)",0.7375,"(0.565, 0.9)",0.6711,0.1883
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,HistGradientBoosting,age_only,1,0.7902,"(0.634, 0.907)",0.8377,0.6625,"(0.507, 0.804)",0.6625,"(0.443, 0.85)",0.6625,"(0.454, 0.862)",0.6625,0.315
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Dummy,age_only,1,0.375,"(0.277, 0.481)",0.4531,0.375,"(0.277, 0.481)",0.375,"(0.214, 0.546)",0.375,"(0.24, 0.525)",0.375,0.625
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Elastic-Net,v1_v2_age,22,0.7748,"(0.623, 0.899)",0.8349,0.7438,"(0.62, 0.857)",0.625,"(0.4, 0.829)",0.8625,"(0.738, 0.958)",0.7092,0.1891
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Random Forest,v1_v2_age,22,0.7455,"(0.557, 0.901)",0.8211,0.65,"(0.506, 0.786)",0.675,"(0.457, 0.875)",0.625,"(0.435, 0.79)",0.6585,0.2076
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,HistGradientBoosting,v1_v2_age,22,0.7229,"(0.534, 0.878)",0.8107,0.6562,"(0.525, 0.772)",0.6375,"(0.423, 0.833)",0.675,"(0.53, 0.8)",0.6497,0.3355
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs TD,32,16,16,Dummy,v1_v2_age,22,0.375,"(0.277, 0.481)",0.4531,0.375,"(0.277, 0.481)",0.375,"(0.214, 0.546)",0.375,"(0.24, 0.525)",0.375,0.625
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Elastic-Net,V1_only,13,0.3946,"(0.182, 0.596)",0.2436,0.4517,"(0.291, 0.608)",0.3556,"(0.067, 0.65)",0.5478,"(0.4, 0.69)",0.2832,0.3168
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Random Forest,V1_only,13,0.3299,"(0.138, 0.527)",0.2425,0.4464,"(0.312, 0.588)",0.2667,"(0.04, 0.54)",0.6261,"(0.483, 0.757)",0.24,0.2916
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,HistGradientBoosting,V1_only,13,0.3306,"(0.116, 0.53)",0.2443,0.4372,"(0.329, 0.546)",0.2222,"(0.04, 0.44)",0.6522,"(0.528, 0.754)",0.2105,0.4475
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Dummy,V1_only,13,0.4773,"(0.387, 0.564)",0.2729,0.4773,"(0.387, 0.564)",0.3111,"(0.2, 0.429)",0.6435,"(0.5, 0.774)",0.28,0.45
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Elastic-Net,V2_only,8,0.6158,"(0.355, 0.868)",0.4933,0.7087,"(0.556, 0.868)",0.6,"(0.3, 0.886)",0.8174,"(0.682, 0.93)",0.5806,0.2238
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Random Forest,V2_only,8,0.7737,"(0.569, 0.931)",0.6217,0.6778,"(0.492, 0.857)",0.5556,"(0.222, 0.875)",0.8,"(0.65, 0.922)",0.5376,0.1735
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,HistGradientBoosting,V2_only,8,0.7506,"(0.565, 0.9)",0.5372,0.6647,"(0.521, 0.81)",0.5556,"(0.3, 0.8)",0.7739,"(0.629, 0.878)",0.5208,0.2629
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Dummy,V2_only,8,0.4773,"(0.387, 0.564)",0.2729,0.4773,"(0.387, 0.564)",0.3111,"(0.2, 0.429)",0.6435,"(0.5, 0.774)",0.28,0.45
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Elastic-Net,V1_plus_V2,21,0.481,"(0.263, 0.704)",0.3506,0.5362,"(0.391, 0.688)",0.3333,"(0.067, 0.629)",0.7391,"(0.629, 0.85)",0.3333,0.2733
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Random Forest,V1_plus_V2,21,0.6228,"(0.406, 0.823)",0.4831,0.5671,"(0.421, 0.717)",0.3778,"(0.114, 0.657)",0.7565,"(0.6, 0.88)",0.3778,0.213
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,HistGradientBoosting,V1_plus_V2,21,0.7168,"(0.527, 0.872)",0.5104,0.5957,"(0.458, 0.713)",0.4,"(0.16, 0.62)",0.7913,"(0.669, 0.886)",0.4138,0.3006
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Dummy,V1_plus_V2,21,0.4773,"(0.387, 0.564)",0.2729,0.4773,"(0.387, 0.564)",0.3111,"(0.2, 0.429)",0.6435,"(0.5, 0.774)",0.28,0.45
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Elastic-Net,age_only,1,0.9782,"(0.927, 1.0)",0.9533,0.9227,"(0.79, 1.0)",0.8889,"(0.625, 1.0)",0.9565,"(0.857, 1.0)",0.8889,0.0656
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Random Forest,age_only,1,0.9258,"(0.815, 1.0)",0.8021,0.8879,"(0.75, 0.986)",0.8889,"(0.625, 1.0)",0.887,"(0.737, 1.0)",0.8163,0.0911
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,HistGradientBoosting,age_only,1,0.9346,"(0.835, 0.996)",0.8818,0.8324,"(0.662, 0.965)",0.7778,"(0.444, 1.0)",0.887,"(0.737, 1.0)",0.7527,0.1407
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Dummy,age_only,1,0.4773,"(0.387, 0.564)",0.2729,0.4773,"(0.387, 0.564)",0.3111,"(0.2, 0.429)",0.6435,"(0.5, 0.774)",0.28,0.45
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Elastic-Net,v1_v2_age,22,0.8916,"(0.745, 0.998)",0.8797,0.8918,"(0.754, 0.989)",0.8444,"(0.571, 1.0)",0.9391,"(0.838, 1.0)",0.8444,0.0886
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Random Forest,v1_v2_age,22,0.8792,"(0.747, 0.971)",0.7768,0.7749,"(0.636, 0.9)",0.6889,"(0.42, 0.925)",0.8609,"(0.748, 0.95)",0.6739,0.1367
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,HistGradientBoosting,v1_v2_age,22,0.8988,"(0.778, 0.985)",0.7182,0.8609,"(0.741, 0.954)",0.8,"(0.55, 0.967)",0.9217,"(0.838, 0.983)",0.8,0.1136
+Nadig Within-Corpus,Nadig,Nadig,ASD vs TD,32,9,23,Dummy,v1_v2_age,22,0.4773,"(0.387, 0.564)",0.2729,0.4773,"(0.387, 0.564)",0.3111,"(0.2, 0.429)",0.6435,"(0.5, 0.774)",0.28,0.45
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Elastic-Net,V1_only,13,0.773,"(0.611, 0.903)",0.7809,0.6812,"(0.54, 0.808)",0.7,"(0.514, 0.883)",0.6625,"(0.45, 0.842)",0.6871,0.2006
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Random Forest,V1_only,13,0.7182,"(0.537, 0.872)",0.7084,0.6625,"(0.512, 0.802)",0.7,"(0.5, 0.88)",0.625,"(0.412, 0.829)",0.6747,0.214
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,HistGradientBoosting,V1_only,13,0.7197,"(0.549, 0.861)",0.6919,0.625,"(0.487, 0.763)",0.575,"(0.387, 0.757)",0.675,"(0.467, 0.863)",0.6053,0.344
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Dummy,V1_only,13,0.4375,"(0.33, 0.555)",0.4727,0.4375,"(0.33, 0.555)",0.4375,"(0.267, 0.614)",0.4375,"(0.307, 0.6)",0.4375,0.5625
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Elastic-Net,V2_only,8,0.4749,"(0.315, 0.651)",0.4889,0.5125,"(0.367, 0.655)",0.3625,"(0.183, 0.56)",0.6625,"(0.45, 0.878)",0.4265,0.3032
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Random Forest,V2_only,8,0.5819,"(0.39, 0.786)",0.5078,0.5813,"(0.451, 0.724)",0.6625,"(0.511, 0.8)",0.5,"(0.3, 0.747)",0.6127,0.2618
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,HistGradientBoosting,V2_only,8,0.6621,"(0.488, 0.824)",0.6134,0.6062,"(0.471, 0.741)",0.625,"(0.415, 0.8)",0.5875,"(0.414, 0.767)",0.6135,0.3495
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Dummy,V2_only,8,0.4375,"(0.33, 0.555)",0.4727,0.4375,"(0.33, 0.555)",0.4375,"(0.267, 0.614)",0.4375,"(0.307, 0.6)",0.4375,0.5625
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Elastic-Net,V1_plus_V2,21,0.6687,"(0.5, 0.826)",0.6547,0.6125,"(0.474, 0.745)",0.6375,"(0.457, 0.814)",0.5875,"(0.386, 0.775)",0.622,0.2614
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Random Forest,V1_plus_V2,21,0.6944,"(0.519, 0.858)",0.675,0.6375,"(0.485, 0.789)",0.6875,"(0.478, 0.877)",0.5875,"(0.362, 0.813)",0.6548,0.2242
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,HistGradientBoosting,V1_plus_V2,21,0.7352,"(0.561, 0.885)",0.6812,0.6813,"(0.547, 0.808)",0.6875,"(0.533, 0.835)",0.675,"(0.467, 0.862)",0.6832,0.3097
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Dummy,V1_plus_V2,21,0.4375,"(0.33, 0.555)",0.4727,0.4375,"(0.33, 0.555)",0.4375,"(0.267, 0.614)",0.4375,"(0.307, 0.6)",0.4375,0.5625
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Elastic-Net,age_only,1,0.4164,"(0.304, 0.535)",0.4426,0.4625,"(0.37, 0.565)",0.3875,"(0.267, 0.537)",0.5375,"(0.4, 0.694)",0.4189,0.2604
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Random Forest,age_only,1,0.4148,"(0.264, 0.575)",0.4482,0.4062,"(0.275, 0.548)",0.4375,"(0.277, 0.6)",0.375,"(0.167, 0.6)",0.4242,0.3506
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,HistGradientBoosting,age_only,1,0.4516,"(0.293, 0.614)",0.4703,0.4688,"(0.328, 0.603)",0.45,"(0.3, 0.6)",0.4875,"(0.263, 0.718)",0.4586,0.4408
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Dummy,age_only,1,0.4375,"(0.33, 0.555)",0.4727,0.4375,"(0.33, 0.555)",0.4375,"(0.267, 0.614)",0.4375,"(0.307, 0.6)",0.4375,0.5625
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Elastic-Net,v1_v2_age,22,0.6698,"(0.507, 0.827)",0.6478,0.6313,"(0.5, 0.76)",0.65,"(0.475, 0.822)",0.6125,"(0.412, 0.8)",0.638,0.2618
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Random Forest,v1_v2_age,22,0.67,"(0.49, 0.844)",0.6398,0.6313,"(0.475, 0.782)",0.7125,"(0.5, 0.9)",0.55,"(0.325, 0.773)",0.659,0.229
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,HistGradientBoosting,v1_v2_age,22,0.7284,"(0.553, 0.882)",0.6649,0.6687,"(0.533, 0.794)",0.6625,"(0.512, 0.8)",0.675,"(0.467, 0.862)",0.6667,0.32
+Eigsti Within-Corpus,Eigsti,Eigsti,ASD vs DD,32,16,16,Dummy,v1_v2_age,22,0.4375,"(0.33, 0.555)",0.4727,0.4375,"(0.33, 0.555)",0.4375,"(0.267, 0.614)",0.4375,"(0.307, 0.6)",0.4375,0.5625
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Elastic-Net,V1_only,13,0.8266,"(0.674, 0.941)",0.7927,0.7563,"(0.638, 0.863)",0.8,"(0.65, 0.929)",0.7125,"(0.509, 0.893)",0.7665,0.1659
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Random Forest,V1_only,13,0.7552,"(0.585, 0.892)",0.6786,0.6813,"(0.55, 0.81)",0.6125,"(0.4, 0.8)",0.75,"(0.555, 0.908)",0.6577,0.206
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,HistGradientBoosting,V1_only,13,0.7147,"(0.572, 0.848)",0.6944,0.65,"(0.527, 0.768)",0.65,"(0.48, 0.817)",0.65,"(0.461, 0.827)",0.65,0.3457
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Dummy,V1_only,13,0.6125,"(0.5, 0.719)",0.5689,0.6125,"(0.5, 0.719)",0.6125,"(0.45, 0.771)",0.6125,"(0.459, 0.756)",0.6125,0.3875
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Elastic-Net,V2_only,8,0.4754,"(0.294, 0.636)",0.466,0.5062,"(0.371, 0.623)",0.4875,"(0.318, 0.65)",0.525,"(0.333, 0.689)",0.4968,0.2829
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Random Forest,V2_only,8,0.4867,"(0.292, 0.677)",0.4602,0.4875,"(0.338, 0.619)",0.475,"(0.326, 0.624)",0.5,"(0.271, 0.72)",0.481,0.3042
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,HistGradientBoosting,V2_only,8,0.4968,"(0.333, 0.661)",0.4754,0.55,"(0.418, 0.683)",0.55,"(0.4, 0.711)",0.55,"(0.339, 0.764)",0.55,0.4358
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Dummy,V2_only,8,0.6125,"(0.5, 0.719)",0.5689,0.6125,"(0.5, 0.719)",0.6125,"(0.45, 0.771)",0.6125,"(0.459, 0.756)",0.6125,0.3875
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Elastic-Net,V1_plus_V2,21,0.7928,"(0.641, 0.914)",0.7439,0.7125,"(0.595, 0.829)",0.7625,"(0.6, 0.895)",0.6625,"(0.456, 0.853)",0.7262,0.1831
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Random Forest,V1_plus_V2,21,0.6528,"(0.478, 0.817)",0.6043,0.6125,"(0.478, 0.733)",0.6125,"(0.437, 0.767)",0.6125,"(0.412, 0.8)",0.6125,0.2339
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,HistGradientBoosting,V1_plus_V2,21,0.6956,"(0.541, 0.835)",0.6724,0.6438,"(0.52, 0.77)",0.65,"(0.467, 0.813)",0.6375,"(0.44, 0.833)",0.646,0.3536
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Dummy,V1_plus_V2,21,0.6125,"(0.5, 0.719)",0.5689,0.6125,"(0.5, 0.719)",0.6125,"(0.45, 0.771)",0.6125,"(0.459, 0.756)",0.6125,0.3875
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Elastic-Net,age_only,1,0.8995,"(0.761, 0.999)",0.8584,0.85,"(0.718, 0.967)",0.8875,"(0.714, 1.0)",0.8125,"(0.6, 1.0)",0.8554,0.1316
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Random Forest,age_only,1,0.8881,"(0.752, 0.99)",0.8131,0.8875,"(0.786, 0.975)",0.9875,"(0.96, 1.0)",0.7875,"(0.585, 0.969)",0.8977,0.1077
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,HistGradientBoosting,age_only,1,0.9014,"(0.781, 0.986)",0.8157,0.8562,"(0.757, 0.94)",0.8375,"(0.705, 0.95)",0.875,"(0.729, 0.987)",0.8535,0.1384
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Dummy,age_only,1,0.6125,"(0.5, 0.719)",0.5689,0.6125,"(0.5, 0.719)",0.6125,"(0.45, 0.771)",0.6125,"(0.459, 0.756)",0.6125,0.3875
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Elastic-Net,v1_v2_age,22,0.9136,"(0.806, 0.985)",0.8943,0.8375,"(0.729, 0.928)",0.9,"(0.757, 1.0)",0.775,"(0.6, 0.92)",0.8471,0.1152
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Random Forest,v1_v2_age,22,0.855,"(0.692, 0.987)",0.7501,0.825,"(0.709, 0.927)",0.85,"(0.72, 0.96)",0.8,"(0.6, 0.969)",0.8293,0.1675
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,HistGradientBoosting,v1_v2_age,22,0.8844,"(0.761, 0.979)",0.8352,0.8313,"(0.722, 0.932)",0.8875,"(0.789, 0.971)",0.775,"(0.571, 0.953)",0.8402,0.1646
+Eigsti Within-Corpus,Eigsti,Eigsti,TD vs DD,32,16,16,Dummy,v1_v2_age,22,0.6125,"(0.5, 0.719)",0.5689,0.6125,"(0.5, 0.719)",0.6125,"(0.45, 0.771)",0.6125,"(0.459, 0.756)",0.6125,0.3875
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Elastic-Net,V1_only,13,0.4879,"(0.234, 0.75)",0.3658,0.5097,"(0.372, 0.63)",0.8889,"(0.636, 1.0)",0.1304,"(0.0, 0.296)",0.4324,0.4416
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Random Forest,V1_only,13,0.343,"(0.132, 0.583)",0.2651,0.4879,"(0.353, 0.587)",0.8889,"(0.636, 1.0)",0.087,"(0.0, 0.217)",0.4211,0.3653
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,HistGradientBoosting,V1_only,13,0.5072,"(0.256, 0.749)",0.3154,0.5072,"(0.314, 0.689)",0.6667,"(0.333, 1.0)",0.3478,"(0.166, 0.542)",0.4,0.484
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Dummy,V1_only,13,0.4952,"(0.285, 0.684)",0.2793,0.4952,"(0.285, 0.684)",0.5556,"(0.2, 0.875)",0.4348,"(0.227, 0.636)",0.3704,0.5312
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Elastic-Net,V2_only,8,0.6715,"(0.449, 0.884)",0.4827,0.5918,"(0.396, 0.789)",0.4444,"(0.125, 0.8)",0.7391,"(0.556, 0.909)",0.4211,0.2293
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Random Forest,V2_only,8,0.6715,"(0.44, 0.873)",0.4875,0.5459,"(0.407, 0.722)",0.2222,"(0.0, 0.5)",0.8696,"(0.714, 1.0)",0.2857,0.1966
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,HistGradientBoosting,V2_only,8,0.5459,"(0.295, 0.794)",0.3677,0.558,"(0.389, 0.746)",0.3333,"(0.0, 0.667)",0.7826,"(0.609, 0.952)",0.3529,0.2971
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Dummy,V2_only,8,0.4952,"(0.285, 0.684)",0.2793,0.4952,"(0.285, 0.684)",0.5556,"(0.2, 0.875)",0.4348,"(0.227, 0.636)",0.3704,0.5312
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Elastic-Net,V1_plus_V2,21,0.5556,"(0.312, 0.793)",0.3745,0.5097,"(0.375, 0.619)",0.8889,"(0.667, 1.0)",0.1304,"(0.0, 0.286)",0.4324,0.4056
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Random Forest,V1_plus_V2,21,0.4831,"(0.263, 0.715)",0.3088,0.4976,"(0.333, 0.654)",0.7778,"(0.5, 1.0)",0.2174,"(0.08, 0.393)",0.4118,0.2941
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,HistGradientBoosting,V1_plus_V2,21,0.4493,"(0.189, 0.72)",0.3352,0.4614,"(0.276, 0.667)",0.4444,"(0.142, 0.778)",0.4783,"(0.278, 0.68)",0.32,0.456
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Dummy,V1_plus_V2,21,0.4952,"(0.285, 0.684)",0.2793,0.4952,"(0.285, 0.684)",0.5556,"(0.2, 0.875)",0.4348,"(0.227, 0.636)",0.3704,0.5312
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Elastic-Net,age_only,1,0.9855,"(0.943, 1.0)",0.9675,0.9227,"(0.79, 1.0)",0.8889,"(0.625, 1.0)",0.9565,"(0.857, 1.0)",0.8889,0.0511
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Random Forest,age_only,1,0.9686,"(0.897, 1.0)",0.9432,0.9227,"(0.79, 1.0)",0.8889,"(0.625, 1.0)",0.9565,"(0.857, 1.0)",0.8889,0.0625
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,HistGradientBoosting,age_only,1,0.9348,"(0.826, 1.0)",0.8094,0.9227,"(0.79, 1.0)",0.8889,"(0.625, 1.0)",0.9565,"(0.857, 1.0)",0.8889,0.0624
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Dummy,age_only,1,0.4952,"(0.285, 0.684)",0.2793,0.4952,"(0.285, 0.684)",0.5556,"(0.2, 0.875)",0.4348,"(0.227, 0.636)",0.3704,0.5312
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Elastic-Net,v1_v2_age,22,0.9807,"(0.927, 1.0)",0.9536,0.8696,"(0.765, 0.96)",1.0,"(1.0, 1.0)",0.7391,"(0.529, 0.92)",0.75,0.1414
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Random Forest,v1_v2_age,22,0.9179,"(0.768, 1.0)",0.8737,0.8575,"(0.712, 0.966)",0.8889,"(0.625, 1.0)",0.8261,"(0.667, 0.957)",0.7619,0.1869
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,HistGradientBoosting,v1_v2_age,22,0.9469,"(0.842, 1.0)",0.8366,0.6111,"(0.5, 0.751)",0.2222,"(0.0, 0.501)",1.0,"(1.0, 1.0)",0.3636,0.1131
+Cross-Corpus Eigsti->Nadig,Eigsti,Nadig,ASD vs TD,32,9,23,Dummy,v1_v2_age,22,0.4952,"(0.285, 0.684)",0.2793,0.4952,"(0.285, 0.684)",0.5556,"(0.2, 0.875)",0.4348,"(0.227, 0.636)",0.3704,0.5312
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Elastic-Net,V1_only,13,0.5586,"(0.341, 0.77)",0.5568,0.5,"(0.417, 0.583)",0.0625,"(0.0, 0.2)",0.9375,"(0.786, 1.0)",0.1111,0.392
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Random Forest,V1_only,13,0.4277,"(0.223, 0.639)",0.5475,0.5312,"(0.438, 0.636)",0.125,"(0.0, 0.316)",0.9375,"(0.786, 1.0)",0.2105,0.2711
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,HistGradientBoosting,V1_only,13,0.4023,"(0.199, 0.603)",0.4925,0.5312,"(0.438, 0.636)",0.125,"(0.0, 0.316)",0.9375,"(0.786, 1.0)",0.2105,0.4338
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Dummy,V1_only,13,0.5,"(0.357, 0.634)",0.5,0.5,"(0.357, 0.634)",0.1875,"(0.0, 0.4)",0.8125,"(0.588, 1.0)",0.2727,0.5
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Elastic-Net,V2_only,8,0.5547,"(0.346, 0.749)",0.6441,0.5938,"(0.474, 0.727)",0.25,"(0.062, 0.477)",0.9375,"(0.8, 1.0)",0.381,0.3662
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Random Forest,V2_only,8,0.6309,"(0.426, 0.804)",0.6653,0.5312,"(0.406, 0.656)",0.1875,"(0.0, 0.4)",0.875,"(0.7, 1.0)",0.2857,0.2536
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,HistGradientBoosting,V2_only,8,0.5215,"(0.306, 0.729)",0.5752,0.5,"(0.321, 0.686)",0.5625,"(0.3, 0.8)",0.4375,"(0.188, 0.692)",0.5294,0.4291
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Dummy,V2_only,8,0.5,"(0.357, 0.634)",0.5,0.5,"(0.357, 0.634)",0.1875,"(0.0, 0.4)",0.8125,"(0.588, 1.0)",0.2727,0.5
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Elastic-Net,V1_plus_V2,21,0.6016,"(0.377, 0.798)",0.6795,0.5625,"(0.5, 0.667)",0.125,"(0.0, 0.333)",1.0,"(1.0, 1.0)",0.2222,0.3616
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Random Forest,V1_plus_V2,21,0.5508,"(0.328, 0.742)",0.5952,0.5312,"(0.406, 0.656)",0.1875,"(0.0, 0.4)",0.875,"(0.7, 1.0)",0.2857,0.2491
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,HistGradientBoosting,V1_plus_V2,21,0.5391,"(0.336, 0.734)",0.5773,0.5312,"(0.406, 0.658)",0.1875,"(0.0, 0.412)",0.875,"(0.7, 1.0)",0.2857,0.4506
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Dummy,V1_plus_V2,21,0.5,"(0.357, 0.634)",0.5,0.5,"(0.357, 0.634)",0.1875,"(0.0, 0.4)",0.8125,"(0.588, 1.0)",0.2727,0.5
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Elastic-Net,age_only,1,0.8828,"(0.723, 0.984)",0.915,0.8125,"(0.663, 0.938)",0.875,"(0.667, 1.0)",0.75,"(0.526, 0.941)",0.8235,0.1516
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Random Forest,age_only,1,0.873,"(0.719, 0.976)",0.8838,0.6562,"(0.498, 0.81)",0.875,"(0.667, 1.0)",0.4375,"(0.2, 0.692)",0.7179,0.2049
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,HistGradientBoosting,age_only,1,0.7715,"(0.592, 0.918)",0.7996,0.7188,"(0.549, 0.87)",0.625,"(0.375, 0.846)",0.8125,"(0.583, 1.0)",0.6897,0.2282
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Dummy,age_only,1,0.5,"(0.357, 0.634)",0.5,0.5,"(0.357, 0.634)",0.1875,"(0.0, 0.4)",0.8125,"(0.588, 1.0)",0.2727,0.5
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Elastic-Net,v1_v2_age,22,0.6094,"(0.405, 0.804)",0.6887,0.625,"(0.531, 0.736)",0.25,"(0.062, 0.471)",1.0,"(1.0, 1.0)",0.4,0.3594
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Random Forest,v1_v2_age,22,0.7773,"(0.597, 0.922)",0.7833,0.7188,"(0.561, 0.856)",0.625,"(0.375, 0.867)",0.8125,"(0.588, 1.0)",0.6897,0.2034
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,HistGradientBoosting,v1_v2_age,22,0.7656,"(0.586, 0.923)",0.7988,0.6562,"(0.498, 0.81)",0.875,"(0.667, 1.0)",0.4375,"(0.2, 0.692)",0.7179,0.3428
+Cross-Corpus Nadig->Eigsti,Nadig,Eigsti,ASD vs TD,32,16,16,Dummy,v1_v2_age,22,0.5,"(0.357, 0.634)",0.5,0.5,"(0.357, 0.634)",0.1875,"(0.0, 0.4)",0.8125,"(0.588, 1.0)",0.2727,0.5

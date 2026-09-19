@@ -1,0 +1,5 @@
+imbalance_strategy,eig_to_nad_auroc,eig_to_nad_bacc,eig_to_nad_sens,eig_to_nad_spec,eig_to_nad_brier,nad_to_eig_auroc,nad_to_eig_bacc,nad_to_eig_sens,nad_to_eig_spec,nad_to_eig_brier
+none,0.3478,0.4106,0.7778,0.0435,0.3435,0.3281,0.5312,0.0625,1.0,0.3257
+class_weight,0.3478,0.4106,0.7778,0.0435,0.3435,0.3398,0.5625,0.125,1.0,0.3042
+random_oversample,0.3478,0.4106,0.7778,0.0435,0.3435,0.3672,0.5312,0.125,0.9375,0.3152
+smote,0.3478,0.4106,0.7778,0.0435,0.3435,0.3438,0.5,0.0625,0.9375,0.3103

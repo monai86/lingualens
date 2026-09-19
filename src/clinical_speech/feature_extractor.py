@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any, Sequence
 
-from src.feature_schema import FEATURES, OPTIONAL_INDICATORS
+from src.feature_schema import FEATURE_SCHEMA_V1_VERSION, FEATURES, OPTIONAL_INDICATORS
 
 from .models import NormalizedTranscriptLine
 
@@ -225,7 +225,7 @@ def extract_clinical_features(
     ]
 
     return {
-        "feature_schema_version": "14-feature-schema",
+        "feature_schema_version": FEATURE_SCHEMA_V1_VERSION,
         "features": {
             **_ordered(core_features, FEATURES),
             **_ordered(optional_indicators, OPTIONAL_INDICATORS),

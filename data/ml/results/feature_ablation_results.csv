@@ -1,0 +1,8 @@
+feature_family,n_features,features,eigsti_within_auroc,eigsti_within_bacc,nadig_within_auroc,nadig_within_bacc,cross_corpus_auroc,cross_corpus_bacc,cross_corpus_sensitivity,cross_corpus_specificity
+all_canonical,13,"total_utterances, mlu, mluw, ttr, total_words, unintelligible_count, unintelligible_ratio, zero_vocalization_count, nonverbal_vocalization_count, question_ratio, echolalia_count, echolalia_ratio, pronoun_reversal_count",0.6234,0.5688,0.3946,0.4517,0.4879,0.5097,0.8889,0.1304
+productivity,2,"total_utterances, total_words",0.4723,0.4813,0.4186,0.4638,0.5652,0.5918,0.4444,0.7391
+language_complexity,3,"mlu, mluw, ttr",0.5367,0.5312,0.3329,0.3662,0.5749,0.529,0.6667,0.3913
+speech_clarity_vocal,4,"unintelligible_count, unintelligible_ratio, zero_vocalization_count, nonverbal_vocalization_count",0.5499,0.5312,0.5366,0.5246,0.5362,0.5097,0.8889,0.1304
+pragmatic_asd_markers,4,"question_ratio, echolalia_count, echolalia_ratio, pronoun_reversal_count",0.6738,0.55,0.3718,0.4029,0.6425,0.6159,0.6667,0.5652
+ratio_focused,6,"mlu, mluw, ttr, question_ratio, echolalia_ratio, unintelligible_ratio",0.6816,0.625,0.2812,0.3401,0.5362,0.4879,0.8889,0.087
+demographic_only,1,age_months,0.8536,0.7625,0.9782,0.9227,0.9855,0.9227,0.8889,0.9565
