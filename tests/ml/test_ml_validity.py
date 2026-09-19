@@ -14,7 +14,8 @@ REPORTS_DIR = PROJECT_ROOT / "reports" / "ml"
 
 def test_participant_registry_integrity():
     registry_path = DATA_DIR / "participant_registry.csv"
-    assert registry_path.exists(), "participant_registry.csv must exist"
+    if not registry_path.exists():
+        pytest.skip("participant_registry.csv is a local research dataset")
     df = pd.read_csv(registry_path)
 
     # Check required columns
@@ -39,8 +40,11 @@ def test_participant_registry_integrity():
 
 def test_canonical_features_integrity():
     parquet_path = DATA_DIR / "canonical_features.parquet"
+    if not parquet_path.exists():
+        pytest.skip("canonical_features.parquet is a local research dataset")
     csv_path = DATA_DIR / "canonical_features.csv"
     xlsx_path = DATA_DIR / "canonical_features.xlsx"
+
 
     assert parquet_path.exists()
     assert csv_path.exists()

@@ -81,7 +81,7 @@ This project is an AI-assisted speech-language clinical decision-support prototy
   unsuitable.
 - Gate 1 is an engineering validation on proxy labels and public English
   corpora, not clinical validation.
-- lingualens currently uses Next.js 16.3.1, React 19, and Node.js 22.x. CI runs
+- lingualens currently uses Next.js 16.3.5, React 19, and Node.js 22.x. CI runs
   type checking, linting, tests, a production build, and blocking dependency
   audits before deployment.
 - AI report drafting through non-template providers is gated behind explicit

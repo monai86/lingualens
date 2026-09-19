@@ -9,7 +9,7 @@
 - active user-facing surfaces และ API ใช้ version `v1.6.3`
 - branch หลัก: `main`
 - Therapist frontend หลัก: `apps/lingualens-app/`
-- Therapist frontend runtime: Next.js `16.3.1` / React 19 / Node.js `22.x`
+- Therapist frontend runtime: Next.js `16.3.5` / React 19 / Node.js `22.x`
 - Therapist workflow API หลัก: `apps/api/`
 - ML/audio/research libraries: `packages/` และ `src/`
 - Analysis-only transcript contract: `packages/analysis_contract/` และ
