@@ -190,12 +190,10 @@ jobs:
   therapist-benchmark:
     needs: test-backend
     runs-on: ubuntu-latest
-    # Blocking performance gate: the benchmark spec asserts absolute budgets
-    # (calibrated on Apple M2 reference hardware), and the baseline check
-    # compares the run against the committed reference with a 2x latency
-    # tolerance and absolute fps floors so shared-runner noise does not block
-    # merge while real regressions still fail. Recalibrate the reference file
-    # after a few green runs if the runner consistently differs.
+    # Blocking performance gate: raw latency samples are compared with the
+    # committed reference and fail on a strict-majority regression, while FPS
+    # remains a per-sample absolute floor. This tolerates an isolated noisy
+    # shared-runner sample without hiding sustained regressions.
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -244,19 +242,24 @@ jobs:
           if-no-files-found: ignore
 
   deploy-backend:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
       - security-scan
       - test-backend
+      - verify-therapist-frontend
+      - ui-design-audit
+      - therapist-e2e
+      - therapist-benchmark
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Render/Railway Deployment Hook
         run: |
           if [ -n "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
             echo "Triggering Render redeployment..."
-            curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+            curl --fail-with-body -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
           elif [ -n "${{ secrets.RAILWAY_DEPLOY_HOOK_URL }}" ]; then
             echo "Triggering Railway redeployment..."
-            curl -X POST "${{ secrets.RAILWAY_DEPLOY_HOOK_URL }}"
+            curl --fail-with-body -X POST "${{ secrets.RAILWAY_DEPLOY_HOOK_URL }}"
           else
             echo "No deployment webhooks configured. Git-based auto-deployment on Render/Railway will occur if linked directly."
           fi

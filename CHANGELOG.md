@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- Added an explicit v2 research transcript contract with 8 conversational
+  fields. Benchmarks use 21 non-age inputs (13 v1 + 8 v2); synchronized local
+  exports contain 22 numeric fields when `age_months` is included and are bound
+  by a SHA-256 artifact manifest.
+- Added executable benchmark-gate fixtures for isolated latency noise,
+  sustained regression, missing measurements, and scroll-FPS floor breaches.
 - Added Visual Fundamental Pitch Contour Overlay (`self._show_pitch_overlay`) in Desktop GUI with real-time F0 curve rendering, voiced autocorrelation sampling, 250 Hz child pitch threshold guideline, and dynamic toolbar toggle (**📈 F0 Curve: ON/OFF**).
 - Added Batch Audio Ingestion Queue & Modal Runner in Desktop GUI (**📦 Batch Ingest Files...**), supporting multi-file automated ingestion into dedicated case sessions with real-time status tracking.
 - Added Longitudinal Assessment Trajectory Tracker (`subtab_longitudinal`, `tree_longitudinal`) providing cross-session developmental progress monitoring, MLU-w growth delta, vocabulary TTR trajectory, and historical session comparison.
@@ -13,7 +19,13 @@
 - Added standalone Desktop GUI (`packages/gui`) and Terminal TUI (`packages/tui`) clinical companion tools with automated test suites (`tests/test_gui.py`, `tests/test_tui.py`).
 
 ### Changed
-- Completed 20-Run Validation & Module Optimization Benchmark on ABA Session Audio (`/Users/porschecaa/Downloads/ABA Sample Session (cards and chase) [-UIrOZkYmO4].mp3`), achieving **100.00% determinism** across all 20 runs (zero drift) and resolving 14 false-CHI prompt misclassifications via ABA/DTT prompt heuristics.
+- Changed conversational response rates to count every ordered utterance as an
+  immediate-response opportunity, preserving same-speaker continuations and
+  terminal utterances as non-responses instead of collapsing speaker runs.
+- Restricted backend deployment hooks to successful pushes on `main` after all
+  security, backend, frontend, UI-audit, E2E, and benchmark jobs; Redis and the
+  dedicated worker are absent from the baseline Compose stack.
+- Recorded a local-only audio-pipeline determinism experiment without committing the source audio path, filename, audio bytes, transcript, or direct identifiers; this experiment is not clinical validation.
 - Shared cached F0 contour and audio buffer between Diarization and AcousticProfile stages in `src/audio_pipeline/pipeline.py`, eliminating redundant `librosa.yin` computations.
 - Redesigned Web App dashboard, topbar, transcript editor studio, and findings views conforming to Impeccable and UI-UX Pro Max design standards with WCAG 2.2 AA contrast and Lucide vector iconography.
 - Updated `scripts/check_api_migrations.py` HEAD revision to `0013_session_cues_acknowledgement` with required column validation.
@@ -169,6 +181,13 @@
   staging users can switch away from non-clinical accounts such as org admin.
 
 ### Fixed
+- Preserved the legacy v1 `features` mapping while exposing v2 through explicit
+  versioned mappings, including numeric parity for file, parsed, and in-memory
+  transcript inputs.
+- Replaced an outlier-sensitive p95 benchmark decision with a raw-sample
+  sustained-regression rule while keeping fail-closed measurement and FPS gates.
+- Removed report claims that contradicted negative v1-to-v2 deltas and corrected
+  the frozen v1 model configuration plus complete artifact checksums.
 - Restored UI audit compliance for dashboard heading hierarchy, chart text
   sizing, transcript-mode touch targets, and valid escaped print selectors.
 - Accepted Supabase JWKS-backed `ES256` access tokens in addition to `RS256`

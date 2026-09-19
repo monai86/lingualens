@@ -222,10 +222,14 @@ cd apps/lingualens-app
 npm ci
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 npm run dev
 
-# Full verification
+# Focused local verification (not a complete CI candidate)
 cd /path/to/asd-project
 bash scripts/check_project.sh
 ```
+
+Complete CI candidate gates additionally run dependency audits, the Python
+3.11/3.12/3.13 matrix, frontend lint/typecheck, UI audit, full therapist and
+demo Playwright suites, and the transcript benchmark baseline gate.
 
 ## Rules for every agent
 

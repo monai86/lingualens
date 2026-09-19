@@ -92,8 +92,10 @@ pilot hardening; production deployments should replace or front it with managed
 edge/API-gateway rate limiting.
 CI now runs repository consistency and secret scanning before test/deploy jobs,
 with Python and frontend dependency audit steps recorded as production security
-gates. Known frontend audit advisories still need remediation before public
-production release.
+gates. Backend deployment hooks are push-to-`main` only and wait for the full
+backend matrix, frontend verification, UI audit, E2E, and benchmark lanes.
+Repository branch protection remains an owner-configured GitHub control. Known
+frontend audit advisories still need remediation before public production release.
 Structured request logging uses route templates or sanitized paths so record
 IDs, child identifiers, transcript text, storage keys, and raw file names are
 not emitted in normal API logs.
@@ -268,6 +270,20 @@ content. This package does not own auth, storage, database access, jobs, product
 CRUD, or diagnostic interpretation, and it is not yet connected to a product
 API or production worker.
 
+### Feature Schema v2 research artifacts
+
+`extract_transcript_features` preserves the legacy v1 mapping and exposes the
+v2 research candidate through explicit versioned mappings. V2 adds 8
+conversational fields; benchmarks use 21 non-age inputs (13 v1 + 8 v2), while
+the local export contains 22 numeric fields when `age_months` is included. The
+conversation features use ordered utterance opportunities and return identical
+values for file, parsed-object, and normalized-line inputs. Generated v2
+Parquet, CSV, and Excel exports are bound by
+`data/ml/canonical_features_v2.manifest.json`. Current comparisons are
+exploratory, show mixed performance deltas and substantial corpus/protocol
+confounding, and do not establish diagnosis, transportability, or Thai clinical
+validity.
+
 ### CLAN-Derived Metrics
 
 The TalkBank/CHILDES reference pipeline can run CLAN batch jobs and parse
@@ -414,11 +430,15 @@ cd apps/lingualens-app && npx playwright install chromium && npm run e2e:smoke #
 PLAYWRIGHT_BACKEND_PORT=8001 PLAYWRIGHT_FRONTEND_PORT=3101 npm run e2e:smoke # use alternate local ports if 8000/3100 are already in use
 ```
 
-Full maintained-project verification:
+Focused local maintained-project verification (not the complete CI candidate):
 
 ```bash
 bash scripts/check_project.sh
 ```
+
+It omits dependency audits, the Python version matrix, frontend lint/typecheck,
+the UI audit, full therapist and demo Playwright suites, and the transcript
+benchmark baseline gate.
 
 ---
 
@@ -434,7 +454,7 @@ asd-project/
 │   ├── clinical_workflow/         # Legacy/research workflow compatibility
 │   ├── therapist_backend/         # Legacy research API compatibility
 │   ├── data_loader.py             # CHAT → features CSV
-│   ├── feature_schema.py          # Shared 14-feature schema
+│   ├── feature_schema.py          # Shared v1 and conversation-v2 schemas
 │   ├── progress_tracking.py       # Longitudinal trends + composite score
 │   ├── transcript_reviewer.py     # Rule-based CHAT QA
 │   ├── therapist_report.py        # Progress report generator

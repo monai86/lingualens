@@ -42,6 +42,9 @@ Frontend dependencies are installed independently:
 cd apps/lingualens-app && npm ci
 ```
 
+Use Node.js 22.x. Supported Python versions are 3.11–3.13; Python 3.12 is
+preferred.
+
 ## Run
 
 ```bash
@@ -56,21 +59,55 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 npm run dev
 
 ## Verification
 
-Use the maintained full-project check:
+### Focused local verification
+
+Use the maintained focused local project check for repository consistency,
+secret scanning, Python imports/core tests/migration smoke, and frontend unit
+tests plus a production build:
 
 ```bash
 bash scripts/check_project.sh
 ```
 
-Targeted checks:
+It does not run dependency audits, the Python version matrix, frontend lint or
+typecheck, the UI design audit, the full Playwright suites, or the benchmark
+gate. Do not use it alone as release or deployment evidence.
+
+### Complete CI candidate gates
+
+The complete candidate is the green `Test and Deploy CI/CD` workflow. It adds
+dependency audits, Python 3.11/3.12/3.13 coverage, frontend lint/typecheck,
+the UI design audit, the full therapist and demo Playwright suites, and the
+transcript benchmark plus baseline gate. Pull requests receive those checks;
+the backend deployment hook is reserved for a successful push to `main`.
+
+Targeted checks and candidate-lane reproductions:
 
 ```bash
 PYTHONPATH=apps/api:src pytest tests/test_name.py -q
 cd apps/api && PYTHONPATH=. pytest tests/test_workflow.py -q
 cd apps/lingualens-app && npm test
-cd apps/lingualens-app && npm run typecheck && npm run build
+# Frontend verification lane
+cd apps/lingualens-app && npm run typecheck && npm run lint && npm run build
+# Focused browser smoke
 cd apps/lingualens-app && npx playwright install chromium && npm run e2e:smoke
 cd apps/lingualens-app && PLAYWRIGHT_BACKEND_PORT=8001 PLAYWRIGHT_FRONTEND_PORT=3101 npm run e2e:smoke
+# Full browser, UI-audit, and benchmark candidate lanes (not run by check_project.sh)
+cd apps/lingualens-app && npx playwright test
+cd apps/lingualens-app && npx playwright test -c playwright.demo.config.ts
+cd apps/lingualens-app && npm run audit:ui
+cd apps/lingualens-app && npm run bench:transcript && npm run bench:check
+```
+
+### Compose
+
+The default Compose stack starts the frontend, API, and PostgreSQL services.
+It intentionally contains no Redis or dedicated worker service. Asynchronous
+queue processing is deferred until measurement justifies it and a complete
+API-to-worker lifecycle has been separately designed and verified:
+
+```bash
+docker compose up
 ```
 
 ## Generated and local-only files

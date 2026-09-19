@@ -1,0 +1,292 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "โครงสร้าง Repository ของ LinguaLens",
+    "output": "lingualens-repo-architecture-review.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/monai86/lingualens.git",
+      "revision": "3278cd6d995a763fe94dee741a64089b2f226d32"
+    }
+  },
+  "layout": {
+    "mode": "grid",
+    "origin": [48, 88],
+    "cols": 5,
+    "gapX": 80,
+    "gapY": 40,
+    "cellW": 140,
+    "cellH": 82
+  },
+  "components": [
+    {
+      "id": "clinician",
+      "type": "external",
+      "label": "นักบำบัด",
+      "sublabel": "responsive PWA",
+      "row": 1,
+      "col": 0,
+      "sources": [{"path": "docs/adr/0016-responsive-web-pwa-only.md"}]
+    },
+    {
+      "id": "web_app",
+      "type": "frontend",
+      "label": "Therapist Web",
+      "sublabel": "Next.js 16 / React 19",
+      "tag": "canonical frontend",
+      "row": 1,
+      "col": 1,
+      "sources": [
+        {"path": "apps/lingualens-app/package.json"},
+        {"path": "apps/lingualens-app/src/lib/api.ts"}
+      ]
+    },
+    {
+      "id": "supabase_auth",
+      "type": "security",
+      "label": "Supabase Auth",
+      "sublabel": "JWT / invitation / MFA",
+      "row": 0,
+      "col": 2,
+      "sources": [
+        {"path": "apps/lingualens-app/src/lib/supabase-browser-client.ts"},
+        {"path": "apps/api/app/auth/supabase_auth.py"}
+      ]
+    },
+    {
+      "id": "api_policy",
+      "type": "backend",
+      "label": "apps/api",
+      "sublabel": "FastAPI policy API",
+      "tag": "canonical backend",
+      "row": 1,
+      "col": 2,
+      "sources": [
+        {"path": "apps/api/app/main.py"},
+        {"path": "docs/adr/0015-supabase-fastapi-production-boundary.md"}
+      ]
+    },
+    {
+      "id": "domain_services",
+      "type": "backend",
+      "label": "Routes + Services",
+      "sublabel": "clinical policies",
+      "row": 1,
+      "col": 3,
+      "sources": [
+        {"path": "apps/api/app/api/v1/routes/__init__.py"},
+        {"path": "apps/api/app/services/__init__.py"}
+      ]
+    },
+    {
+      "id": "repositories",
+      "type": "backend",
+      "label": "Repositories",
+      "sublabel": "JSON / memory / SQL",
+      "row": 1,
+      "col": 4,
+      "sources": [
+        {"path": "apps/api/app/repositories/base.py"},
+        {"path": "apps/api/app/repositories/sqlalchemy_repository.py"},
+        {"path": "apps/api/app/repositories/mock_repository.py"}
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "clinical data + RLS",
+      "row": 2,
+      "col": 4,
+      "sources": [
+        {"path": "apps/api/app/db/models.py"},
+        {"path": "apps/api/app/db/migrations/versions/0009_add_tenant_rls_policies.py"}
+      ]
+    },
+    {
+      "id": "private_storage",
+      "type": "cloud",
+      "label": "Private Storage",
+      "sublabel": "signed URLs",
+      "row": 2,
+      "col": 3,
+      "sources": [{"path": "apps/api/app/services/storage_service.py"}]
+    },
+    {
+      "id": "job_runtime",
+      "type": "messagebus",
+      "label": "Job model + queue",
+      "sublabel": "memory / Redis",
+      "row": 2,
+      "col": 2,
+      "sources": [
+        {"path": "apps/api/app/tasks/job_queue.py"},
+        {"path": "apps/api/app/tasks/worker.py"}
+      ]
+    },
+    {
+      "id": "provider_adapters",
+      "type": "backend",
+      "label": "Provider adapters",
+      "sublabel": "ASR / AI / ML",
+      "row": 2,
+      "col": 1,
+      "sources": [
+        {"path": "apps/api/app/services/asr_providers/registry.py"},
+        {"path": "apps/api/app/services/ml_providers/registry.py"},
+        {"path": "apps/api/app/services/providers/registry.py"}
+      ]
+    },
+    {
+      "id": "research_core",
+      "type": "backend",
+      "label": "packages/ + src/",
+      "sublabel": "CHAT / ML / audio",
+      "tag": "research boundary",
+      "row": 2,
+      "col": 0,
+      "sources": [
+        {"path": "packages/analysis_contract/execution.py"},
+        {"path": "packages/features/transcript_features.py"},
+        {"path": "src/audio_pipeline/pipeline.py"}
+      ]
+    },
+    {
+      "id": "legacy_surfaces",
+      "type": "external",
+      "label": "Legacy modules",
+      "sublabel": "old API / workflow / JS",
+      "tag": "ห้ามเพิ่ม product endpoint",
+      "row": 0,
+      "col": 4,
+      "sources": [
+        {"path": "src/therapist_backend/app.py"},
+        {"path": "src/clinical_workflow/repository_interface.py"},
+        {"path": "shared/package.json"}
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "ผลิตภัณฑ์หลักที่ดูแลอยู่",
+      "wraps": ["web_app", "api_policy", "domain_services", "repositories", "job_runtime", "provider_adapters"]
+    },
+    {
+      "kind": "security-group",
+      "label": "ข้อมูลคลินิกที่ต้องควบคุมสิทธิ์",
+      "wraps": ["postgres", "private_storage"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clinician_web",
+      "from": "clinician",
+      "to": "web_app",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "web_auth",
+      "from": "web_app",
+      "to": "supabase_auth",
+      "label": "sign-in + MFA",
+      "variant": "security"
+    },
+    {
+      "id": "web_api",
+      "from": "web_app",
+      "to": "api_policy",
+      "label": "REST /api/v1",
+      "variant": "emphasis",
+      "labelAt": [438, 284]
+    },
+    {
+      "id": "api_auth",
+      "from": "supabase_auth",
+      "to": "api_policy",
+      "label": "ตรวจ JWT / claims",
+      "variant": "security",
+      "labelAt": [548, 179]
+    },
+    {
+      "id": "api_services",
+      "from": "api_policy",
+      "to": "domain_services",
+      "label": "policy gates"
+    },
+    {
+      "id": "services_repositories",
+      "from": "domain_services",
+      "to": "repositories",
+      "label": "repository I/O"
+    },
+    {
+      "id": "repositories_postgres",
+      "from": "repositories",
+      "to": "postgres",
+      "label": "SQLAlchemy + Alembic",
+      "labelAt": [988, 284]
+    },
+    {
+      "id": "services_storage",
+      "from": "domain_services",
+      "to": "private_storage",
+      "label": "signed URL + verify completion",
+      "variant": "security",
+      "labelAt": [768, 284]
+    },
+    {
+      "id": "services_jobs",
+      "from": "domain_services",
+      "to": "job_runtime",
+      "label": "job record / enqueue",
+      "variant": "dashed"
+    },
+    {
+      "id": "jobs_providers",
+      "from": "job_runtime",
+      "to": "provider_adapters",
+      "label": "ประมวลผลแบบ worker",
+      "variant": "dashed"
+    },
+    {
+      "id": "research_artifacts",
+      "from": "research_core",
+      "to": "provider_adapters",
+      "label": "สร้าง feature / versioned artifacts",
+      "variant": "dashed",
+      "labelAt": [218, 317]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "สิ่งที่วางมาดี",
+      "items": [
+        "มี canonical frontend/backend เพียงชุดเดียวและมี ADR คุมขอบเขต",
+        "FastAPI เป็น policy boundary; browser ไม่เขียนข้อมูลคลินิกโดยตรง",
+        "CI ครอบคลุม security scan, matrix tests, UI/E2E และ benchmark"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "หนี้เทคนิคใน Repository",
+      "items": [
+        "SQL repository 1,781 บรรทัดและ clinical schema 1,133 บรรทัด ควรแยกตาม bounded context",
+        "packages/ ยัง import src/ หลายจุด ทำให้ research packaging และ deployment coupling สูง",
+        "shared/ ไม่มี active app import แล้ว ควรยืนยันผู้ใช้ก่อน archive หรือถอดออก"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "สิ่งที่ต้องปิดก่อน Production",
+      "items": [
+        "พิสูจน์ Supabase Auth claims, RLS สอง tenant และ private Storage บน staging จริง",
+        "ทำให้ queue policy ตรงกัน: เอกสารบอกว่ายังไม่ต้อง Redis แต่ production config บังคับ Redis",
+        "แยกและทำให้ working tree 127 modified + 12 untracked groups กลับสู่ candidate ที่รีวิวได้"
+      ]
+    }
+  ]
+}

@@ -47,14 +47,21 @@ This project is an AI-assisted speech-language clinical decision-support prototy
   demonstration.
 - Backend organization-admin endpoints can add/list local memberships and assign
   case care-team members with cross-tenant denial and audit tenant tagging.
-- Full local verification currently passes via `scripts/check_project.sh`,
-  including repository consistency, secret scan, Python core tests, API migration
-  smoke to Alembic head, lingualens app tests, and production build.
+- `scripts/check_project.sh` provides focused local verification for repository
+  consistency, secret scan, Python core tests, API migration smoke, frontend
+  unit tests, and production build. It is not a complete CI/release attestation:
+  dependency audits, the Python matrix, frontend lint/typecheck, UI audit, full
+  Playwright suites, and the benchmark gate remain complete-candidate lanes.
 - The analysis-only Python boundary now includes deterministic CHAT subset
   semantic round-trip checks, a versioned Thai/mixed tokenizer profile,
   descriptive child-only features, structured QA limitations/blockers, and
   checksum/version provenance plus a synchronous execution seam without taking
   ownership of product workflows.
+- Feature Schema v2 now has an explicit additive output contract: every input
+  preserves its legacy v1 values while the 8 new conversation fields have
+  numeric parity across supported transcript inputs. Exports are synchronized
+  and checksum-bound. Model comparisons remain exploratory and show mixed
+  deltas plus strong corpus confounding.
 
 ## Current Limitations
 
@@ -85,7 +92,9 @@ This project is an AI-assisted speech-language clinical decision-support prototy
   and alerting.
 - CI includes repository consistency and secret scanning before test/deploy
   jobs. Python and frontend dependency audits are blocking gates for unresolved
-  high/critical findings.
+  high/critical findings. Backend deployment hooks run only on successful pushes
+  to `main` after all security, backend-matrix, frontend, UI, E2E, and benchmark
+  jobs; repository branch protection still requires owner-side configuration.
 - Structured API request logging now records route templates or sanitized paths
   and suppresses INFO-level HTTP access logs that can include raw clinical URLs.
 - CORS allowed origins are now server-configurable, production rejects wildcard
