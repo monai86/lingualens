@@ -53,13 +53,23 @@ rg -n "v0\\.|v1\\.[0-5]\\.|v1\\.6\\.[0-2]" README.md PROJECT_STATUS.md docs scri
 ถ้าค่านั้นเป็นเพียง historical record ที่ตั้งใจเก็บไว้ ให้ย้ายออกจาก maintained
 docs หรือ rewrite ให้เป็น current wording
 
-## 4. รัน verification ก่อน commit
+## 4. รัน verification สำหรับ release candidate
+
+Focused local checks give fast development feedback, but do not replace the
+complete CI candidate gates:
 
 ```bash
 python3 scripts/check_repo_consistency.py
 PYTHONPATH=apps/api:src pytest -m "not audio" -q
 bash scripts/check_project.sh
 ```
+
+ก่อน merge หรือ deployment ให้รอ workflow `Test and Deploy CI/CD` เป็น green
+สำหรับ candidate เดียวกัน: dependency/security audits, Python 3.11–3.13 matrix,
+frontend typecheck/lint/test/build, UI design audit, full therapist และ demo
+Playwright suites, และ transcript benchmark baseline gate. `check_project.sh`
+ไม่ได้รัน audit, matrix, lint/typecheck, E2E, UI audit หรือ benchmark gate เหล่านี้
+จึงห้ามใช้เป็นหลักฐาน release เพียงอย่างเดียว.
 
 ## 5. Commit และ push
 

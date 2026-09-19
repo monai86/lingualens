@@ -1,0 +1,47 @@
+{
+  "artifacts": [
+    {
+      "bytes": 237766,
+      "path": "data/ml/canonical_features_v2.parquet",
+      "sha256": "8bd45037df6c9be6e554c1478b4aef109d1fc0b1b7f54483081ae5464f915f29"
+    },
+    {
+      "bytes": 569030,
+      "path": "data/ml/canonical_features_v2.csv",
+      "sha256": "da59c0332ecc111c7e521dd9fa533fc531b98d0dd0cd4e1fa8e8dd9a6ff69987"
+    },
+    {
+      "bytes": 419975,
+      "path": "data/ml/canonical_features_v2.xlsx",
+      "sha256": "d235badd85c111379ee3af6b3fc7f863f710dd9167d477fc26f9744cff5072f4"
+    }
+  ],
+  "feature_extractor_version": "features-conversation-v2",
+  "features": [
+    "age_months",
+    "total_utterances",
+    "mlu",
+    "mluw",
+    "ttr",
+    "total_words",
+    "unintelligible_count",
+    "unintelligible_ratio",
+    "zero_vocalization_count",
+    "nonverbal_vocalization_count",
+    "question_ratio",
+    "echolalia_count",
+    "echolalia_ratio",
+    "pronoun_reversal_count",
+    "speaker_balance_ratio",
+    "turn_alternation_rate",
+    "child_run_length_mean",
+    "child_response_rate",
+    "adult_response_rate",
+    "partner_repetition_exact_ratio",
+    "partner_repetition_overlap_mean",
+    "self_repetition_exact_ratio"
+  ],
+  "participant_count": 1144,
+  "row_count": 1961,
+  "schema_version": "22-feature-schema-v2"
+}

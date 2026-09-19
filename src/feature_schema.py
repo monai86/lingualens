@@ -9,6 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+FEATURE_SCHEMA_V1_VERSION = "14-feature-schema"
+FEATURE_SCHEMA_V2_VERSION = "22-feature-schema-v2"
+
+
 FEATURES: list[str] = [
     "age_months",
     "total_utterances",
@@ -25,6 +29,19 @@ FEATURES: list[str] = [
     "echolalia_ratio",
     "pronoun_reversal_count",
 ]
+
+CONVERSATION_V2_FEATURES: list[str] = [
+    "speaker_balance_ratio",
+    "turn_alternation_rate",
+    "child_run_length_mean",
+    "child_response_rate",
+    "adult_response_rate",
+    "partner_repetition_exact_ratio",
+    "partner_repetition_overlap_mean",
+    "self_repetition_exact_ratio",
+]
+
+FEATURES_V2: list[str] = FEATURES + CONVERSATION_V2_FEATURES
 
 OPTIONAL_INDICATORS: list[str] = [
     "pause_count",
@@ -180,6 +197,70 @@ FEATURE_DOCS: dict[str, FeatureDoc] = {
         "higher can be marker",
         "Heuristic only; many pronoun uses are context-dependent and need human review.",
     ),
+    "speaker_balance_ratio": FeatureDoc(
+        "Speaker balance ratio",
+        "Conversational dynamics",
+        "total_child_utterances / (total_child_utterances + total_adult_utterances)",
+        "Measures relative conversational participation between child and adult.",
+        "context-dependent",
+        "Sensitive to adult examiner chattiness and protocol pacing.",
+    ),
+    "turn_alternation_rate": FeatureDoc(
+        "Turn alternation rate",
+        "Conversational dynamics",
+        "speaker_transitions / (total_utterances - 1)",
+        "Captures the fluidity of reciprocal conversational turn-taking.",
+        "higher often better",
+        "Single-speaker segments or monologues reduce this value.",
+    ),
+    "child_run_length_mean": FeatureDoc(
+        "Mean child run length",
+        "Conversational dynamics",
+        "mean contiguous child utterances per child turn run",
+        "Quantifies child tendency for unprompted multi-utterance bursts.",
+        "context-dependent",
+        "May reflect narrative production or non-responsiveness to partner.",
+    ),
+    "child_response_rate": FeatureDoc(
+        "Child response rate",
+        "Conversational dynamics",
+        "adult_utterances_immediately_followed_by_child / total_adult_utterances",
+        "Operational proxy for child responsiveness to partner prompts.",
+        "higher often better",
+        "Does not capture response quality or timing; same-speaker continuations and terminal utterances count as non-responses.",
+    ),
+    "adult_response_rate": FeatureDoc(
+        "Adult response rate",
+        "Conversational dynamics",
+        "child_utterances_immediately_followed_by_adult / total_child_utterances",
+        "Conversational context control quantifying partner scaffolding.",
+        "context-dependent",
+        "Reflects examiner protocol rather than child intrinsic ability; same-speaker continuations and terminal utterances count as non-responses.",
+    ),
+    "partner_repetition_exact_ratio": FeatureDoc(
+        "Exact partner repetition ratio",
+        "Repetition dynamics",
+        "exact_echo_child_responses / total_child_responses_to_adult",
+        "Measures immediate verbatim repetition of adult partner utterances.",
+        "higher can be marker",
+        "Deterministic lexical match; does not constitute clinical diagnosis.",
+    ),
+    "partner_repetition_overlap_mean": FeatureDoc(
+        "Mean partner token overlap",
+        "Repetition dynamics",
+        "mean Jaccard token overlap between child response and partner prompt",
+        "Captures lexical borrowing and partial repetition from partner.",
+        "context-dependent",
+        "Can be elevated by shared play topic or structured questioning.",
+    ),
+    "self_repetition_exact_ratio": FeatureDoc(
+        "Exact self-repetition ratio",
+        "Repetition dynamics",
+        "exact_self_repeat_utterances / total_consecutive_child_pairs",
+        "Measures perseverative immediate repetition of child's own speech.",
+        "higher can be marker",
+        "Can reflect repetitive vocal play or emphatic emphasis.",
+    ),
 }
 
 OPTIONAL_INDICATOR_DOCS: dict[str, FeatureDoc] = {
@@ -242,10 +323,11 @@ OPTIONAL_INDICATOR_DOCS: dict[str, FeatureDoc] = {
 }
 
 
-def feature_schema_rows() -> list[dict[str, str]]:
+def feature_schema_rows(version: str = "v1") -> list[dict[str, str]]:
     """Return feature metadata as JSON/CSV-friendly dictionaries."""
+    target_features = FEATURES_V2 if version == "v2" else FEATURES
     rows = []
-    for feature in FEATURES:
+    for feature in target_features:
         doc = FEATURE_DOCS[feature]
         rows.append({
             "feature": feature,

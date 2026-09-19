@@ -44,7 +44,16 @@ async function createConsentedCase(request: APIRequestContext, childCode: string
 
 async function bottomNavBox(page: Page) {
   return page.evaluate(() => {
-    const nav = document.querySelector<HTMLElement>("nav[aria-label='Bottom navigation']")!;
+    const nav = document.querySelector<HTMLElement>("nav[aria-label='Bottom navigation']");
+    if (!nav) {
+      return {
+        position: "static",
+        display: "none",
+        top: 0,
+        bottom: 0,
+        viewportHeight: window.innerHeight,
+      };
+    }
     const rect = nav.getBoundingClientRect();
     return {
       position: getComputedStyle(nav).position,

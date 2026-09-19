@@ -41,7 +41,10 @@
 ## Build And Run
 - Backend API: `cd apps/api && PYTHONPATH=. uvicorn app.main:app --reload --port 8000`.
 - Therapist app: `cd apps/lingualens-app && npm run dev`.
-- Full local verification: `bash scripts/check_project.sh`.
+- Focused local verification: `bash scripts/check_project.sh`. It does not run
+  dependency audits, the Python version matrix, frontend lint/typecheck, the UI
+  audit, full Playwright suites, or the benchmark gate; use complete CI
+  candidate gates for release/deployment evidence.
 
 ## Key Conventions
 - Follow `README.md`, `DEVELOPER_SETUP.md`, `docs/DEVELOPMENT.md`, and `docs/SECURITY.md` for workflow and safety rules.

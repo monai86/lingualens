@@ -1,6 +1,8 @@
 # Deployment Guide
 
-This project currently maintains the therapist application path only.
+This project maintains the canonical therapist frontend and therapist workflow
+API only. The research surfaces under `packages/` and `src/` are not separate
+product deployment targets.
 
 The complete runtime boundary is documented in
 [`docs/ARCHITECTURE_BOUNDARIES.md`](./ARCHITECTURE_BOUNDARIES.md). In
@@ -11,6 +13,7 @@ Cloudflare edge function.
 | App | Directory | Tech | Target |
 |-----|-----------|------|--------|
 | Therapist App | `apps/lingualens-app/` | Next.js + React + TypeScript | Vercel (standard Next.js build); Cloudflare Workers for staging |
+| Therapist Workflow API | `apps/api/` | FastAPI / Python 3.11–3.13 (3.12 preferred) | Server-side deployment target |
 
 ---
 
@@ -40,6 +43,19 @@ npm run typecheck
 npm run build
 ```
 
+### Local Compose stack
+
+`docker compose up` starts the supported local frontend, API, and PostgreSQL
+services with Node 22 and Python 3.12. Baseline Compose intentionally contains
+no Redis or dedicated worker service. Asynchronous queue processing is deferred
+until measurement justifies it and a complete API-to-worker lifecycle is
+separately designed and verified.
+
+```bash
+# Default local stack
+docker compose up
+```
+
 ### Vercel deployment
 
 Vercel is the simplest production target for the maintained Next.js app. No
@@ -67,8 +83,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase-publishable-key>
 NEXT_PUBLIC_SITE_URL=https://<therapist-app-host>
 ```
 
-The FastAPI API, Redis worker, private Supabase Storage credentials, and Python
-analysis code remain outside Vercel. After adding a Vercel preview or
+The FastAPI API, private Supabase Storage credentials, and Python analysis code
+remain outside Vercel. Redis and a dedicated worker are not baseline runtime
+services and are absent from local Compose; consider them only after a measured
+asynchronous-processing need and verified lifecycle design.
+After adding a Vercel preview or
 production origin, add that exact HTTPS origin to the API CORS allowlist and
 the Supabase Auth redirect/allowed-site settings before testing browser auth.
 The GitHub workflow validates this same standard build; it does not trigger a
@@ -86,7 +105,8 @@ npm run build:cf
 npm run deploy:cf
 ```
 
-Current Cloudflare staging worker:
+Documented Cloudflare staging endpoint (verify reachability and configuration
+before release):
 
 ```text
 https://lingualens-web.monai-yut.workers.dev
@@ -114,7 +134,7 @@ comma-separated list.
 
 ### Production readiness controls
 
-Do not deploy the therapist-clinician app with real clinical data until these
+Do not deploy the therapist app with real clinical data until these
 runtime boundaries are configured and verified:
 
 | Boundary | Required production setting |
@@ -123,8 +143,8 @@ runtime boundaries are configured and verified:
 | API | HTTPS-only FastAPI deployment with authenticated requests and case-owner checks |
 | Database | Postgres/Supabase schema from `docs/sql/`, RLS reviewed, backups enabled |
 | Storage | Private encrypted bucket, signed upload/download URLs, retention policy |
-| Processing | Backend worker queue for audio pipeline; no browser-side PHI processing |
-| Monitoring | API error rate, worker failures, storage failures, auth failures, queue latency |
+| Processing | Real-clinical-data deployment remains blocked until a durable API-to-worker lifecycle is implemented and rehearsed; no browser-side PHI processing |
+| Monitoring | API error rate, storage/auth failures, and processing latency/failures; queue latency only if asynchronous processing is enabled |
 | Logs | Structured logs without transcript/audio content or child identifiers |
 | Privacy | Export, consent withdrawal, and deletion requests routed to admin review |
 
@@ -134,15 +154,20 @@ Canonical API environment variables:
 NEXT_PUBLIC_API_BASE_URL=https://api.example.org/api/v1
 LINGUALENS_REPOSITORY_MODE=sql
 LINGUALENS_DATABASE_URL=postgresql+psycopg://...
-LINGUALENS_JOB_QUEUE_MODE=redis
-# Use a managed TLS Redis endpoint in production.
-REDIS_URL=rediss://...
 LINGUALENS_STORAGE_MODE=supabase_private
 LINGUALENS_SUPABASE_STORAGE_URL=https://<project-ref>.supabase.co
 LINGUALENS_SUPABASE_STORAGE_SERVICE_ROLE_KEY=<managed-secret>
 LINGUALENS_SUPABASE_STORAGE_BUCKET=clinical-audio
 LINGUALENS_REFERENCE_ARTIFACT_DIR=artifacts/reference_evidence/reference-core-14-v1
 ```
+
+Redis is not a baseline deployment dependency. The repository does not provide
+a verified API-to-worker Redis lifecycle through local Compose, so asynchronous
+queue processing is deferred. Do not configure a queue for the local baseline
+stack. Non-mock production configuration currently fails closed unless a
+managed Redis URL is supplied, but satisfying that configuration check alone
+does not establish an operable worker lifecycle or authorize real clinical
+data. Design, implement, and rehearse that lifecycle before production use.
 
 Legacy v2 env names remain supported temporarily for backward compatibility.
 
@@ -156,6 +181,15 @@ to the active rotation runbook.
 
 Production authentication, provider credentials, retention, storage, and audit
 settings remain deployment-specific and must stay server-side.
+
+### CI deployment governance
+
+Pull requests run the full candidate checks but cannot execute the backend
+deployment job. The backend deployment hook runs only for a `push` to `main`
+and waits for the security scan, all Python matrix jobs, therapist frontend
+verification, UI design audit, therapist E2E, and transcript benchmark gates.
+Treat a focused local verification as development evidence only; it does not
+authorize deployment.
 
 Operational requirements:
 - Terminate TLS at the edge and enforce HTTPS redirects.
@@ -176,7 +210,9 @@ Operational requirements:
 4. Set the build settings shown for the respective app above.
 5. Click **Save and Deploy**.
 
-Future pushes to the `main` branch will trigger automatic redeployments.
+When Git integration is enabled, future pushes to `main` follow the provider's
+configured deployment policy. The backend deployment hook remains governed by
+the CI gates described above.
 
 ---
 

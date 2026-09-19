@@ -1,0 +1,4 @@
+condition,within_eigsti_auroc,within_eigsti_bacc,cross_nadig_auroc,cross_nadig_bacc
+A_linguistic_without_age,0.6234,0.5688,0.4879,0.5097
+B_linguistic_plus_age,0.8664,0.8,0.9614,0.8696
+C_age_only_control,0.8536,0.7625,0.9855,0.9227

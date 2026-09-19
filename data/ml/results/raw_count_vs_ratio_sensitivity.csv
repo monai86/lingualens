@@ -1,0 +1,5 @@
+configuration,rf_cross_auroc,rf_cross_bacc,rf_cross_sens,rf_cross_spec,en_cross_auroc,en_cross_bacc,en_cross_sens,en_cross_spec
+raw_counts_only,0.4396,0.5193,0.7778,0.2609,0.5217,0.4444,0.8889,0.0
+ratios_only,0.3671,0.4758,0.7778,0.1739,0.5362,0.4879,0.8889,0.087
+both_counts_and_ratios,0.3478,0.4106,0.7778,0.0435,0.4879,0.5097,0.8889,0.1304
+without_utterances_and_words,0.3527,0.4879,0.8889,0.087,0.4976,0.5314,0.8889,0.1739

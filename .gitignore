@@ -21,6 +21,19 @@ node_modules/
 .open-next/
 *.tsbuildinfo
 
+# Row-level research datasets stay local. They may contain source-linked
+# participant/session metadata needed for reproducible extraction and must not
+# be committed. Commit only aggregate results, manifests, and synthetic
+# validation fixtures under data/ml/.
+data/ml/participant_registry.csv
+data/ml/canonical_features.csv
+data/ml/canonical_features.parquet
+data/ml/canonical_features.xlsx
+data/ml/canonical_features_v2.csv
+data/ml/canonical_features_v2.parquet
+data/ml/canonical_features_v2.xlsx
+data/ml/LinguaLens_ML_Features_and_Results_Summary.xlsx
+
 # Playwright
 apps/lingualens-app/test-results/
 apps/lingualens-app/playwright-report/

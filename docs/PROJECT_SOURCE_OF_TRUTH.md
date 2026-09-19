@@ -9,7 +9,7 @@
 - active user-facing surfaces และ API ใช้ version `v1.6.3`
 - branch หลัก: `main`
 - Therapist frontend หลัก: `apps/lingualens-app/`
-- Therapist frontend runtime: Next.js `16.3.1` / React 19 / Node.js `22.x`
+- Therapist frontend runtime: Next.js `16.3.5` / React 19 / Node.js `22.x`
 - Therapist workflow API หลัก: `apps/api/`
 - ML/audio/research libraries: `packages/` และ `src/`
 - Analysis-only transcript contract: `packages/analysis_contract/` และ
@@ -222,10 +222,14 @@ cd apps/lingualens-app
 npm ci
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 npm run dev
 
-# Full verification
+# Focused local verification (not a complete CI candidate)
 cd /path/to/asd-project
 bash scripts/check_project.sh
 ```
+
+Complete CI candidate gates additionally run dependency audits, the Python
+3.11/3.12/3.13 matrix, frontend lint/typecheck, UI audit, full therapist and
+demo Playwright suites, and the transcript benchmark baseline gate.
 
 ## Rules for every agent
 

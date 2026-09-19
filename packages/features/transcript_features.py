@@ -9,10 +9,24 @@ from typing import Any, Sequence
 
 from packages.cha.parser import ParsedChaTranscript, ParsedChaUtterance, parse_cha_file
 from src.audio_pipeline.acoustic_profile import compute_acoustic_profile
-from src.chat_feature_extractor import extract_chat_features
-from src.clinical_speech.feature_extractor import content_tokens, extract_clinical_features
+from src.chat_feature_extractor import (
+    extract_chat_features,
+    extract_conversational_features_v2_from_turns,
+)
+from src.clinical_speech.feature_extractor import (
+    content_tokens,
+    extract_clinical_features,
+    is_thai_text,
+    thai_content_tokens,
+)
 from src.clinical_speech.models import NormalizedTranscriptLine
-from src.feature_schema import FEATURES, OPTIONAL_INDICATORS
+from src.feature_schema import (
+    CONVERSATION_V2_FEATURES,
+    FEATURE_SCHEMA_V2_VERSION,
+    FEATURES,
+    FEATURES_V2,
+    OPTIONAL_INDICATORS,
+)
 
 
 FEATURE_ALIASES: dict[str, str] = {
@@ -52,28 +66,59 @@ def extract_transcript_features(
         lines = list(transcript)
 
     extracted = extract_clinical_features(lines, age_months=age_months)
-    canonical_source = extracted["core_features"]
+    normalized_canonical_source = extracted["core_features"]
+    canonical_source = normalized_canonical_source
     if source_path is not None:
         chat_features = extract_chat_features(source_path)
         if chat_features is not None:
             canonical_source = chat_features
-    canonical = {key: canonical_source.get(key) for key in FEATURES}
+    canonical_v1 = {key: canonical_source.get(key) for key in FEATURES}
     if age_months is not None:
-        canonical["age_months"] = age_months
+        canonical_v1["age_months"] = age_months
+    conversation_v2 = extract_conversational_features_v2_from_turns(
+        _conversation_turns(lines)
+    )
+    # V2 is additive: it must preserve the exact v1 values produced for the
+    # same input mode, then append only the eight conversational fields.
+    canonical_v2_base = dict(canonical_v1)
+    canonical_v2 = {
+        **canonical_v2_base,
+        **{key: conversation_v2[key] for key in CONVERSATION_V2_FEATURES},
+    }
+
     optional = {key: extracted["optional_indicators"].get(key, 0) for key in OPTIONAL_INDICATORS}
     extended = _extended_interaction_features(lines, parsed=parsed)
-    aliases = feature_aliases({**canonical, **optional, **extended})
+    aliases = feature_aliases({**canonical_v1, **optional, **extended})
 
     return {
         "feature_schema_version": extracted["feature_schema_version"],
-        "canonical_features": canonical,
-        "core_features": canonical,
+        "feature_schema_version_v2": FEATURE_SCHEMA_V2_VERSION,
+        "canonical_features": canonical_v1,
+        "core_features": canonical_v1,
+        "canonical_features_v2": canonical_v2,
+        "conversation_v2_features": conversation_v2,
         "optional_indicators": {**optional, **extended},
         "feature_aliases": aliases,
-        "features": {**canonical, **optional, **extended, **aliases},
+        "features": {**canonical_v1, **optional, **extended, **aliases},
+        "features_v2": {**canonical_v2, **optional, **extended, **aliases},
         "review_flags": extracted.get("review_flags", []),
         "safety_labels": extracted.get("safety_labels", []),
     }
+
+
+def _conversation_turns(
+    lines: Sequence[NormalizedTranscriptLine],
+) -> list[tuple[str, list[str]]]:
+    turns = []
+    # Normalized transcript lines already carry transcript order. Re-sorting by
+    # optional timestamps moves untimed lines behind later timed lines and can
+    # change adjacent-speaker denominators.
+    for line in lines:
+        speaker = "CHI" if _is_child(line) else "ADULT"
+        text = line.effective_text
+        tokens = thai_content_tokens(text) if is_thai_text(text) else content_tokens(text)
+        turns.append((speaker, tokens))
+    return turns
 
 
 def feature_aliases(features: dict[str, Any]) -> dict[str, Any]:

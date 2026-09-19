@@ -6,7 +6,12 @@ not for a public self-serve SaaS release.
 ## Preflight
 
 - `npm test`, `npm run typecheck`, and `npm run build` pass in `apps/lingualens-app/`.
-- `/`, `/record`, `/results`, `/review-transcript`, `/transcript`, and `/report-summary` render.
+- `/` redirects to `/today`; `/today`, `/cases`, `/sessions/{sessionId}?view=intake|transcript|findings|report`, `/reports`, and `/settings` render.
+- The CI candidate is green for repository/secret and dependency audits, every
+  Python 3.11–3.13 backend matrix run, therapist frontend verification, the UI
+  design audit, the full therapist and demo Playwright suites, and the
+  transcript benchmark gate. `bash scripts/check_project.sh` is a focused
+  local check and is not a substitute for these candidate gates.
 - Browser audio bytes are not persisted in web storage.
 - The selected `LINGUALENS_REPOSITORY_MODE` is tested with anonymized-only child codes.
 - Supabase RLS policies are applied and tested for organization isolation,
@@ -55,10 +60,14 @@ not for a public self-serve SaaS release.
 - Admin bootstrap uses a service role or trusted backend path; the browser must
   not be able to self-assign `org_admin`, `clinical_supervisor`, or
   `platform_operator`.
-- Durable queue/worker processing is the active job path, with one active job
-  per audio artifact.
+- A durable API-to-worker lifecycle has been implemented, rehearsed, and shown
+  to preserve one active job per audio artifact. The current baseline does not
+  satisfy this production gate; local Compose intentionally has no Redis or
+  dedicated worker.
 - Transcript edits immediately stale downstream AI/review/report outputs.
-- Monitoring alerts are configured for auth, storage, processing, API errors, and privacy queue age.
+- Monitoring alerts are configured for auth, storage, processing latency or
+  failures, API errors, and privacy-operation backlog. Add queue-age alerts if
+  asynchronous processing is enabled.
 - Audit events keep actor, action, target, outcome, timestamp, and
   correlation ID only, without raw clinical identifiers or content.
 - Telemetry and notifications contain operational metadata only.
@@ -74,7 +83,8 @@ not for a public self-serve SaaS release.
 ## Rollback
 
 1. Revert the Pages/API deployment to the previous known-good artifact.
-2. Pause backend processing workers if storage or transcript generation is affected.
+2. Disable the affected processing path; pause a worker or queue only when one
+   is actually enabled.
 3. Keep database migrations reversible or apply a documented forward fix.
 4. Preserve audit logs and privacy operation records.
 5. Confirm login, case ownership, upload blocking, and report export behavior after rollback.

@@ -1,13 +1,27 @@
-# LinguaLens Current Handoff
+# LinguaLens Historical Handoff Snapshot
 
-Last verified: 2026-08-16 (evening)  
-Handoff base: `main` at `4771ab0b`  
-Working branch: `codex/current-handoff` — carries the completed UI/UX remediation
-work described below (see "UI/UX remediation status")
+Snapshot created: 2026-08-16 (evening)
+Historical handoff base: `main` at `4771ab0b`
+Historical working branch: `codex/current-handoff`
 
-เอกสารนี้เป็น snapshot สำหรับส่งต่องาน ไม่ใช่ architecture authority หากข้อมูล
+เอกสารนี้เป็น historical snapshot สำหรับส่งต่องาน ไม่ใช่ architecture authority
+และไม่ใช่ current deployment, branch, or verification attestation. หากข้อมูล
 ขัดกัน ให้ยึด `docs/PROJECT_SOURCE_OF_TRUTH.md`, `AGENTS.md` และโค้ดบน `main`
-ก่อนเสมอ
+ก่อนเสมอ. Re-check all dated results, external URLs, branches, and workflow runs
+before relying on them.
+
+## Current operating baseline
+
+- Canonical product surfaces are `apps/lingualens-app/` and `apps/api/`.
+- Canonical routes are `/today`, `/cases`, `/sessions/{sessionId}?view=...`,
+  `/reports`, and `/settings`; `/` redirects to `/today`.
+- Node.js 22.x and Python 3.11–3.13 (3.12 preferred) are supported. The default
+  local Compose stack contains no Redis or dedicated worker; introduce them
+  only after measured asynchronous-processing need and a verified lifecycle.
+- `bash scripts/check_project.sh` is focused local evidence, not complete CI
+  candidate evidence. A release/deployment candidate also needs the full CI
+  gates: dependency audits, matrix coverage, frontend lint/typecheck, E2E, UI
+  audit, and benchmark.
 
 ## Executive summary
 
@@ -24,11 +38,11 @@ LinguaLens มี canonical therapist product เพียงชุดเดี�
 ไม่ใช่ diagnostic tool และยังไม่ผ่าน production security/legal/Thai clinical
 validation gates
 
-Owner feedback ล่าสุดคือ UI ปัจจุบันเข้าใจยาก ดูยาก และใช้งานยาก ดังนั้นงาน
-product ถัดไปควรเริ่มจาก UI/UX audit ของ workflow จริงก่อนแก้หน้าจอ ห้ามเริ่มจาก
-การ redesign ทั้งระบบ
+Historical owner feedback about UI/UX led to the remediation summary below. It
+is not a current prioritization directive; start new work from the current
+source of truth and an approved task scope.
 
-## Verified deployed state
+## Historical deployed-state evidence (not a current attestation)
 
 - Frontend: `https://lingualens-nu.vercel.app`
   - `/` redirects to `/today`
@@ -42,7 +56,7 @@ product ถัดไปควรเริ่มจาก UI/UX audit ของ w
 Reachability and smoke tests do not prove tenant isolation, production Auth,
 private Storage policy, backup, legal, or clinical readiness
 
-## Recently completed work
+## Historical completed work
 
 | PR | Merge commit | Result |
 | --- | --- | --- |
@@ -64,7 +78,7 @@ It intentionally adds none of the following:
 - new ML model or diagnostic output
 - UI changes
 
-## Last verification evidence
+## Historical verification evidence
 
 After rebasing Phase 2 on the status cleanup:
 
@@ -114,7 +128,7 @@ Do not add a `sys.path` hack or duplicate the scientific code inside
 `apps/api`. When product wiring is actually required, choose one small explicit
 packaging/deployment change and verify API startup on Render before merge
 
-## Recommended next work
+## Historical recommended next work
 
 ### Priority 1: UI/UX audit — COMPLETE (phases A-E implemented)
 
@@ -209,7 +223,7 @@ Staging credentials/environment are not available in this local checkout.
 - Do not move ordinary CRUD or clinical workflow policy into the analysis layer
 - Do not weaken non-diagnostic wording or therapist review gates for UI clarity
 
-## Preserved recovery state
+## Historical recovery references
 
 - Worktree: `.worktrees/v1.7.0-speech-to-chat`
 - Branch: `codex/v1.7.0-speech-to-chat`
@@ -246,7 +260,8 @@ git status --short --branch
 sed -n '1,260p' docs/PROJECT_SOURCE_OF_TRUTH.md
 sed -n '1,240p' docs/CURRENT_HANDOFF.md
 
-# Full local verification; Python 3.12 is recommended
+# Focused local verification; it does not run the complete CI candidate gates.
+# Python 3.12 is recommended.
 LINGUALENS_PYTHON=/absolute/path/to/python3.12 bash scripts/check_project.sh
 
 # Active API
@@ -263,9 +278,9 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 npm run dev
 
 ```text
 Read AGENTS.md, docs/PROJECT_SOURCE_OF_TRUTH.md, and docs/CURRENT_HANDOFF.md.
-Start with a read-only UI/UX audit of the maintained Next.js therapist app.
-Use the live workflow and current code, rank usability problems, propose the
-smallest reviewable phases, and stop for approval before changing UI code.
-Do not modify the deferred Supabase security configuration, scientific
-analysis behavior, legacy research surfaces, or clinical safety gates.
+Treat CURRENT_HANDOFF.md as historical context, not a current plan or status
+attestation. Confirm the canonical routes, current CI gates, and approved task
+scope from the source of truth and current code before proposing changes. Do
+not modify clinical safety gates, legacy research surfaces, or deferred
+infrastructure without explicit authorization.
 ```

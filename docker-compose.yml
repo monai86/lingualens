@@ -1,6 +1,6 @@
 services:
   api:
-    image: python:3.11-slim
+    image: python:3.12-slim
     working_dir: /workspace/apps/api
     volumes:
       - .:/workspace
@@ -11,18 +11,8 @@ services:
       - PYTHONPATH=/workspace/apps/api
       - THERAPIST_APP_V2_DEBUG_FEATURE_OVERRIDE=false
 
-  worker:
-    image: python:3.11-slim
-    working_dir: /workspace/apps/api
-    volumes:
-      - .:/workspace
-    command: sh -c "pip install -r ../../requirements.txt -r requirements.txt && python -c 'from app.tasks.worker import run_worker; print(run_worker())'"
-    environment:
-      - PYTHONPATH=/workspace/apps/api
-      - THERAPIST_APP_V2_DEBUG_FEATURE_OVERRIDE=false
-
   frontend:
-    image: node:20-slim
+    image: node:22-slim
     working_dir: /workspace/apps/lingualens-app
     volumes:
       - .:/workspace
@@ -42,8 +32,3 @@ services:
       - POSTGRES_DB=therapist_app_v2
     ports:
       - "5432:5432"
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"

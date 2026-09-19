@@ -3,6 +3,7 @@ import { cpus, freemem, platform, release, totalmem } from "node:os";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { validateBenchmarkCapture } from "../scripts/check-benchmark-baseline.mjs";
 import { makeTranscriptText } from "./fixtures/transcript-lines";
 
 const backendPort = process.env.PLAYWRIGHT_BACKEND_PORT ?? "8000";
@@ -149,8 +150,7 @@ test("transcript editor stays responsive at 100, 500, and 1,000 lines", async ({
 
   }
 
-  mkdirSync(path.dirname(resultPath), { recursive: true });
-  writeFileSync(resultPath, `${JSON.stringify({
+  const capturedBenchmark = {
     capturedAt: new Date().toISOString(),
     conditions: {
       browser: browser.browserType().name(),
@@ -170,14 +170,12 @@ test("transcript editor stays responsive at 100, 500, and 1,000 lines", async ({
       line1000: { keystrokeP95Ms: 100, minimumScrollFps: 45 },
     },
     results,
-  }, null, 2)}\n`);
+  };
+  const captureDecision = validateBenchmarkCapture(capturedBenchmark);
+  expect(captureDecision.passed, captureDecision.failures.join("\n")).toBe(true);
 
-  const result500 = results.find((result) => result.lineCount === 500)!;
-  const result1000 = results.find((result) => result.lineCount === 1_000)!;
-  expect(result500.summary.keystrokeMs.p95, "500-line keystroke p95 must stay at or below 50 ms").toBeLessThanOrEqual(50);
-  expect(Math.min(...result500.runs.map((run) => run.scrollFps)), "500-line scroll must stay at or above 50 fps").toBeGreaterThanOrEqual(50);
-  expect(result1000.summary.keystrokeMs.p95, "1,000-line keystroke p95 must stay at or below 100 ms").toBeLessThanOrEqual(100);
-  expect(Math.min(...result1000.runs.map((run) => run.scrollFps)), "1,000-line scroll must stay at or above 45 fps").toBeGreaterThanOrEqual(45);
+  mkdirSync(path.dirname(resultPath), { recursive: true });
+  writeFileSync(resultPath, `${JSON.stringify(capturedBenchmark, null, 2)}\n`);
 });
 
 function summarize(runs: RunMetrics[]): Summary {
