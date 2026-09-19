@@ -40,12 +40,11 @@ def main() -> int:
         require_path(path, errors)
 
     errors.extend(consistency_violations(ROOT, ignore_local_runtime=True))
-    for path in sorted(p.as_posix() for p in ROOT.rglob("*") if p.is_file()):
-        path = Path(path).relative_to(ROOT).as_posix()
-        if path.startswith("therapist-clinician-app/"):
-            errors.append(f"retired therapist app file exists: {path}")
-        if path.startswith(("public-screening/", "presentation-dashboard/")):
-            errors.append(f"removed demo surface exists: {path}")
+    for retired_surface in ("therapist-clinician-app", "public-screening", "presentation-dashboard"):
+        surface_path = ROOT / retired_surface
+        if surface_path.exists():
+            errors.append(f"retired or removed surface exists: {retired_surface}")
+
 
     require_text("README.md", PROJECT_VERSION, errors)
     require_text("PROJECT_STATUS.md", PROJECT_VERSION, errors)
