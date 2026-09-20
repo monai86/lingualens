@@ -771,6 +771,7 @@ class LinguaLensGUIApp:
         btn_bar_c.pack(fill=tk.X, pady=(0, 10))
         ttk.Button(btn_bar_c, text="Create New Case", command=self._show_create_case_dialog).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(btn_bar_c, text="Refresh Cases", command=self._refresh_cases).pack(side=tk.LEFT)
+        ttk.Button(btn_bar_c, text="Clear Mock Data", command=self._prompt_clear_mock_data).pack(side=tk.RIGHT)
 
         # Sessions Table
         lbl_s = ttk.Label(frame, text="Sessions for Selected Case", font=self.font_heading)
@@ -1630,6 +1631,34 @@ class LinguaLensGUIApp:
             self._refresh_transcript_and_findings()
 
         return True
+
+    def _prompt_clear_mock_data(self) -> None:
+        """Prompt confirmation and purge mock test data from memory and local repositories."""
+        if not messagebox.askyesno(
+            "Clear Mock Test Data",
+            "Are you sure you want to clear all mock test data and reset to a clean state?\n\nThis will reset test repositories and purge accumulated mock records.",
+            icon="warning",
+        ):
+            return
+
+        try:
+            if hasattr(self.client, "clear_mock_data"):
+                self.client.clear_mock_data()
+
+            from pathlib import Path
+            import subprocess
+            import sys
+
+            script_path = Path(__file__).resolve().parent.parent.parent / "scripts" / "clean_mock_data.py"
+            if script_path.exists():
+                subprocess.run([sys.executable, str(script_path)], check=False, capture_output=True)
+
+            self._refresh_cases()
+            if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                self.lbl_status.config(text="✓ Mock test data cleared successfully.")
+            messagebox.showinfo("Data Cleared", "Mock test data has been successfully cleared and reset.")
+        except Exception as exc:
+            messagebox.showerror("Error Clearing Data", f"Failed to clear mock data: {exc}")
 
     def _on_global_case_changed(self, event: Any) -> None:
         sel_text = self.combo_global_case.get()

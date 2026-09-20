@@ -820,7 +820,7 @@ class JsonFileRepository(MockRepository):
         self.load()
 
     def load(self) -> None:
-        if not self.path.exists():
+        if not self.path.exists() or self.path.stat().st_size == 0:
             self.save()
             return
         data = json.loads(self.path.read_text(encoding="utf-8"))

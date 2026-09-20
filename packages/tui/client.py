@@ -196,6 +196,10 @@ class LinguaLensClient:
         """Explicitly seed demo cases and transcripts for demonstration or tutorial."""
         self._mock_data = self._init_mock_data(seed_demo=True)
 
+    def clear_mock_data(self) -> None:
+        """Reset all in-memory mock cases and clinical data to a completely clean state."""
+        self._mock_data = self._init_mock_data(seed_demo=False)
+
     def _init_mock_data(self, seed_demo: bool = False) -> dict[str, Any]:
         """Initialize in-memory dataset. Starts clean and empty by default for production readiness."""
         if not seed_demo:
