@@ -21,6 +21,10 @@ from typing import Any, Callable
 import urllib.error
 import uuid
 
+from packages.gui.audio_controller import AudioPlaybackController
+from packages.gui.dialogs import ClinicalDialogFactory
+from packages.gui.export_engine import ClinicalExportEngine
+from packages.gui.radar_renderer import RadarChartRenderer
 from packages.tui.client import (
     LinguaLensApiError,
     LinguaLensAuthError,
@@ -85,6 +89,12 @@ class LinguaLensGUIApp:
         self._current_refresh_request_id: str | None = None
         self._consent_request_id: str | None = None
         self._consent_loaded_at: str | None = None
+
+        # Deep domain controllers
+        self.audio_controller = AudioPlaybackController()
+        self.export_engine = ClinicalExportEngine()
+        self.dialog_factory = ClinicalDialogFactory()
+        self.radar_renderer: RadarChartRenderer | None = None
 
         self.root.bind("<Destroy>", lambda e: self._cleanup_timers() if e.widget == self.root else None, add="+")
 
@@ -1344,117 +1354,13 @@ class LinguaLensGUIApp:
 
     def _draw_spider_diagram(self, metrics: dict[str, Any]) -> None:
         """Render native radar chart comparing Child values vs Typical Development (TD) Norms."""
-        import math
-        self.canvas_radar.delete("all")
-        self.canvas_radar.update_idletasks()
-        width = max(280, self.canvas_radar.winfo_width()) if self.canvas_radar.winfo_width() > 1 else 380
-        height = max(240, self.canvas_radar.winfo_height()) if self.canvas_radar.winfo_height() > 1 else 330
-        cx, cy = width / 2, height / 2 - 5
-        radius = max(60, min(cx, cy) - 45)
-
-        has_child_data = bool(
-            metrics
-            and (metrics.get("mlu_words") is not None or metrics.get("total_child_utterances", 0) > 0)
-            and metrics.get("total_child_utterances", 0) > 0
-        )
-
-        # 6 Axes comparing Child to Typical Development (TD) norm baseline
-        f0_val = metrics.get("f0_iqr_hz") if has_child_data else None
-        f0_float = float(f0_val) if f0_val is not None and f0_val != "N/A" else None
-        sp_val = metrics.get("speech_rate_wpm") if has_child_data else None
-        sp_float = float(sp_val) if sp_val is not None and sp_val != "N/A" else None
-
-        mlu_val = float(metrics["mlu_words"]) if has_child_data and metrics.get("mlu_words") is not None else None
-        ttr_val = float(metrics["ttr"]) if has_child_data and metrics.get("ttr") is not None else None
-        tt_val = float(metrics["turn_taking_ratio"]) if has_child_data and metrics.get("turn_taking_ratio") is not None else None
-        intel_val = float(metrics["intelligibility_rate"]) if has_child_data and metrics.get("intelligibility_rate") is not None else None
-
-        axes = [
-            {"label": "MLU-w\n(Sentence)", "val": mlu_val, "td": 3.5, "unit": "words"},
-            {"label": "TTR\n(Vocab)", "val": ttr_val, "td": 0.75, "unit": ""},
-            {"label": "Turn-Taking\n(Reciprocity)", "val": tt_val, "td": 0.90, "unit": ""},
-            {"label": "Intelligibility\n(Clarity)", "val": intel_val, "td": 0.95, "unit": ""},
-            {"label": "Speech Rate\n(WPM)", "val": sp_float, "td": 90.0, "unit": "wpm"},
-            {"label": "Prosody IQR\n(F0 Range)", "val": f0_float, "td": 35.0, "unit": "Hz"},
-        ]
-        n = len(axes)
-
-        # Concentric grid rings
-        for r_ratio in [0.25, 0.5, 0.75, 1.0, 1.2]:
-            r = radius * (r_ratio / 1.2)
-            pts = []
-            for i in range(n):
-                angle = -math.pi / 2 + (2 * math.pi * i / n)
-                pts.extend([cx + r * math.cos(angle), cy + r * math.sin(angle)])
-            is_norm = (r_ratio == 1.0)
-            self.canvas_radar.create_polygon(pts, fill="", outline="#94a3b8" if is_norm else "#e2e8f0", width=1.5 if is_norm else 1, dash=(3, 2) if is_norm else ())
-
-        # Spokes and labels
-        for i, ax in enumerate(axes):
-            angle = -math.pi / 2 + (2 * math.pi * i / n)
-            self.canvas_radar.create_line(cx, cy, cx + radius * math.cos(angle), cy + radius * math.sin(angle), fill="#e2e8f0", width=1)
-            x_lbl = cx + (radius + 22) * math.cos(angle)
-            y_lbl = cy + (radius + 22) * math.sin(angle)
-            self.canvas_radar.create_text(x_lbl, y_lbl, text=ax["label"], font=(self.font_family, 8, "bold"), fill="#475569", justify=tk.CENTER)
-
-        # 1. Typical Development (TD) Baseline Polygon (100% ring)
-        td_pts = []
-        for i in range(n):
-            angle = -math.pi / 2 + (2 * math.pi * i / n)
-            r_td = radius * (1.0 / 1.2)
-            td_pts.extend([cx + r_td * math.cos(angle), cy + r_td * math.sin(angle)])
-        self.canvas_radar.create_polygon(td_pts, fill="", outline="#10b981", width=2, dash=(4, 2))
-
-        # 2. Child Session Data Polygon (only if genuine child data exists)
-        if has_child_data:
-            child_pts = []
-            for i, ax in enumerate(axes):
-                angle = -math.pi / 2 + (2 * math.pi * i / n)
-                if ax["val"] is not None:
-                    ratio = ax["val"] / ax["td"] if ax["td"] else 1.0
-                    ratio = max(0.15, min(1.25, ratio))
-                else:
-                    ratio = 0.05
-                r_child = radius * (ratio / 1.2)
-                child_pts.extend([cx + r_child * math.cos(angle), cy + r_child * math.sin(angle)])
-
-            if len(child_pts) >= 6:
-                self.canvas_radar.create_polygon(child_pts, fill="#e0f2fe", outline="#0284c7", width=2.5)
-
-            for i, ax in enumerate(axes):
-                if ax["val"] is not None:
-                    px, py = child_pts[i*2], child_pts[i*2+1]
-                    self.canvas_radar.create_oval(px-3.5, py-3.5, px+3.5, py+3.5, fill="#0369a1", outline="white", width=1)
-
-            # Summary text
-            self.txt_radar_summary.config(state=tk.NORMAL)
-            self.txt_radar_summary.delete("1.0", tk.END)
-            self.txt_radar_summary.insert(tk.END, "Spider Diagram (Developmental Comparison vs Norms):\n\n", "title")
-            self.txt_radar_summary.insert(tk.END, "● Green Dashed Line: Typical Development (TD Norm 100%)\n", "green")
-            self.txt_radar_summary.insert(tk.END, "■ Blue Shaded Area: Child Session Evaluation\n\n", "blue")
-            for ax in axes:
-                lbl_clean = ax['label'].split('\n')[0]
-                if ax["val"] is not None:
-                    pct = int((ax["val"] / ax["td"]) * 100) if ax["td"] else 100
-                    unit_str = f" {ax['unit']}" if ax["unit"] else ""
-                    status_mark = "✓" if pct >= 85 else ("▲" if pct >= 65 else "●")
-                    self.txt_radar_summary.insert(tk.END, f"{status_mark} {lbl_clean}: {ax['val']}{unit_str} (Norm: {ax['td']}{unit_str}) — {pct}%\n")
-                else:
-                    self.txt_radar_summary.insert(tk.END, f"○ {lbl_clean}: N/A (Audio acoustic data required)\n")
-            self.txt_radar_summary.config(state=tk.DISABLED)
-        else:
-            # Clean Empty State Display
-            self.canvas_radar.create_rectangle(cx - 130, cy - 26, cx + 130, cy + 26, fill="#f8fafc", outline="#cbd5e1", width=1)
-            self.canvas_radar.create_text(cx, cy - 7, text="No evaluation data in this session", font=(self.font_family, 9, "bold"), fill="#64748b")
-            self.canvas_radar.create_text(cx, cy + 10, text="(Ingest audio or transcript in Tab 2)", font=(self.font_family, 8), fill="#94a3b8")
-
-            self.txt_radar_summary.config(state=tk.NORMAL)
-            self.txt_radar_summary.delete("1.0", tk.END)
-            self.txt_radar_summary.insert(tk.END, "Spider Diagram (Developmental Comparison vs Norms):\n\n", "title")
-            self.txt_radar_summary.insert(tk.END, "● Green Dashed Line: Typical Development (TD Norm 100%)\n\n", "green")
-            self.txt_radar_summary.insert(tk.END, "No Evaluation Data Available\n\n", "title")
-            self.txt_radar_summary.insert(tk.END, "Please ingest session audio or dialogue transcript in Tab 2 (Ingest Material) to compute LSA metrics and acoustic prosody profile.")
-            self.txt_radar_summary.config(state=tk.DISABLED)
+        if not hasattr(self, "radar_renderer") or self.radar_renderer is None:
+            self.radar_renderer = RadarChartRenderer(
+                canvas=self.canvas_radar,
+                summary_widget=getattr(self, "txt_radar_summary", None),
+                font_family=self.font_family,
+            )
+        self.radar_renderer.draw(metrics)
 
     # --- Tab 5: Report UI (Data Ground Truth & Clinical Decision Support) ---
     def _build_tab_report(self) -> None:
@@ -2039,10 +1945,7 @@ class LinguaLensGUIApp:
     @staticmethod
     def _format_time(sec: float) -> str:
         """Format seconds into MM:SS.s clinical timeline format."""
-        sec = max(0.0, float(sec))
-        m = int(sec // 60)
-        s = sec % 60
-        return f"{m:02d}:{s:04.1f}"
+        return AudioPlaybackController.format_time(sec)
 
     def _slice_audio_snippet(
         self,
@@ -2051,33 +1954,7 @@ class LinguaLensGUIApp:
         end_sec: float | None = None,
     ) -> str | None:
         """Extract a precise slice of audio to a temporary WAV file for playback."""
-        if not audio_path or not os.path.exists(audio_path):
-            return None
-        import tempfile
-        out_fd, out_path = tempfile.mkstemp(suffix="_lingualens_slice.wav")
-        os.close(out_fd)
-
-        try:
-            import soundfile as sf
-            info = sf.info(audio_path)
-            sr = info.samplerate
-            start_frame = max(0, int(start_sec * sr))
-            stop_frame = min(info.frames, int(end_sec * sr)) if end_sec is not None else info.frames
-            if stop_frame <= start_frame:
-                return None
-            data, _ = sf.read(audio_path, start=start_frame, stop=stop_frame)
-            sf.write(out_path, data, sr)
-            return out_path
-        except Exception:
-            try:
-                import librosa
-                import soundfile as sf
-                dur = (end_sec - start_sec) if end_sec is not None else None
-                y, sr = librosa.load(audio_path, sr=16000, offset=start_sec, duration=dur)
-                sf.write(out_path, y, sr)
-                return out_path
-            except Exception:
-                return None
+        return self.audio_controller.slice_audio_snippet(audio_path, start_sec, end_sec)
 
     def _build_audio_segment_command(
         self,
@@ -2085,44 +1962,9 @@ class LinguaLensGUIApp:
         start_sec: float | None = None,
         end_sec: float | None = None,
     ) -> tuple[list[str] | None, str | None]:
-        """Build platform-specific CLI command to play an audio file or snippet with speed control.
-        Returns (command_list, temp_slice_path_or_none).
-        """
-        if not audio_path:
-            return None, None
-
-        play_target = audio_path
-        temp_slice = None
-
-        if start_sec is not None and start_sec > 0.05:
-            temp_slice = self._slice_audio_snippet(audio_path, start_sec, end_sec)
-            if temp_slice:
-                play_target = temp_slice
-        elif start_sec is not None and end_sec is not None and end_sec > start_sec:
-            temp_slice = self._slice_audio_snippet(audio_path, start_sec, end_sec)
-            if temp_slice:
-                play_target = temp_slice
-
+        """Build platform-specific CLI command to play an audio file or snippet with speed control."""
         speed = float(getattr(self, "playback_speed", 1.0))
-
-        if sys.platform == "darwin":
-            cmd = ["afplay"]
-            if abs(speed - 1.0) > 0.05:
-                cmd.extend(["-r", str(round(speed, 2))])
-            cmd.append(play_target)
-            return cmd, temp_slice
-        elif sys.platform.startswith("linux"):
-            if abs(speed - 1.0) > 0.05:
-                return ["ffplay", "-nodisp", "-autoexit", "-af", f"atempo={speed:.2f}", play_target], temp_slice
-            if temp_slice:
-                return ["aplay", play_target], temp_slice
-            elif start_sec is not None:
-                to_args = ["-to", str(end_sec)] if end_sec is not None else []
-                return ["ffplay", "-nodisp", "-autoexit", "-ss", str(start_sec), *to_args, audio_path], None
-            return ["aplay", audio_path], None
-        elif sys.platform == "win32":
-            return ["powershell", "-c", f"(New-Object Media.SoundPlayer '{play_target}').PlaySync();"], temp_slice
-        return None, None
+        return self.audio_controller.build_audio_segment_command(audio_path, start_sec, end_sec, speed=speed)
 
     def _highlight_utterance(self, u_id: str | None) -> None:
         """Highlight an utterance in the Treeview and ensure it is scrolled into view."""
@@ -3180,84 +3022,10 @@ class LinguaLensGUIApp:
 
     def _compute_waveform_peaks(self, audio_path: str, num_peaks: int = 200) -> list[float]:
         """Compute downsampled normalized RMS amplitude peaks and F0 pitch contour for visualization."""
-        if not audio_path or not os.path.exists(audio_path):
-            self._audio_f0_contour = []
-            return []
-        try:
-            import soundfile as sf
-            import numpy as np
-
-            info = sf.info(audio_path)
-            self._audio_waveform_duration = float(info.duration)
-            data, sr = sf.read(audio_path, dtype="float32")
-            if data.ndim > 1:
-                data = data.mean(axis=1)
-            total_samples = len(data)
-            if total_samples == 0:
-                self._audio_f0_contour = []
-                return []
-            chunk_size = max(1, total_samples // num_peaks)
-            peaks = []
-            f0_contour = []
-            dur = self._audio_waveform_duration
-
-            # Sample F0 contour efficiently across segments
-            for i in range(0, total_samples, chunk_size):
-                chunk = data[i:i + chunk_size]
-                if len(chunk) > 0:
-                    rms = float(np.sqrt(np.mean(chunk**2)))
-                    peaks.append(rms)
-                    t_sec = (i / total_samples) * dur
-
-                    # Simple zero-crossing / autocorrelation F0 estimator for fast GUI rendering
-                    if rms > 0.01 and len(chunk) > 64:
-                        corr = np.correlate(chunk, chunk, mode="full")
-                        corr = corr[len(corr) // 2:]
-                        d = np.diff(corr)
-                        peaks_idx = np.where((d[:-1] > 0) & (d[1:] < 0))[0] + 1
-                        if len(peaks_idx) > 0:
-                            lag = peaks_idx[0]
-                            if lag > 0:
-                                f0 = float(sr / lag)
-                                if 65.0 <= f0 <= 500.0:
-                                    f0_contour.append((t_sec, f0))
-
-            self._audio_f0_contour = f0_contour
-            max_rms = max(peaks) if peaks and max(peaks) > 0 else 1.0
-            return [min(1.0, p / max_rms) for p in peaks]
-        except Exception:
-            try:
-                import librosa
-                import numpy as np
-                y, sr = librosa.load(audio_path, sr=8000)
-                self._audio_waveform_duration = float(len(y) / sr)
-                chunk_size = max(1, len(y) // num_peaks)
-                peaks = []
-                f0_contour = []
-                dur = self._audio_waveform_duration
-                for i in range(0, len(y), chunk_size):
-                    chunk = y[i:i + chunk_size]
-                    if len(chunk) > 0:
-                        rms = float(np.sqrt(np.mean(chunk**2)))
-                        peaks.append(rms)
-                        t_sec = (i / len(y)) * dur
-                        if rms > 0.01 and len(chunk) > 32:
-                            corr = np.correlate(chunk, chunk, mode="full")
-                            corr = corr[len(corr) // 2:]
-                            d = np.diff(corr)
-                            peaks_idx = np.where((d[:-1] > 0) & (d[1:] < 0))[0] + 1
-                            if len(peaks_idx) > 0:
-                                lag = peaks_idx[0]
-                                if lag > 0:
-                                    f0 = float(sr / lag)
-                                    if 65.0 <= f0 <= 500.0:
-                                        f0_contour.append((t_sec, f0))
-                self._audio_f0_contour = f0_contour
-                max_rms = max(peaks) if peaks and max(peaks) > 0 else 1.0
-                return [min(1.0, p / max_rms) for p in peaks]
-            except Exception:
-                self._audio_f0_contour = []
-                return []
+        peaks = self.audio_controller.compute_waveform_peaks(audio_path, num_peaks=num_peaks)
+        self._audio_waveform_duration = self.audio_controller.waveform_duration
+        self._audio_f0_contour = self.audio_controller.f0_contour
+        return peaks
 
     def _redraw_waveform(self) -> None:
         """Render interactive waveform canvas with speaker turn colors, F0 pitch overlay, and timeline."""
@@ -3488,164 +3256,58 @@ class LinguaLensGUIApp:
         """Export authentic TalkBank CHAT (.cha) transcript with %mor: tiers."""
         if self._guard_v2_mode("Export TalkBank CHAT"):
             return
-        if not self.active_transcript:
-            messagebox.showwarning("No Data", "No transcript available to export.")
-            return
-        out_file = filedialog.asksaveasfilename(
-            title="Save TalkBank CHAT File",
-            defaultextension=".cha",
-            initialfile=f"{self.active_session_id or 'transcript'}.cha",
-            filetypes=[("TalkBank CHAT", "*.cha"), ("Text", "*.txt")],
+        fallback = self.txt_chat_view.get("1.0", tk.END).strip() if hasattr(self, "txt_chat_view") else ""
+        self.export_engine.export_cha_file(
+            self.active_transcript,
+            self.active_session_id,
+            fallback_text=fallback,
         )
-        if not out_file:
-            return
-        raw_cha = self.active_transcript.get("raw_cha")
-        if not raw_cha:
-            raw_cha = self.txt_chat_view.get("1.0", tk.END).strip()
-        with open(out_file, "w", encoding="utf-8") as f:
-            f.write(raw_cha + "\n")
-        messagebox.showinfo("Exported", f"Saved TalkBank CHAT file to:\n{out_file}")
 
     def _export_csv_biomarkers(self) -> None:
         """Export tabular speech, language, and acoustic biomarker parameters to CSV."""
         if self._guard_v2_mode("Export Biomarkers CSV"):
             return
-        if not self.active_session_id:
-            messagebox.showwarning("Warning", "Please select a Session first.")
-            return
-        findings = self.client.get_findings(self.active_session_id)
-        out_file = filedialog.asksaveasfilename(
-            title="Save Biomarkers CSV",
-            defaultextension=".csv",
-            initialfile=f"biomarkers_{self.active_session_id}.csv",
-            filetypes=[("CSV File", "*.csv"), ("Text", "*.txt")],
+        self.export_engine.export_csv_biomarkers(
+            self.client,
+            self.active_case_id,
+            self.active_session_id,
         )
-        if not out_file:
-            return
-        import csv
-        with open(out_file, "w", newline="", encoding="utf-8-sig") as f:
-            writer = csv.writer(f)
-            writer.writerow(["case_id", "session_id", "metric_name", "metric_value"])
-            for k, v in findings.get("metrics", {}).items():
-                writer.writerow([self.active_case_id, self.active_session_id, k, v])
-        messagebox.showinfo("Exported", f"Saved Biomarkers CSV to:\n{out_file}")
 
     def _export_html_report(self) -> None:
         """Export a comprehensive, beautifully styled bilingual clinical HTML report ready for printing/PDF."""
         if self._guard_v2_mode("Export HTML Report"):
             return
-        if not self.active_session_id:
-            messagebox.showwarning("Warning", "Please select a Session first.")
-            return
-        if not self.active_transcript or not self.active_transcript.get("utterances"):
-            messagebox.showwarning("No Data", "Cannot export report: No session data recorded yet.")
-            return
-        out_file = filedialog.asksaveasfilename(
-            title="Save Clinical HTML Report",
-            defaultextension=".html",
-            initialfile=f"clinical_report_{self.active_session_id}.html",
-            filetypes=[("HTML Document", "*.html"), ("All Files", "*.*")],
+        narrative = self.txt_narrative.get("1.0", tk.END).strip() if hasattr(self, "txt_narrative") else ""
+        recommendations = self.txt_recommendations.get("1.0", tk.END).strip() if hasattr(self, "txt_recommendations") else ""
+        self.export_engine.export_html_report(
+            self.client,
+            self.active_case_id,
+            self.active_session_id,
+            self.active_transcript,
+            narrative,
+            recommendations,
         )
-        if not out_file:
-            return
-
-        findings = self.client.get_findings(self.active_session_id)
-        narrative = self.txt_narrative.get("1.0", tk.END).strip()
-        recommendations = self.txt_recommendations.get("1.0", tk.END).strip()
-        case_info = next((c for c in self.client.list_cases() if c.get("case_id") == self.active_case_id), {})
-        session_info = next((s for s in self.client.list_sessions(self.active_case_id) if s.get("session_id") == self.active_session_id), {"session_id": self.active_session_id})
-
-        # Collect longitudinal sessions for active case
-        longitudinal_sessions = []
-        if self.active_case_id:
-            for s in self.client.list_sessions(self.active_case_id):
-                s_id = s["session_id"]
-                s_dt = s.get("session_date", "N/A")
-                tr = self.client.get_session_transcript(s_id)
-                f = self.client.get_findings(s_id)
-                m = f.get("metrics", {})
-                u_list = tr.get("utterances", []) if tr else []
-                if u_list:
-                    longitudinal_sessions.append({
-                        "session_id": s_id,
-                        "date": s_dt,
-                        "utterances": len(u_list),
-                        "chi_turns": sum(1 for u in u_list if u.get("speaker") == "CHI"),
-                        "mlu_w": m.get("mlu_words", m.get("mlu", "-")),
-                        "ttr": m.get("ttr", m.get("type_token_ratio", "-")),
-                        "f0_median": m.get("f0_median_hz", "-"),
-                    })
-
-        from packages.reports.clinical_report_template import generate_bilingual_clinical_html
-        attested_by = self.active_transcript.get("attested_by", "Kru Aum (Certified SLP)") if self.active_transcript.get("attested") else None
-
-        html_content = generate_bilingual_clinical_html(
-            case_info=case_info,
-            session_info=session_info,
-            findings=findings,
-            narrative=narrative,
-            recommendations=recommendations,
-            attested_by=attested_by,
-            longitudinal_sessions=longitudinal_sessions,
-        )
-
-        with open(out_file, "w", encoding="utf-8") as f:
-            f.write(html_content)
-        messagebox.showinfo("Exported", f"Saved Bilingual Clinical HTML Report to:\n{out_file}")
 
     def _build_create_case_window(self) -> tk.Toplevel:
         """Construct the create case dialog window with dynamic geometry."""
-        win = tk.Toplevel(self.root)
-        win.title("Create Child Case — LinguaLens")
-        win.geometry("420x280")
-        win.minsize(380, 240)
-        win.bind("<Escape>", lambda e: win.destroy())
-
-        frame = ttk.Frame(win, padding=16)
-        frame.pack(fill=tk.BOTH, expand=True)
-        frame.columnconfigure(1, weight=1)
-
-        ttk.Label(frame, text="Child Identifier:").grid(row=0, column=0, sticky=tk.W, pady=6)
-        e_cid = ttk.Entry(frame)
         cases_count = len(self.tree_cases.get_children()) if hasattr(self, "tree_cases") else 1
-        e_cid.insert(0, f"C-{cases_count + 1:03d}")
-        e_cid.grid(row=0, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
+        default_cid = f"C-{cases_count + 1:03d}"
 
-        ttk.Label(frame, text="Birth (YYYY-MM):").grid(row=1, column=0, sticky=tk.W, pady=6)
-        e_dob = ttk.Entry(frame)
-        e_dob.insert(0, "2021-05")
-        e_dob.grid(row=1, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
+        def _on_created(new_c: dict[str, Any]) -> None:
+            self._refresh_cases()
+            for idx, val in enumerate(self.combo_global_case["values"]):
+                if val.startswith(new_c["case_id"]):
+                    self.combo_global_case.current(idx)
+                    self.active_case_id = new_c["case_id"]
+                    break
+            self._refresh_sessions_for_active_case()
 
-        ttk.Label(frame, text="Primary Language:").grid(row=2, column=0, sticky=tk.W, pady=6)
-        e_lang = ttk.Entry(frame)
-        e_lang.insert(0, "th")
-        e_lang.grid(row=2, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
-
-        ttk.Label(frame, text="Clinical Notes:").grid(row=3, column=0, sticky=tk.W, pady=6)
-        e_notes = ttk.Entry(frame)
-        e_notes.insert(0, "Speech delay referral.")
-        e_notes.grid(row=3, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
-
-        def _do_create():
-            try:
-                new_c = self.client.create_case(e_cid.get().strip(), e_dob.get().strip(), e_lang.get().strip(), e_notes.get().strip())
-                self._refresh_cases()
-                for idx, val in enumerate(self.combo_global_case["values"]):
-                    if val.startswith(new_c["case_id"]):
-                        self.combo_global_case.current(idx)
-                        self.active_case_id = new_c["case_id"]
-                        break
-                self._refresh_sessions_for_active_case()
-                win.destroy()
-            except Exception as exc:
-                messagebox.showerror("Case Creation Failed", str(exc))
-
-        btn_row = ttk.Frame(frame)
-        btn_row.grid(row=4, column=0, columnspan=2, pady=(16, 0), sticky=tk.E)
-        ttk.Button(btn_row, text="Cancel", command=win.destroy).pack(side=tk.RIGHT, padx=(6, 0))
-        ttk.Button(btn_row, text="Create Case", style="Primary.TButton", command=_do_create).pack(side=tk.RIGHT)
-        e_cid.focus_set()
-        return win
+        return self.dialog_factory.build_create_case_dialog(
+            parent=self.root,
+            client=self.client,
+            default_case_code=default_cid,
+            on_success=_on_created,
+        )
 
     def _show_create_case_dialog(self) -> tk.Toplevel:
         win = self._build_create_case_window()
@@ -3654,44 +3316,21 @@ class LinguaLensGUIApp:
 
     def _build_create_session_window(self) -> tk.Toplevel:
         """Construct the create session dialog window with dynamic geometry."""
-        from datetime import date
-        win = tk.Toplevel(self.root)
-        win.title("Start Therapy Session — LinguaLens")
-        win.geometry("400x220")
-        win.minsize(360, 200)
-        win.bind("<Escape>", lambda e: win.destroy())
+        def _on_created(new_s: dict[str, Any]) -> None:
+            self._refresh_sessions_for_active_case()
+            for idx, val in enumerate(self.combo_global_session["values"]):
+                if val.startswith(new_s["session_id"]):
+                    self.combo_global_session.current(idx)
+                    self.active_session_id = new_s["session_id"]
+                    break
+            self._refresh_transcript_and_findings()
 
-        frame = ttk.Frame(win, padding=16)
-        frame.pack(fill=tk.BOTH, expand=True)
-        frame.columnconfigure(1, weight=1)
-
-        ttk.Label(frame, text="Session Date:").grid(row=0, column=0, sticky=tk.W, pady=6)
-        e_date = ttk.Entry(frame)
-        e_date.insert(0, date.today().isoformat())
-        e_date.grid(row=0, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
-
-        ttk.Label(frame, text="Session Notes:").grid(row=1, column=0, sticky=tk.W, pady=6)
-        e_notes = ttk.Entry(frame)
-        e_notes.insert(0, "Play-based session.")
-        e_notes.grid(row=1, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
-
-        def _do_create():
-            if not self.active_case_id:
-                return
-            try:
-                new_s = self.client.create_session(self.active_case_id, e_date.get().strip(), e_notes.get().strip())
-                self._refresh_sessions_for_active_case()
-                win.destroy()
-            except Exception as exc:
-                messagebox.showerror("Session Creation Failed", str(exc))
-
-        btn_row = ttk.Frame(frame)
-
-        btn_row.grid(row=2, column=0, columnspan=2, pady=(16, 0), sticky=tk.E)
-        ttk.Button(btn_row, text="Cancel", command=win.destroy).pack(side=tk.RIGHT, padx=(6, 0))
-        ttk.Button(btn_row, text="Start Session", style="Primary.TButton", command=_do_create).pack(side=tk.RIGHT)
-        e_notes.focus_set()
-        return win
+        return self.dialog_factory.build_create_session_dialog(
+            parent=self.root,
+            client=self.client,
+            active_case_id=self.active_case_id or "",
+            on_success=_on_created,
+        )
 
     def _show_create_session_dialog(self) -> tk.Toplevel | None:
         if self._guard_v2_mode("Create session"):
