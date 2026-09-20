@@ -103,147 +103,309 @@ class LinguaLensGUIApp:
         except Exception:
             pass
 
-        # Clinical Teal System Colors & Fonts (Aligned with PRODUCT.md & tokens.css)
-        self.bg_color = "#f8fafc"
-        self.primary_color = "#0f766e"
-        self.primary_strong = "#115e59"
-        self.accent_soft = "#f0fdfa"
-        self.border_color = "#cbd5e1"
-        self.text_color = "#0f172a"
+        # Detect optimal typography hierarchy
+        try:
+            from tkinter import font as tkfont
+            avail_families = set(tkfont.families(self.root))
+        except Exception:
+            avail_families = set()
+
+        if "Helvetica Neue" in avail_families:
+            sys_font = "Helvetica Neue"
+        elif "Helvetica" in avail_families:
+            sys_font = "Helvetica"
+        elif "Arial" in avail_families:
+            sys_font = "Arial"
+        else:
+            sys_font = "TkDefaultFont"
+
+        if "Menlo" in avail_families:
+            mono_font = "Menlo"
+        elif "Monaco" in avail_families:
+            mono_font = "Monaco"
+        else:
+            mono_font = "Courier"
+
+        self.font_sys = sys_font
+        self.font_family = sys_font
+        self.font_mono = mono_font
+        self.font_code = mono_font
+        self.font_title = (sys_font, 13, "bold")
+        self.font_heading = (sys_font, 11, "bold")
+        self.font_subheading = (sys_font, 10, "bold")
+        self.font_body = (sys_font, 10)
+        self.font_body_bold = (sys_font, 10, "bold")
+        self.font_caption = (sys_font, 9)
+        self.font_caption_bold = (sys_font, 9, "bold")
+        self.font_badge = (sys_font, 8, "bold")
+
+        # Clinical Teal System Design Tokens (from PRODUCT.md & tokens.css)
+        self.bg_color = "#f8fafc"         # Slate 50 (Calm app canvas)
+        self.surface_color = "#ffffff"    # Pure crisp white for panels/cards
+        self.surface_alt = "#f1f5f9"      # Slate 100 for toolbars & headers
+        self.primary_color = "#0f766e"    # Clinical Teal 700 (Trustworthy brand anchor)
+        self.primary_strong = "#115e59"   # Clinical Teal 800 (Hover/Active)
+        self.primary_light = "#14b8a6"    # Clinical Teal 500 (Waveform & accents)
+        self.accent_soft = "#f0fdfa"      # Teal 50 (Selected background tint)
+        self.accent_cyan = "#0284c7"      # Sky 600 (Informational actions)
+        self.border_color = "#cbd5e1"     # Slate 300 (Subtle structural borders)
+        self.border_light = "#e2e8f0"     # Slate 200 (Clean divider lines)
+        self.text_color = "#0f172a"       # Slate 900 (High contrast readable ink)
+        self.text_secondary = "#334155"  # Slate 700
+        self.text_muted = "#64748b"       # Slate 500
+        self.success_color = "#059669"    # Emerald 600
+        self.warning_color = "#d97706"    # Amber 600
+        self.error_color = "#dc2626"      # Red 600
+
         self.root.configure(bg=self.bg_color)
 
-        style.configure("TNotebook", background=self.bg_color)
-        style.configure("TNotebook.Tab", padding=[14, 7], font=("Helvetica", 10, "bold"))
+        # TTK Global Widget Styling
+        style.configure("TNotebook", background=self.bg_color, borderwidth=0)
+        style.configure(
+            "TNotebook.Tab",
+            padding=[18, 7],
+            font=(sys_font, 10, "bold"),
+            background=self.bg_color,
+            foreground="#475569",
+            lightcolor=self.bg_color,
+            borderwidth=0,
+        )
         style.map(
             "TNotebook.Tab",
-            background=[("selected", self.accent_soft), ("active", "#e2e8f0")],
+            background=[("selected", "#ffffff"), ("active", "#f1f5f9")],
             foreground=[("selected", self.primary_color), ("!selected", "#475569")],
         )
-        style.configure("Treeview", rowheight=28, font=("Helvetica", 10))
-        style.configure("Treeview.Heading", font=("Helvetica", 10, "bold"), background="#e2e8f0", foreground=self.text_color)
-        style.configure("Primary.TButton", font=("Helvetica", 10, "bold"), padding=[10, 5])
-        style.configure("Success.TButton", font=("Helvetica", 10, "bold"), padding=[10, 5])
+
+        style.configure(
+            "Treeview",
+            rowheight=28,
+            font=(sys_font, 10),
+            background="#ffffff",
+            fieldbackground="#ffffff",
+            foreground=self.text_color,
+            borderwidth=1,
+            relief="solid",
+        )
+        style.configure(
+            "Treeview.Heading",
+            font=(sys_font, 9, "bold"),
+            background="#f1f5f9",
+            foreground=self.text_secondary,
+            relief="flat",
+            padding=[6, 4],
+        )
+        style.map(
+            "Treeview.Heading",
+            background=[("active", "#e2e8f0")],
+        )
+
+        style.configure(
+            "Primary.TButton",
+            font=(sys_font, 10, "bold"),
+            padding=[12, 6],
+            background=self.primary_color,
+            foreground="#ffffff",
+            borderwidth=0,
+        )
+        style.map(
+            "Primary.TButton",
+            background=[("active", self.primary_strong), ("disabled", "#94a3b8")],
+            foreground=[("active", "#ffffff"), ("disabled", "#e2e8f0")],
+        )
+
+        style.configure(
+            "Success.TButton",
+            font=(sys_font, 10, "bold"),
+            padding=[12, 6],
+            background=self.success_color,
+            foreground="#ffffff",
+            borderwidth=0,
+        )
+        style.map(
+            "Success.TButton",
+            background=[("active", "#047857"), ("disabled", "#94a3b8")],
+            foreground=[("active", "#ffffff"), ("disabled", "#e2e8f0")],
+        )
+
+        style.configure(
+            "TButton",
+            font=(sys_font, 9),
+            padding=[10, 5],
+            background="#ffffff",
+            foreground=self.text_color,
+        )
+        style.map(
+            "TButton",
+            background=[("active", "#f1f5f9"), ("disabled", "#f8fafc")],
+            foreground=[("active", self.primary_color), ("disabled", "#94a3b8")],
+        )
+
+        style.configure(
+            "TLabelframe",
+            background="#ffffff",
+            bordercolor=self.border_light,
+            lightcolor=self.border_light,
+            darkcolor=self.border_light,
+        )
+        style.configure(
+            "TLabelframe.Label",
+            font=(sys_font, 10, "bold"),
+            foreground=self.primary_color,
+            background="#ffffff",
+        )
+        style.configure(
+            "TEntry",
+            font=(sys_font, 10),
+            padding=[6, 4],
+        )
+        style.configure(
+            "TCombobox",
+            font=(sys_font, 10),
+            padding=[4, 2],
+        )
 
     # --- UI Layout Builders ---
     def _build_header(self) -> None:
-        # Classic Desktop App Title Header
-        header_frame = tk.Frame(self.root, bg="#f8fafc", padx=16, pady=8, highlightthickness=1, highlightbackground="#e2e8f0")
+        # App Shell Navigation Bar
+        header_frame = tk.Frame(self.root, bg="#ffffff", padx=16, pady=8, highlightthickness=1, highlightbackground=self.border_light)
         header_frame.pack(fill=tk.X)
 
-        title_frame = tk.Frame(header_frame, bg="#f8fafc")
+        title_frame = tk.Frame(header_frame, bg="#ffffff")
         title_frame.pack(side=tk.LEFT)
 
+        # Brand Mark & Version Badge
         tk.Label(
             title_frame,
-            text="🖥️ LinguaLens v1.6.3",
-            font=("Helvetica", 14, "bold"),
-            fg="#0f172a",
-            bg="#f8fafc",
+            text="LinguaLens",
+            font=(self.font_sys, 13, "bold"),
+            fg=self.primary_color,
+            bg="#ffffff",
         ).pack(side=tk.LEFT)
 
         tk.Label(
             title_frame,
-            text=" — Clinical Speech-Language Decision Support System",
-            font=("Helvetica", 11),
-            fg="#64748b",
-            bg="#f8fafc",
+            text="v1.6.3",
+            font=(self.font_sys, 8, "bold"),
+            fg="#475569",
+            bg="#f1f5f9",
+            padx=5,
+            pady=1,
+            relief=tk.FLAT,
+        ).pack(side=tk.LEFT, padx=(6, 8))
+
+        tk.Label(
+            title_frame,
+            text="Clinical Speech-Language Decision Support",
+            font=(self.font_sys, 10),
+            fg=self.text_muted,
+            bg="#ffffff",
         ).pack(side=tk.LEFT)
 
-        # Connection Badge
+        # Connection Status Badge
         is_online = self.client.check_health()
-        status_text = "● Connected (API)" if is_online else "○ Offline Mode"
-        status_bg = "#dcfce7" if is_online else "#fef9c3"
-        status_fg = "#166534" if is_online else "#854d0e"
+        status_text = "● API Connected" if is_online else "○ Offline Mode"
+        status_bg = "#ecfdf5" if is_online else "#fef9c3"
+        status_fg = "#047857" if is_online else "#854d0e"
 
         status_lbl = tk.Label(
             header_frame,
             text=status_text,
-            font=("Helvetica", 9, "bold"),
+            font=(self.font_sys, 9, "bold"),
             fg=status_fg,
             bg=status_bg,
             padx=8,
             pady=3,
+            relief=tk.FLAT,
         )
         status_lbl.pack(side=tk.RIGHT)
 
         # Mode indicator badge (MOCK vs LIVE)
         mode_text = "[LOCAL RESEARCH MOCK]" if self.client.mock_mode else "[CLINICAL LIVE - FASTAPI]"
-        mode_fg = "#0f766e" if self.client.mock_mode else "#0284c7"
-        self.lbl_mode = tk.Label(header_frame, text=mode_text, font=("Helvetica", 9, "bold"), fg=mode_fg, bg="#ffffff")
+        mode_fg = self.primary_color if self.client.mock_mode else self.accent_cyan
+        self.lbl_mode = tk.Label(
+            header_frame,
+            text=mode_text,
+            font=(self.font_sys, 8, "bold"),
+            fg=mode_fg,
+            bg="#f8fafc",
+            padx=6,
+            pady=2,
+            relief=tk.FLAT,
+        )
         self.lbl_mode.pack(side=tk.RIGHT, padx=(0, 8))
 
-        # Subtle safety note
-        safety_banner = tk.Frame(self.root, bg="#fffbeb", padx=14, pady=3, highlightthickness=1, highlightbackground="#fef3c7")
+        # Calm Clinical Safety Notice Ribbon
+        safety_banner = tk.Frame(self.root, bg="#fffbeb", padx=16, pady=4, highlightthickness=1, highlightbackground="#fef3c7")
         safety_banner.pack(fill=tk.X)
         safety_lbl = tk.Label(
             safety_banner,
-            text="⚠️ Research/Education Prototype Only. Non-diagnostic. Human-in-the-loop clinician verification required.",
-            font=("Helvetica", 9, "italic"),
-            fg="#b45309",
+            text="Clinical Decision-Support Prototype  •  Non-Diagnostic  •  Requires Clinician Verification & Sign-off",
+            font=(self.font_sys, 9),
+            fg="#92400e",
             bg="#fffbeb",
         )
         safety_lbl.pack(anchor=tk.W)
 
-        # Persistent Global Context Bar (Searchable Case, Session, Refresh, Actions)
-        ctx_bar = tk.Frame(self.root, bg="#f1f5f9", padx=12, pady=6, highlightthickness=1, highlightbackground="#cbd5e1")
+        # Persistent Global Context Bar
+        ctx_bar = tk.Frame(self.root, bg="#ffffff", padx=12, pady=6, highlightthickness=1, highlightbackground=self.border_light)
         ctx_bar.pack(fill=tk.X, padx=12, pady=(6, 2))
 
-        # Case Search & Selector
-        tk.Label(ctx_bar, text="🔍 Find Case:", font=("Helvetica", 9, "bold"), bg="#f1f5f9", fg="#334155").pack(side=tk.LEFT, padx=(0, 2))
-        self.entry_case_search = ttk.Entry(ctx_bar, width=12, font=("Helvetica", 9))
-        self.entry_case_search.pack(side=tk.LEFT, padx=(0, 6))
+        # Patient & Case Selection Group
+        tk.Label(ctx_bar, text="Search:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_secondary).pack(side=tk.LEFT, padx=(0, 2))
+        self.entry_case_search = ttk.Entry(ctx_bar, width=11, font=(self.font_sys, 9))
+        self.entry_case_search.pack(side=tk.LEFT, padx=(0, 8))
         self.entry_case_search.bind("<KeyRelease>", self._on_case_search_typing)
 
-        tk.Label(ctx_bar, text="👤 Case:", font=("Helvetica", 9, "bold"), bg="#f1f5f9", fg="#0f172a").pack(side=tk.LEFT, padx=(0, 2))
-        self.combo_global_case = ttk.Combobox(ctx_bar, state="readonly", width=24, font=("Helvetica", 9))
-        self.combo_global_case.pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(ctx_bar, text="Case:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(0, 2))
+        self.combo_global_case = ttk.Combobox(ctx_bar, state="readonly", width=22, font=(self.font_sys, 9))
+        self.combo_global_case.pack(side=tk.LEFT, padx=(0, 8))
         self.combo_global_case.bind("<<ComboboxSelected>>", self._on_global_case_changed)
 
         # Session Selector
-        tk.Label(ctx_bar, text="🗓️ Session:", font=("Helvetica", 9, "bold"), bg="#f1f5f9", fg="#0f172a").pack(side=tk.LEFT, padx=(0, 2))
-        self.combo_global_session = ttk.Combobox(ctx_bar, state="readonly", width=20, font=("Helvetica", 9))
-        self.combo_global_session.pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(ctx_bar, text="Session:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(0, 2))
+        self.combo_global_session = ttk.Combobox(ctx_bar, state="readonly", width=18, font=(self.font_sys, 9))
+        self.combo_global_session.pack(side=tk.LEFT, padx=(0, 8))
         self.combo_global_session.bind("<<ComboboxSelected>>", self._on_global_session_changed)
 
         # Child Selector (Assessment V2)
-        tk.Label(ctx_bar, text="👶 Child:", font=("Helvetica", 9, "bold"), bg="#f1f5f9", fg="#0f172a").pack(side=tk.LEFT, padx=(4, 2))
-        self.combo_global_child = ttk.Combobox(ctx_bar, state="readonly", width=20, font=("Helvetica", 9))
-        self.combo_global_child.pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(ctx_bar, text="Child:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(2, 2))
+        self.combo_global_child = ttk.Combobox(ctx_bar, state="readonly", width=18, font=(self.font_sys, 9))
+        self.combo_global_child.pack(side=tk.LEFT, padx=(0, 8))
         self.combo_global_child.bind("<<ComboboxSelected>>", self._on_global_child_changed)
 
-        # Consent Status Badge & Actions (Subtask B)
+        # Consent Status Badge & Actions
         self.lbl_consent_status = tk.Label(
             ctx_bar,
             text="[Consent Not Loaded]",
-            font=("Helvetica", 8, "bold"),
+            font=(self.font_sys, 8, "bold"),
             bg="#f1f5f9",
-            fg="#64748b",
-            padx=4,
-            pady=1,
-            relief=tk.GROOVE,
+            fg=self.text_muted,
+            padx=6,
+            pady=2,
+            relief=tk.FLAT,
         )
         self.lbl_consent_status.pack(side=tk.LEFT, padx=(2, 2))
 
         self.lbl_consent_loaded_at = tk.Label(
             ctx_bar,
             text="",
-            font=("Helvetica", 8),
-            bg="#f1f5f9",
+            font=(self.font_sys, 8),
+            bg="#ffffff",
             fg="#94a3b8",
         )
         self.lbl_consent_loaded_at.pack(side=tk.LEFT, padx=(0, 4))
 
         self.btn_refresh_consent = ttk.Button(
             ctx_bar,
-            text="🔄",
-            width=3,
+            text="Refresh",
+            width=7,
             command=self._refresh_consent,
         )
         self.btn_refresh_consent.pack(side=tk.LEFT, padx=(0, 2))
 
         self.btn_record_consent = ttk.Button(
             ctx_bar,
-            text="📋 Record Consent",
+            text="Record Consent",
             command=self._show_record_consent_dialog,
         )
         self.btn_record_consent.pack(side=tk.LEFT, padx=(2, 4))
@@ -251,69 +413,68 @@ class LinguaLensGUIApp:
         self.lbl_assessment_ctx = tk.Label(
             ctx_bar,
             text="",
-            font=("Helvetica", 8, "bold"),
-            bg="#f1f5f9",
-            fg="#7e22ce",
-            padx=4,
-            pady=1,
-            relief=tk.GROOVE,
+            font=(self.font_sys, 8, "bold"),
+            bg="#f5f3ff",
+            fg="#6d28d9",
+            padx=6,
+            pady=2,
+            relief=tk.FLAT,
         )
         self.lbl_assessment_ctx.pack(side=tk.LEFT, padx=(2, 2))
 
         self.btn_create_assessment = ttk.Button(
             ctx_bar,
-            text="➕ New Assessment",
+            text="New Assessment",
             command=self._show_create_assessment_dialog,
         )
         self.btn_create_assessment.pack(side=tk.LEFT, padx=(2, 6))
 
-        # Quick Buttons & Refresh
-        ttk.Button(ctx_bar, text="🔄 Refresh", command=self._refresh_all_data).pack(side=tk.LEFT, padx=(2, 0))
-        ttk.Button(ctx_bar, text="➕ New Case", command=self._show_create_case_dialog).pack(side=tk.RIGHT, padx=(3, 0))
-        ttk.Button(ctx_bar, text="➕ New Session", command=self._show_create_session_dialog).pack(side=tk.RIGHT, padx=(3, 0))
-        ttk.Button(ctx_bar, text="➕ New Child", command=self._show_create_child_dialog).pack(side=tk.RIGHT, padx=(3, 0))
-
+        # Quick Actions Bar
+        ttk.Button(ctx_bar, text="Refresh All", command=self._refresh_all_data).pack(side=tk.LEFT, padx=(2, 0))
+        ttk.Button(ctx_bar, text="New Case", command=self._show_create_case_dialog).pack(side=tk.RIGHT, padx=(3, 0))
+        ttk.Button(ctx_bar, text="New Session", command=self._show_create_session_dialog).pack(side=tk.RIGHT, padx=(3, 0))
+        ttk.Button(ctx_bar, text="New Child", command=self._show_create_child_dialog).pack(side=tk.RIGHT, padx=(3, 0))
 
     def _build_tabs(self) -> None:
         self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=12, pady=8)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=12, pady=6)
 
         # Tab 1: Cases & Sessions
         self.tab_cases = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_cases, text="1. 📋 Cases & Sessions")
+        self.notebook.add(self.tab_cases, text="Cases & Sessions")
         self._build_tab_cases()
 
-        # Tab 2: Ingestion (Audio / CHA / Text)
+        # Tab 2: Ingestion
         self.tab_ingestion = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_ingestion, text="2. 🎙️ Ingest Audio & Transcript")
+        self.notebook.add(self.tab_ingestion, text="Ingest Material")
         self._build_tab_ingestion()
 
-        # Tab 3: Transcript QA Review
+        # Tab 3: Transcript Review
         self.tab_review = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_review, text="3. 🗣️ Transcript QA & Review")
+        self.notebook.add(self.tab_review, text="Transcript Review")
         self._build_tab_review()
 
-        # Tab 4: Findings & Guideline Mapping
+        # Tab 4: Clinical Findings
         self.tab_findings = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_findings, text="4. 📊 Findings & Acoustics")
+        self.notebook.add(self.tab_findings, text="Clinical Findings")
         self._build_tab_findings()
 
-        # Tab 5: Progress Report & Export
+        # Tab 5: Report & Sign-off
         self.tab_report = ttk.Frame(self.notebook)
-        self.notebook.add(self.tab_report, text="5. 📝 Report & Sign-off")
+        self.notebook.add(self.tab_report, text="Report & Sign-off")
         self._build_tab_report()
 
     def _build_statusbar(self) -> None:
         """Bottom status bar with operational status and indeterminate progress indicator."""
-        self.statusbar_frame = tk.Frame(self.root, bg="#e2e8f0", padx=12, pady=4)
+        self.statusbar_frame = tk.Frame(self.root, bg="#f1f5f9", padx=16, pady=5, highlightthickness=1, highlightbackground=self.border_light)
         self.statusbar_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
         self.lbl_status = tk.Label(
             self.statusbar_frame,
             text="Ready",
-            font=("Helvetica", 9),
-            fg="#334155",
-            bg="#e2e8f0",
+            font=(self.font_sys, 9),
+            fg=self.text_secondary,
+            bg="#f1f5f9",
         )
         self.lbl_status.pack(side=tk.LEFT)
 
@@ -579,15 +740,15 @@ class LinguaLensGUIApp:
 
     # --- Tab 1: Cases & Sessions UI ---
     def _build_tab_cases(self) -> None:
-        frame = ttk.Frame(self.tab_cases, padding=12)
+        frame = ttk.Frame(self.tab_cases, padding=16)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        # Cases Table Header
-        lbl_c = ttk.Label(frame, text="Active Child Cases Directory", font=("Helvetica", 12, "bold"))
+        # Section 1: Cases & Sessions Directory
+        lbl_c = ttk.Label(frame, text="Active Child Cases Directory", font=self.font_heading)
         lbl_c.pack(anchor=tk.W, pady=(0, 4))
 
         columns_c = ("case_id", "child_id", "age", "lang", "sessions", "notes")
-        self.tree_cases = ttk.Treeview(frame, columns=columns_c, show="headings", height=6)
+        self.tree_cases = ttk.Treeview(frame, columns=columns_c, show="headings", height=5)
         self.tree_cases.heading("case_id", text="Case ID")
         self.tree_cases.heading("child_id", text="Child ID")
         self.tree_cases.heading("age", text="Age (Mo)")
@@ -602,21 +763,21 @@ class LinguaLensGUIApp:
         self.tree_cases.column("sessions", width=70, anchor=tk.CENTER)
         self.tree_cases.column("notes", width=380)
 
-        self.tree_cases.pack(fill=tk.X, pady=(0, 8))
+        self.tree_cases.pack(fill=tk.X, pady=(0, 6))
         self.tree_cases.bind("<<TreeviewSelect>>", self._on_case_selected)
 
         # Button Bar for Cases
         btn_bar_c = ttk.Frame(frame)
-        btn_bar_c.pack(fill=tk.X, pady=(0, 12))
-        ttk.Button(btn_bar_c, text="➕ Create New Case", command=self._show_create_case_dialog).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(btn_bar_c, text="🔄 Refresh Cases", command=self._refresh_cases).pack(side=tk.LEFT)
+        btn_bar_c.pack(fill=tk.X, pady=(0, 10))
+        ttk.Button(btn_bar_c, text="Create New Case", command=self._show_create_case_dialog).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_bar_c, text="Refresh Cases", command=self._refresh_cases).pack(side=tk.LEFT)
 
         # Sessions Table
-        lbl_s = ttk.Label(frame, text="Sessions for Selected Case", font=("Helvetica", 12, "bold"))
-        lbl_s.pack(anchor=tk.W, pady=(8, 4))
+        lbl_s = ttk.Label(frame, text="Sessions for Selected Case", font=self.font_heading)
+        lbl_s.pack(anchor=tk.W, pady=(4, 4))
 
         columns_s = ("session_id", "date", "number", "status", "transcript", "report")
-        self.tree_sessions = ttk.Treeview(frame, columns=columns_s, show="headings", height=5)
+        self.tree_sessions = ttk.Treeview(frame, columns=columns_s, show="headings", height=4)
         self.tree_sessions.heading("session_id", text="Session ID")
         self.tree_sessions.heading("date", text="Date")
         self.tree_sessions.heading("number", text="Sess #")
@@ -631,18 +792,18 @@ class LinguaLensGUIApp:
         self.tree_sessions.column("transcript", width=100, anchor=tk.CENTER)
         self.tree_sessions.column("report", width=100, anchor=tk.CENTER)
 
-        self.tree_sessions.pack(fill=tk.X, pady=(0, 8))
+        self.tree_sessions.pack(fill=tk.X, pady=(0, 6))
         self.tree_sessions.bind("<<TreeviewSelect>>", self._on_session_selected)
 
         # Button Bar for Sessions
         btn_bar_s = ttk.Frame(frame)
-        btn_bar_s.pack(fill=tk.X, pady=(0, 12))
-        ttk.Button(btn_bar_s, text="➕ Start New Session", command=self._show_create_session_dialog).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(btn_bar_s, text="🚀 Open in Ingestion Workspace ➔", command=lambda: self.notebook.select(1)).pack(side=tk.LEFT)
+        btn_bar_s.pack(fill=tk.X, pady=(0, 10))
+        ttk.Button(btn_bar_s, text="Start New Session", command=self._show_create_session_dialog).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_bar_s, text="Open in Ingestion Workspace →", command=lambda: self.notebook.select(1)).pack(side=tk.LEFT)
 
-        # Active Children Directory (Assessment V2)
-        lbl_ch = ttk.Label(frame, text="Active Children Directory (Assessment V2)", font=("Helvetica", 12, "bold"))
-        lbl_ch.pack(anchor=tk.W, pady=(8, 4))
+        # Section 2: Active Children Directory (Assessment V2)
+        lbl_ch = ttk.Label(frame, text="Active Children Directory (Assessment V2)", font=self.font_heading)
+        lbl_ch.pack(anchor=tk.W, pady=(4, 4))
 
         columns_ch = ("child_id", "display_code", "birth_ym", "lang")
         self.tree_children = ttk.Treeview(frame, columns=columns_ch, show="headings", height=4)
@@ -660,13 +821,13 @@ class LinguaLensGUIApp:
         self.tree_children.bind("<<TreeviewSelect>>", self._on_child_selected)
 
         btn_bar_ch = ttk.Frame(frame)
-        btn_bar_ch.pack(fill=tk.X, pady=(0, 10))
-        ttk.Button(btn_bar_ch, text="➕ Create Child Profile (V2)", command=self._show_create_child_dialog).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(btn_bar_ch, text="➕ Create Assessment (V2)", command=self._show_create_assessment_dialog).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(btn_bar_ch, text="🔄 Refresh Children", command=self._refresh_children).pack(side=tk.LEFT)
+        btn_bar_ch.pack(fill=tk.X, pady=(0, 8))
+        ttk.Button(btn_bar_ch, text="Create Child Profile (V2)", command=self._show_create_child_dialog).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_bar_ch, text="Create Assessment (V2)", command=self._show_create_assessment_dialog).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_bar_ch, text="Refresh Children", command=self._refresh_children).pack(side=tk.LEFT)
 
         # Assessments Directory (Assessment V2)
-        lbl_asmt = ttk.Label(frame, text="Assessments Directory (Assessment V2)", font=("Helvetica", 12, "bold"))
+        lbl_asmt = ttk.Label(frame, text="Assessments Directory (Assessment V2)", font=self.font_heading)
         lbl_asmt.pack(anchor=tk.W, pady=(4, 4))
 
         columns_asmt = ("asmt_id", "child_id", "purpose", "state", "clinician", "version")
@@ -688,7 +849,6 @@ class LinguaLensGUIApp:
         self.tree_assessments.pack(fill=tk.X, pady=(0, 6))
         self.tree_assessments.bind("<<TreeviewSelect>>", self._on_assessment_selected)
 
-
     # --- Tab 2: Ingestion UI ---
     def _build_tab_ingestion(self) -> None:
         frame = ttk.Frame(self.tab_ingestion, padding=16)
@@ -697,49 +857,49 @@ class LinguaLensGUIApp:
         self.lbl_ingest_ctx = ttk.Label(
             frame,
             text="Please select a Session from Tab 1 to begin ingestion.",
-            font=("Helvetica", 11, "bold"),
-            foreground="#0369a1",
+            font=self.font_heading,
+            foreground=self.primary_color,
         )
         self.lbl_ingest_ctx.pack(anchor=tk.W, pady=(0, 12))
 
         # Audio/Video File Picker Card
-        card_audio = ttk.LabelFrame(frame, text="🎙️ Option A: Ingest Local Audio / Video Clip", padding=12)
+        card_audio = ttk.LabelFrame(frame, text="Option A: Ingest Local Audio / Video Clip", padding=12)
         card_audio.pack(fill=tk.X, pady=(0, 12))
 
         lbl_desc = ttk.Label(
             card_audio,
             text="Select an audio or video recording from your computer (.wav, .mp3, .m4a, .mp4).\n"
             "The system will extract Pitch/Prosody acoustics (F0) and transcribe dialogue segments.",
-            font=("Helvetica", 10),
+            font=self.font_body,
         )
         lbl_desc.pack(anchor=tk.W, pady=(0, 8))
 
         f_picker = ttk.Frame(card_audio)
         f_picker.pack(fill=tk.X)
-        self.entry_audio_path = ttk.Entry(f_picker, font=("Helvetica", 10))
+        self.entry_audio_path = ttk.Entry(f_picker, font=self.font_body)
         self.entry_audio_path.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
-        self.btn_select_audio = ttk.Button(f_picker, text="📂 Browse...", command=self._browse_audio_file)
+        self.btn_select_audio = ttk.Button(f_picker, text="Browse Audio...", command=self._browse_audio_file)
         self.btn_select_audio.pack(side=tk.LEFT, padx=(0, 6))
-        self.btn_process_audio = ttk.Button(f_picker, text="⚡ Process", command=self._process_audio_file)
+        self.btn_process_audio = ttk.Button(f_picker, text="Process Audio", style="Primary.TButton", command=self._process_audio_file)
         self.btn_process_audio.pack(side=tk.LEFT, padx=(0, 6))
-        self.btn_batch_ingest = ttk.Button(f_picker, text="📦 Batch Ingest...", command=self._batch_ingest_audio_files)
+        self.btn_batch_ingest = ttk.Button(f_picker, text="Batch Ingest...", command=self._batch_ingest_audio_files)
         self.btn_batch_ingest.pack(side=tk.LEFT)
 
         # Dedicated Audio Ingestion Progress Panel (Hidden by default, shown during processing)
         self.frame_ingest_progress = tk.Frame(
             card_audio,
-            bg="#f0fdf4",
+            bg="#f0fdfa",
             padx=12,
             pady=10,
             highlightthickness=1,
-            highlightbackground="#86efac",
+            highlightbackground="#99f6e4",
         )
         self.lbl_ingest_stage = tk.Label(
             self.frame_ingest_progress,
-            text="🚀 Initializing Audio Pipeline...",
-            font=("Helvetica", 10, "bold"),
-            fg="#166534",
-            bg="#f0fdf4",
+            text="Initializing Audio Pipeline...",
+            font=self.font_subheading,
+            fg=self.primary_color,
+            bg="#f0fdfa",
         )
         self.lbl_ingest_stage.pack(anchor=tk.W, pady=(0, 4))
 
@@ -754,30 +914,30 @@ class LinguaLensGUIApp:
         self.lbl_ingest_percent = tk.Label(
             self.frame_ingest_progress,
             text="0% Completed",
-            font=("Helvetica", 9),
-            fg="#15803d",
-            bg="#f0fdf4",
+            font=self.font_caption,
+            fg=self.primary_color,
+            bg="#f0fdfa",
         )
         self.lbl_ingest_percent.pack(anchor=tk.W)
 
         # CHA / Text File Picker Card
-        card_text = ttk.LabelFrame(frame, text="📄 Option B: Load Demo Dialogue or CHAT File", padding=12)
+        card_text = ttk.LabelFrame(frame, text="Option B: Load Demo Dialogue or CHAT File", padding=12)
         card_text.pack(fill=tk.BOTH, expand=True)
 
         btn_row = ttk.Frame(card_text)
         btn_row.pack(anchor=tk.W, pady=(0, 8))
-        self.btn_ingest_demo = ttk.Button(btn_row, text="✨ Load Demo Thai Play Dialogue", command=self._load_demo_dialogue)
+        self.btn_ingest_demo = ttk.Button(btn_row, text="Load Demo Thai Play Dialogue", command=self._load_demo_dialogue)
         self.btn_ingest_demo.pack(side=tk.LEFT, padx=(0, 8))
-        self.btn_browse_text = ttk.Button(btn_row, text="📂 Load .cha / .txt File...", command=self._browse_text_file)
+        self.btn_browse_text = ttk.Button(btn_row, text="Browse .cha / .txt File...", command=self._browse_text_file)
         self.btn_browse_text.pack(side=tk.LEFT)
 
-        lbl_raw = ttk.Label(card_text, text="Or enter dialogue text manually below (format: 'INV: ...' and 'CHI: ...'):", font=("Helvetica", 9, "italic"))
+        lbl_raw = ttk.Label(card_text, text="Or enter dialogue text manually below (format: 'INV: ...' and 'CHI: ...'):", font=self.font_caption)
         lbl_raw.pack(anchor=tk.W, pady=(0, 4))
 
-        self.txt_manual = tk.Text(card_text, height=8, font=("Courier", 10))
+        self.txt_manual = tk.Text(card_text, height=8, font=self.font_code, bg="#ffffff", fg=self.text_color, relief=tk.SOLID, borderwidth=1, highlightthickness=1, highlightbackground=self.border_light)
         self.txt_manual.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
-        self.btn_ingest_text = ttk.Button(card_text, text="📥 Ingest Typed Dialogue Text", command=self._ingest_typed_text)
+        self.btn_ingest_text = ttk.Button(card_text, text="Ingest Typed Dialogue Text", style="Primary.TButton", command=self._ingest_typed_text)
         self.btn_ingest_text.pack(anchor=tk.E)
 
 
@@ -788,10 +948,10 @@ class LinguaLensGUIApp:
 
         top_bar = ttk.Frame(frame)
         top_bar.pack(fill=tk.X, pady=(0, 6))
-        self.lbl_review_status = ttk.Label(top_bar, text="Transcript Status: Not loaded", font=("Helvetica", 11, "bold"))
+        self.lbl_review_status = ttk.Label(top_bar, text="Transcript Status: Not loaded", font=(self.font_family, 10, "bold"))
         self.lbl_review_status.pack(side=tk.LEFT)
 
-        self.btn_attest = ttk.Button(top_bar, text="✍️ Clinician Sign-Off & Attest", command=self._attest_transcript)
+        self.btn_attest = ttk.Button(top_bar, text="Clinician Sign-Off & Attest", style="Primary.TButton", command=self._attest_transcript)
         self.btn_attest.pack(side=tk.RIGHT)
 
         # Dual-mode sub-notebook (TalkBank CHAT vs Table Editor)
@@ -800,52 +960,52 @@ class LinguaLensGUIApp:
 
         # Sub-tab A: TalkBank / CHAT Viewer
         self.subtab_chat = ttk.Frame(self.review_notebook, padding=8)
-        self.review_notebook.add(self.subtab_chat, text="📜 TalkBank / CHAT Format View")
+        self.review_notebook.add(self.subtab_chat, text="TalkBank CHAT View")
 
         chat_bar = ttk.Frame(self.subtab_chat)
         chat_bar.pack(fill=tk.X, pady=(0, 4))
-        ttk.Label(chat_bar, text="TalkBank CHAT Canonical Syntax (@Begin ... *CHI / *INV ... @End):", font=("Helvetica", 9, "italic"), foreground="#475569").pack(side=tk.LEFT)
-        ttk.Button(chat_bar, text="📋 Copy CHAT", command=self._copy_chat_text).pack(side=tk.RIGHT)
+        ttk.Label(chat_bar, text="Canonical CHAT Syntax (@Begin ... *CHI / *INV ... @End):", font=(self.font_family, 9, "italic"), foreground="#475569").pack(side=tk.LEFT)
+        ttk.Button(chat_bar, text="Copy CHAT", command=self._copy_chat_text).pack(side=tk.RIGHT)
 
         self.txt_chat_view = tk.Text(
             self.subtab_chat,
-            font=("Courier", 10),
+            font=(self.font_code, 10),
             bg="#ffffff",
             fg="#0f172a",
-            insertbackground="#0284c7",
-            padx=12,
-            pady=10,
+            insertbackground="#0f766e",
+            padx=14,
+            pady=12,
             highlightthickness=1,
             highlightbackground="#cbd5e1",
             relief=tk.FLAT,
         )
         self.txt_chat_view.pack(fill=tk.BOTH, expand=True)
         # Configure clean light syntax tags for TalkBank style
-        self.txt_chat_view.tag_configure("header", foreground="#475569", font=("Courier", 10, "bold"))
-        self.txt_chat_view.tag_configure("chi", foreground="#1d4ed8", font=("Courier", 10, "bold"))
-        self.txt_chat_view.tag_configure("inv", foreground="#047857", font=("Courier", 10, "bold"))
-        self.txt_chat_view.tag_configure("time", foreground="#b45309", font=("Courier", 10))
-        self.txt_chat_view.tag_configure("tier", foreground="#7c3aed", font=("Courier", 10, "italic"))
+        self.txt_chat_view.tag_configure("header", foreground="#475569", font=(self.font_code, 10, "bold"))
+        self.txt_chat_view.tag_configure("chi", foreground="#0f766e", font=(self.font_code, 10, "bold"))
+        self.txt_chat_view.tag_configure("inv", foreground="#0284c7", font=(self.font_code, 10, "bold"))
+        self.txt_chat_view.tag_configure("time", foreground="#b45309", font=(self.font_code, 10))
+        self.txt_chat_view.tag_configure("tier", foreground="#6366f1", font=(self.font_code, 10, "italic"))
 
         # Sub-tab B: Utterance Table & Interactive Editor
         self.subtab_table = ttk.Frame(self.review_notebook, padding=8)
-        self.review_notebook.add(self.subtab_table, text="✏️ Utterance Table & Quick Editor")
+        self.review_notebook.add(self.subtab_table, text="Utterance Table & Audio")
 
         # Interactive Audio Waveform Visualizer & Seek Canvas
         self.frame_waveform = tk.Frame(
             self.subtab_table,
-            bg="#0f172a",
-            height=65,
+            bg="#090d16",
+            height=68,
             highlightthickness=1,
-            highlightbackground="#334155",
+            highlightbackground="#1e293b",
         )
         self.frame_waveform.pack(fill=tk.X, pady=(0, 6))
         self.frame_waveform.pack_propagate(False)
 
         self.canvas_waveform = tk.Canvas(
             self.frame_waveform,
-            bg="#0f172a",
-            height=63,
+            bg="#090d16",
+            height=66,
             highlightthickness=0,
             cursor="crosshair",
         )
@@ -857,20 +1017,20 @@ class LinguaLensGUIApp:
         # Interactive Audio Scrubber & Timeline Bar
         self.frame_scrubber = tk.Frame(
             self.subtab_table,
-            bg="#f1f5f9",
+            bg="#f8fafc",
             padx=8,
-            pady=3,
+            pady=4,
             highlightthickness=1,
-            highlightbackground="#cbd5e1",
+            highlightbackground="#e2e8f0",
         )
         self.frame_scrubber.pack(fill=tk.X, pady=(0, 4))
 
         self.lbl_time_current = tk.Label(
             self.frame_scrubber,
             text="00:00.0",
-            font=("Helvetica", 9, "bold"),
+            font=(self.font_code, 9, "bold"),
             fg="#0f766e",
-            bg="#f1f5f9",
+            bg="#f8fafc",
             width=7,
         )
         self.lbl_time_current.pack(side=tk.LEFT, padx=(0, 6))
@@ -889,9 +1049,9 @@ class LinguaLensGUIApp:
         self.lbl_time_total = tk.Label(
             self.frame_scrubber,
             text="00:00.0",
-            font=("Helvetica", 9),
+            font=(self.font_code, 9),
             fg="#64748b",
-            bg="#f1f5f9",
+            bg="#f8fafc",
             width=7,
         )
         self.lbl_time_total.pack(side=tk.RIGHT, padx=(6, 0))
@@ -900,16 +1060,16 @@ class LinguaLensGUIApp:
         self.frame_audio_player = tk.Frame(
             self.subtab_table,
             bg="#f8fafc",
-            padx=10,
+            padx=8,
             pady=6,
             highlightthickness=1,
-            highlightbackground="#cbd5e1",
+            highlightbackground="#e2e8f0",
         )
         self.frame_audio_player.pack(fill=tk.X, pady=(0, 6))
 
         self.btn_play_continuous = ttk.Button(
             self.frame_audio_player,
-            text="▶️ Play Audio with Follow",
+            text="Play Audio with Follow",
             style="Primary.TButton",
             command=self._toggle_continuous_playback,
         )
@@ -917,19 +1077,19 @@ class LinguaLensGUIApp:
 
         self.btn_stop_audio = ttk.Button(
             self.frame_audio_player,
-            text="⏹️ Stop",
+            text="Stop",
             command=self._stop_playback,
         )
         self.btn_stop_audio.pack(side=tk.LEFT, padx=(0, 8))
 
         # Playback speed selector
-        ttk.Label(self.frame_audio_player, text="Speed:", font=("Helvetica", 9, "bold")).pack(side=tk.LEFT, padx=(4, 2))
+        ttk.Label(self.frame_audio_player, text="Speed:", font=(self.font_family, 9, "bold")).pack(side=tk.LEFT, padx=(4, 2))
         self.combo_speed = ttk.Combobox(
             self.frame_audio_player,
             values=["0.75x", "1.0x", "1.25x"],
             width=5,
             state="readonly",
-            font=("Helvetica", 9),
+            font=(self.font_family, 9),
         )
         self.combo_speed.set("1.0x")
         self.combo_speed.pack(side=tk.LEFT, padx=(0, 8))
@@ -937,30 +1097,30 @@ class LinguaLensGUIApp:
 
         self.btn_auto_refine = ttk.Button(
             self.frame_audio_player,
-            text="🧠 Auto-Refine Speakers",
+            text="Auto-Refine Speakers",
             command=self._auto_refine_speakers,
         )
         self.btn_auto_refine.pack(side=tk.LEFT, padx=(0, 4))
 
         self.btn_swap_speakers = ttk.Button(
             self.frame_audio_player,
-            text="🔄 Swap CHI ↔ Adult",
+            text="Swap CHI ↔ Adult",
             command=self._swap_speakers,
         )
         self.btn_swap_speakers.pack(side=tk.LEFT, padx=(0, 4))
 
         self.btn_toggle_pitch = ttk.Button(
             self.frame_audio_player,
-            text="📈 F0 Curve: ON",
+            text="F0 Pitch: ON",
             command=self._toggle_pitch_overlay,
         )
         self.btn_toggle_pitch.pack(side=tk.LEFT, padx=(0, 8))
 
         self.lbl_playback_status = tk.Label(
             self.frame_audio_player,
-            text="Audio: Ready (Click ▶️ or press [C]=CHI, [I]=INV, [M]=MOT to tag)",
-            font=("Helvetica", 9),
-            fg="#475569",
+            text="Audio: Ready (Click Play or press [C]=CHI, [I]=INV, [M]=MOT to tag)",
+            font=(self.font_family, 9),
+            fg="#64748b",
             bg="#f8fafc",
         )
         self.lbl_playback_status.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -982,8 +1142,8 @@ class LinguaLensGUIApp:
         # Configure real-time playing highlight tag
         self.tree_utterances.tag_configure(
             "playing",
-            background="#dbeafe",
-            foreground="#1e40af",
+            background="#e0f2fe",
+            foreground="#0369a1",
         )
 
         self.tree_utterances.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
@@ -991,7 +1151,7 @@ class LinguaLensGUIApp:
         self.tree_utterances.bind("<KeyPress>", self._on_tree_key_press)
 
         # Edit controls
-        edit_box = ttk.LabelFrame(self.subtab_table, text="✏️ Edit Selected Utterance & Speaker", padding=8)
+        edit_box = ttk.LabelFrame(self.subtab_table, text="Edit Selected Utterance & Speaker", padding=10)
         edit_box.pack(fill=tk.X, pady=(2, 0))
 
         e_row = ttk.Frame(edit_box)
@@ -1004,7 +1164,7 @@ class LinguaLensGUIApp:
         self.combo_spk.set("CHI")
 
         ttk.Label(e_row, text="Text:").grid(row=0, column=2, sticky=tk.W, padx=(0, 4))
-        self.entry_u_text = ttk.Entry(e_row, font=("Helvetica", 10))
+        self.entry_u_text = ttk.Entry(e_row, font=(self.font_family, 10))
         self.entry_u_text.grid(row=0, column=3, sticky=tk.EW, padx=(0, 10))
 
         self.btn_play_snippet = ttk.Button(e_row, text="🔊 Play Snippet", command=self._play_selected_utterance)
@@ -1016,7 +1176,7 @@ class LinguaLensGUIApp:
         # Word-level interactive audio chips row
         self.frame_words_chips = ttk.Frame(edit_box)
         self.frame_words_chips.pack(fill=tk.X, pady=(6, 0))
-        self.lbl_words_title = ttk.Label(self.frame_words_chips, text="🎯 Word Timings (Click to listen):", font=("Helvetica", 9, "bold"))
+        self.lbl_words_title = ttk.Label(self.frame_words_chips, text="Word Timings (Click to listen):", font=(self.font_family, 9, "bold"))
         self.lbl_words_title.pack(side=tk.LEFT, padx=(0, 6))
         self.container_word_buttons = ttk.Frame(self.frame_words_chips)
         self.container_word_buttons.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -1038,13 +1198,14 @@ class LinguaLensGUIApp:
         tk.Label(
             self.frame_stale_findings,
             text="⚠️ Transcript modified: Findings & Report are currently STALE. Click Recalculate to refresh.",
-            font=("Helvetica", 9, "bold"),
+            font=(self.font_family, 9, "bold"),
             fg="#92400e",
             bg="#fffbeb",
         ).pack(side=tk.LEFT)
         ttk.Button(
             self.frame_stale_findings,
-            text="🔄 Recalculate Findings",
+            text="Recalculate Findings",
+            style="Primary.TButton",
             command=self._recalculate_findings,
         ).pack(side=tk.RIGHT)
 
@@ -1054,7 +1215,7 @@ class LinguaLensGUIApp:
 
         # Sub-tab 1: Spider / Radar Diagram View
         self.subtab_radar = ttk.Frame(self.findings_notebook, padding=8)
-        self.findings_notebook.add(self.subtab_radar, text="🕸️ Spider Diagram (Norm Comparison)")
+        self.findings_notebook.add(self.subtab_radar, text="Normative Spider Profile")
 
         radar_split = ttk.Frame(self.subtab_radar)
         radar_split.pack(fill=tk.BOTH, expand=True)
@@ -1067,20 +1228,29 @@ class LinguaLensGUIApp:
         self.canvas_radar.bind("<Configure>", self._on_canvas_radar_resize)
 
         # Right Summary Panel
-        sum_frame = ttk.LabelFrame(radar_split, text="📊 Benchmark Comparison vs TD Norms", padding=10)
+        sum_frame = ttk.LabelFrame(radar_split, text="Benchmark Comparison vs TD Norms", padding=10)
         sum_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        self.txt_radar_summary = tk.Text(sum_frame, font=("Helvetica", 10), bg="#f8fafc", padx=8, pady=8, wrap=tk.WORD, relief=tk.FLAT)
+        self.txt_radar_summary = tk.Text(
+            sum_frame,
+            font=(self.font_family, 10),
+            bg="#f8fafc",
+            fg="#0f172a",
+            padx=10,
+            pady=10,
+            wrap=tk.WORD,
+            relief=tk.FLAT,
+        )
         self.txt_radar_summary.pack(fill=tk.BOTH, expand=True)
-        self.txt_radar_summary.tag_configure("title", font=("Helvetica", 10, "bold"), foreground="#0f172a")
-        self.txt_radar_summary.tag_configure("green", font=("Helvetica", 9, "bold"), foreground="#15803d")
-        self.txt_radar_summary.tag_configure("blue", font=("Helvetica", 9, "bold"), foreground="#1d4ed8")
+        self.txt_radar_summary.tag_configure("title", font=(self.font_family, 10, "bold"), foreground="#0f172a")
+        self.txt_radar_summary.tag_configure("green", font=(self.font_family, 9, "bold"), foreground="#0f766e")
+        self.txt_radar_summary.tag_configure("blue", font=(self.font_family, 9, "bold"), foreground="#0284c7")
 
         # Sub-tab 2: Detailed Table View
         self.subtab_table_features = ttk.Frame(self.findings_notebook, padding=8)
-        self.findings_notebook.add(self.subtab_table_features, text="📋 Comprehensive 15+ Features & Guidelines Table")
+        self.findings_notebook.add(self.subtab_table_features, text="Speech & Acoustic Features")
 
-        lbl_f = ttk.Label(self.subtab_table_features, text="📊 Speech-Language, Interaction & Acoustic Profile", font=("Helvetica", 11, "bold"))
+        lbl_f = ttk.Label(self.subtab_table_features, text="Speech-Language, Interaction & Acoustic Profile", font=(self.font_family, 11, "bold"))
         lbl_f.pack(anchor=tk.W, pady=(0, 4))
 
         columns_m = ("category", "metric", "val", "desc")
@@ -1096,7 +1266,7 @@ class LinguaLensGUIApp:
         self.tree_metrics.column("desc", width=420)
         self.tree_metrics.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
-        lbl_g = ttk.Label(self.subtab_table_features, text="📑 Clinical Guideline Linkages (Thai ASD Assessment Dimensions)", font=("Helvetica", 10, "bold"))
+        lbl_g = ttk.Label(self.subtab_table_features, text="Clinical Guideline Linkages (Thai ASD Assessment Dimensions)", font=(self.font_family, 10, "bold"))
         lbl_g.pack(anchor=tk.W, pady=(0, 2))
 
         columns_g = ("construct", "status", "evidence")
@@ -1112,15 +1282,15 @@ class LinguaLensGUIApp:
 
         # Sub-tab 3: Longitudinal Assessment Trajectory
         self.subtab_longitudinal = ttk.Frame(self.findings_notebook, padding=8)
-        self.findings_notebook.add(self.subtab_longitudinal, text="📅 Longitudinal Trajectory (Cross-Session)")
+        self.findings_notebook.add(self.subtab_longitudinal, text="Longitudinal Trajectory")
 
-        lbl_l = ttk.Label(self.subtab_longitudinal, text="📈 Multi-Session Developmental Trajectory & Growth Tracking", font=("Helvetica", 11, "bold"))
+        lbl_l = ttk.Label(self.subtab_longitudinal, text="Multi-Session Developmental Trajectory & Growth Tracking", font=(self.font_family, 11, "bold"))
         lbl_l.pack(anchor=tk.W, pady=(0, 4))
 
         self.lbl_longitudinal_summary = tk.Label(
             self.subtab_longitudinal,
             text="Tracking progress across sessions for active case...",
-            font=("Helvetica", 9),
+            font=(self.font_family, 9),
             bg="#f0fdfa",
             fg="#0f766e",
             padx=10,
@@ -1199,12 +1369,12 @@ class LinguaLensGUIApp:
         intel_val = float(metrics["intelligibility_rate"]) if has_child_data and metrics.get("intelligibility_rate") is not None else None
 
         axes = [
-            {"label": "MLU-w\n(ประโยค)", "val": mlu_val, "td": 3.5, "unit": "คำ"},
-            {"label": "TTR\n(คำศัพท์)", "val": ttr_val, "td": 0.75, "unit": ""},
-            {"label": "Turn-Taking\n(การผลัดกันพูด)", "val": tt_val, "td": 0.90, "unit": ""},
-            {"label": "Intelligibility\n(ความชัดเจน)", "val": intel_val, "td": 0.95, "unit": ""},
-            {"label": "Speech Rate\n(ความเร็วพูด)", "val": sp_float, "td": 90.0, "unit": "wpm"},
-            {"label": "Prosody IQR\n(ช่วงเสียง)", "val": f0_float, "td": 35.0, "unit": "Hz"},
+            {"label": "MLU-w\n(Sentence)", "val": mlu_val, "td": 3.5, "unit": "words"},
+            {"label": "TTR\n(Vocab)", "val": ttr_val, "td": 0.75, "unit": ""},
+            {"label": "Turn-Taking\n(Reciprocity)", "val": tt_val, "td": 0.90, "unit": ""},
+            {"label": "Intelligibility\n(Clarity)", "val": intel_val, "td": 0.95, "unit": ""},
+            {"label": "Speech Rate\n(WPM)", "val": sp_float, "td": 90.0, "unit": "wpm"},
+            {"label": "Prosody IQR\n(F0 Range)", "val": f0_float, "td": 35.0, "unit": "Hz"},
         ]
         n = len(axes)
 
@@ -1224,7 +1394,7 @@ class LinguaLensGUIApp:
             self.canvas_radar.create_line(cx, cy, cx + radius * math.cos(angle), cy + radius * math.sin(angle), fill="#e2e8f0", width=1)
             x_lbl = cx + (radius + 22) * math.cos(angle)
             y_lbl = cy + (radius + 22) * math.sin(angle)
-            self.canvas_radar.create_text(x_lbl, y_lbl, text=ax["label"], font=("Helvetica", 8, "bold"), fill="#475569", justify=tk.CENTER)
+            self.canvas_radar.create_text(x_lbl, y_lbl, text=ax["label"], font=(self.font_family, 8, "bold"), fill="#475569", justify=tk.CENTER)
 
         # 1. Typical Development (TD) Baseline Polygon (100% ring)
         td_pts = []
@@ -1258,31 +1428,31 @@ class LinguaLensGUIApp:
             # Summary text
             self.txt_radar_summary.config(state=tk.NORMAL)
             self.txt_radar_summary.delete("1.0", tk.END)
-            self.txt_radar_summary.insert(tk.END, "Spider Diagram (ผลเปรียบเทียบกับเกณฑ์สมวัย):\n\n", "title")
-            self.txt_radar_summary.insert(tk.END, "🟢 เส้นประเขียว: ค่าปกติสมวัย (TD Norm Baseline 100%)\n", "green")
-            self.txt_radar_summary.insert(tk.END, "🔵 พื้นที่ฟ้า: ผลการตรวจของเด็กในเซสชันนี้\n\n", "blue")
+            self.txt_radar_summary.insert(tk.END, "Spider Diagram (Developmental Comparison vs Norms):\n\n", "title")
+            self.txt_radar_summary.insert(tk.END, "● Green Dashed Line: Typical Development (TD Norm 100%)\n", "green")
+            self.txt_radar_summary.insert(tk.END, "■ Blue Shaded Area: Child Session Evaluation\n\n", "blue")
             for ax in axes:
                 lbl_clean = ax['label'].split('\n')[0]
                 if ax["val"] is not None:
                     pct = int((ax["val"] / ax["td"]) * 100) if ax["td"] else 100
                     unit_str = f" {ax['unit']}" if ax["unit"] else ""
-                    status_emoji = "✓" if pct >= 85 else ("⚡" if pct >= 65 else "⚠️")
-                    self.txt_radar_summary.insert(tk.END, f"{status_emoji} {lbl_clean}: {ax['val']}{unit_str} (เกณฑ์ปกติ: {ax['td']}{unit_str}) — {pct}%\n")
+                    status_mark = "✓" if pct >= 85 else ("▲" if pct >= 65 else "●")
+                    self.txt_radar_summary.insert(tk.END, f"{status_mark} {lbl_clean}: {ax['val']}{unit_str} (Norm: {ax['td']}{unit_str}) — {pct}%\n")
                 else:
-                    self.txt_radar_summary.insert(tk.END, f"○ {lbl_clean}: N/A (ไม่มีไฟล์เสียง - ข้อความล้วน)\n")
+                    self.txt_radar_summary.insert(tk.END, f"○ {lbl_clean}: N/A (Audio acoustic data required)\n")
             self.txt_radar_summary.config(state=tk.DISABLED)
         else:
             # Clean Empty State Display
             self.canvas_radar.create_rectangle(cx - 130, cy - 26, cx + 130, cy + 26, fill="#f8fafc", outline="#cbd5e1", width=1)
-            self.canvas_radar.create_text(cx, cy - 7, text="ยังไม่มีข้อมูลการประเมินในเซสชันนี้", font=("Helvetica", 9, "bold"), fill="#64748b")
-            self.canvas_radar.create_text(cx, cy + 10, text="(กรุณา Ingest ไฟล์เสียงหรือข้อความใน Tab 2)", font=("Helvetica", 8), fill="#94a3b8")
+            self.canvas_radar.create_text(cx, cy - 7, text="No evaluation data in this session", font=(self.font_family, 9, "bold"), fill="#64748b")
+            self.canvas_radar.create_text(cx, cy + 10, text="(Ingest audio or transcript in Tab 2)", font=(self.font_family, 8), fill="#94a3b8")
 
             self.txt_radar_summary.config(state=tk.NORMAL)
             self.txt_radar_summary.delete("1.0", tk.END)
-            self.txt_radar_summary.insert(tk.END, "Spider Diagram (ผลเปรียบเทียบกับเกณฑ์สมวัย):\n\n", "title")
-            self.txt_radar_summary.insert(tk.END, "🟢 เส้นประเขียว: ค่าปกติสมวัย (TD Norm Baseline 100%)\n\n", "green")
-            self.txt_radar_summary.insert(tk.END, "⚠️ ยังไม่มีข้อมูลการประเมิน\n\n", "title")
-            self.txt_radar_summary.insert(tk.END, "กรุณานำเข้าไฟล์เสียงหรือบทสนทนาในแท็บ '2. Ingest Audio & Transcript' เพื่อเริ่มการวิเคราะห์ตัวชี้วัด LSA และ Acoustic Prosody")
+            self.txt_radar_summary.insert(tk.END, "Spider Diagram (Developmental Comparison vs Norms):\n\n", "title")
+            self.txt_radar_summary.insert(tk.END, "● Green Dashed Line: Typical Development (TD Norm 100%)\n\n", "green")
+            self.txt_radar_summary.insert(tk.END, "No Evaluation Data Available\n\n", "title")
+            self.txt_radar_summary.insert(tk.END, "Please ingest session audio or dialogue transcript in Tab 2 (Ingest Material) to compute LSA metrics and acoustic prosody profile.")
             self.txt_radar_summary.config(state=tk.DISABLED)
 
     # --- Tab 5: Report UI (Data Ground Truth & Clinical Decision Support) ---
@@ -1292,35 +1462,57 @@ class LinguaLensGUIApp:
 
         top_r = ttk.Frame(frame)
         top_r.pack(fill=tk.X, pady=(0, 4))
-        self.lbl_report_status = ttk.Label(top_r, text="Report Status: Draft", font=("Helvetica", 11, "bold"))
+        self.lbl_report_status = ttk.Label(top_r, text="Report Status: Draft", font=(self.font_family, 10, "bold"))
         self.lbl_report_status.pack(side=tk.LEFT)
 
-        ttk.Button(top_r, text="✨ Generate Draft", command=self._generate_report_draft).pack(side=tk.LEFT, padx=(8, 4))
-        ttk.Button(top_r, text="✍️ Sign-Off Report", command=self._sign_off_report).pack(side=tk.RIGHT, padx=(4, 0))
-        ttk.Button(top_r, text="💾 Export Markdown", command=self._export_report).pack(side=tk.RIGHT, padx=4)
-        ttk.Button(top_r, text="📊 Export CSV", command=self._export_csv_biomarkers).pack(side=tk.RIGHT, padx=4)
-        ttk.Button(top_r, text="📋 Export HTML Report", command=self._export_html_report).pack(side=tk.RIGHT, padx=4)
-        ttk.Button(top_r, text="📄 Export TalkBank (.cha)", command=self._export_cha_file).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(top_r, text="Generate Draft", style="Primary.TButton", command=self._generate_report_draft).pack(side=tk.LEFT, padx=(8, 4))
+        ttk.Button(top_r, text="Sign-Off Report", style="Success.TButton", command=self._sign_off_report).pack(side=tk.RIGHT, padx=(4, 0))
+        ttk.Button(top_r, text="Export Markdown", command=self._export_report).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(top_r, text="Export CSV", command=self._export_csv_biomarkers).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(top_r, text="Export HTML Report", command=self._export_html_report).pack(side=tk.RIGHT, padx=4)
+        ttk.Button(top_r, text="Export TalkBank (.cha)", command=self._export_cha_file).pack(side=tk.RIGHT, padx=4)
 
         # Ground Truth & Provenance Info Card
         prov_card = tk.Frame(frame, bg="#f8fafc", padx=10, pady=6, highlightthickness=1, highlightbackground="#e2e8f0")
         prov_card.pack(fill=tk.X, pady=(4, 6))
         tk.Label(
             prov_card,
-            text="🔒 Ground Truth & Reliability Context: 100% Sourced directly from verified session utterances & deterministic LSA metrics. Clinician sign-off seals report with SHA-256 integrity hash.",
-            font=("Helvetica", 9, "italic"),
+            text="Ground Truth & Reliability Context: Sourced directly from verified session utterances & deterministic LSA metrics. Clinician sign-off seals report with SHA-256 integrity hash.",
+            font=(self.font_family, 9, "italic"),
             fg="#0369a1",
             bg="#f8fafc",
         ).pack(anchor=tk.W)
 
-        lbl_n = ttk.Label(frame, text="Clinical Narrative (Language Sample Analysis):", font=("Helvetica", 10, "bold"))
+        lbl_n = ttk.Label(frame, text="Clinical Narrative (Language Sample Analysis):", font=(self.font_family, 10, "bold"))
         lbl_n.pack(anchor=tk.W, pady=(4, 2))
-        self.txt_narrative = tk.Text(frame, height=6, font=("Helvetica", 10))
+        self.txt_narrative = tk.Text(
+            frame,
+            height=6,
+            font=(self.font_family, 10),
+            bg="#ffffff",
+            fg="#0f172a",
+            padx=10,
+            pady=8,
+            highlightthickness=1,
+            highlightbackground="#cbd5e1",
+            relief=tk.FLAT,
+        )
         self.txt_narrative.pack(fill=tk.X, pady=(0, 6))
 
-        lbl_rec = ttk.Label(frame, text="Recommendations & Therapy Goals:", font=("Helvetica", 10, "bold"))
+        lbl_rec = ttk.Label(frame, text="Recommendations & Therapy Goals:", font=(self.font_family, 10, "bold"))
         lbl_rec.pack(anchor=tk.W, pady=(4, 2))
-        self.txt_recommendations = tk.Text(frame, height=5, font=("Helvetica", 10))
+        self.txt_recommendations = tk.Text(
+            frame,
+            height=5,
+            font=(self.font_family, 10),
+            bg="#ffffff",
+            fg="#0f172a",
+            padx=10,
+            pady=8,
+            highlightthickness=1,
+            highlightbackground="#cbd5e1",
+            relief=tk.FLAT,
+        )
         self.txt_recommendations.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
 
     # --- Data Operations & Global Context Handlers ---
@@ -1428,13 +1620,13 @@ class LinguaLensGUIApp:
                 self.combo_global_case.current(0)
                 self.active_case_id = cases[0]["case_id"]
         else:
-            self.combo_global_case["values"] = ["(No Cases — Click ➕ New Case)"]
+            self.combo_global_case["values"] = ["(No Cases — Click New Case)"]
             self.combo_global_case.current(0)
             self.active_case_id = None
             self.combo_global_session["values"] = ["(No Active Case)"]
             self.combo_global_session.current(0)
             self.active_session_id = None
-            self.lbl_ingest_ctx.config(text="Active Context: Please create a Case to begin (Click ➕ New Case)")
+            self.lbl_ingest_ctx.config(text="Active Context: Please create a Case to begin (Click New Case)")
             self._refresh_transcript_and_findings()
 
         return True
@@ -1565,10 +1757,10 @@ class LinguaLensGUIApp:
                 self.tree_sessions.selection_set(self.active_session_id)
             self.lbl_ingest_ctx.config(text=f"Active Context: Case {self.active_case_id} > Session {self.active_session_id}")
         else:
-            self.combo_global_session["values"] = ["(No sessions - Click ➕ New Session)"]
+            self.combo_global_session["values"] = ["(No sessions - Click New Session)"]
             self.combo_global_session.current(0)
             self.active_session_id = None
-            self.lbl_ingest_ctx.config(text=f"Active Context: Case {self.active_case_id} > (No Session - Click ➕ New Session)")
+            self.lbl_ingest_ctx.config(text=f"Active Context: Case {self.active_case_id} > (No Session - Click New Session)")
 
         return self._refresh_transcript_and_findings()
 
@@ -2213,7 +2405,7 @@ class LinguaLensGUIApp:
     def _build_ingest_progress_dialog(self, audio_filename: str) -> tk.Toplevel:
         """Construct a real-time progress dialog with smooth progress bar and stage feedback."""
         win = tk.Toplevel(self.root)
-        win.title("🎙️ Processing Audio — LinguaLens")
+        win.title("Processing Audio — LinguaLens")
         win.geometry("480x210")
         win.minsize(440, 190)
         win.resizable(False, False)
@@ -2238,8 +2430,8 @@ class LinguaLensGUIApp:
         # Header Title
         tk.Label(
             frame,
-            text="🎙️ Ingesting Audio & Transcribing Speech",
-            font=("Helvetica", 12, "bold"),
+            text="Ingesting Audio & Transcribing Speech",
+            font=(self.font_family, 12, "bold"),
             fg="#0f766e",
             bg="#f8fafc",
         ).pack(anchor=tk.W)
@@ -2248,7 +2440,7 @@ class LinguaLensGUIApp:
         tk.Label(
             frame,
             text=f"File: {audio_filename}",
-            font=("Helvetica", 9),
+            font=(self.font_family, 9),
             fg="#64748b",
             bg="#f8fafc",
         ).pack(anchor=tk.W, pady=(2, 10))
@@ -2256,8 +2448,8 @@ class LinguaLensGUIApp:
         # Stage Description
         self._dlg_lbl_stage = tk.Label(
             frame,
-            text="🚀 Initializing ASR and acoustic pipeline...",
-            font=("Helvetica", 10, "bold"),
+            text="Initializing ASR and acoustic pipeline...",
+            font=(self.font_family, 10, "bold"),
             fg="#1e293b",
             bg="#f8fafc",
         )
@@ -2277,7 +2469,7 @@ class LinguaLensGUIApp:
         self._dlg_lbl_pct = tk.Label(
             frame,
             text="5% Completed",
-            font=("Helvetica", 9),
+            font=(self.font_family, 9),
             fg="#0f766e",
             bg="#f8fafc",
         )
@@ -2291,7 +2483,7 @@ class LinguaLensGUIApp:
             self.frame_ingest_progress.pack(fill=tk.X, pady=(10, 0))
             self.bar_ingest_progress["value"] = 5
             self.lbl_ingest_percent.config(text="5% Completed")
-            self.lbl_ingest_stage.config(text="🚀 Initializing pipeline...")
+            self.lbl_ingest_stage.config(text="Initializing pipeline...")
 
         try:
             self._progress_dialog = self._build_ingest_progress_dialog(audio_filename)
@@ -2413,7 +2605,7 @@ class LinguaLensGUIApp:
             return
 
         batch_win = tk.Toplevel(self.root)
-        batch_win.title("📦 Batch Audio Ingestion Queue")
+        batch_win.title("Batch Audio Ingestion Queue — LinguaLens")
         batch_win.geometry("540x380")
         batch_win.transient(self.root)
         batch_win.grab_set()
@@ -2421,14 +2613,14 @@ class LinguaLensGUIApp:
         frame = tk.Frame(batch_win, bg="#f8fafc", padx=16, pady=14)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        tk.Label(frame, text=f"📦 Ingesting {len(f_paths)} Audio Files into Case {self.active_case_id}", font=("Helvetica", 11, "bold"), fg="#0f766e", bg="#f8fafc").pack(anchor=tk.W)
+        tk.Label(frame, text=f"Ingesting {len(f_paths)} Audio Files into Case {self.active_case_id}", font=(self.font_family, 11, "bold"), fg="#0f766e", bg="#f8fafc").pack(anchor=tk.W)
 
         bar_batch = ttk.Progressbar(frame, orient="horizontal", mode="determinate", length=480)
         bar_batch.pack(fill=tk.X, pady=(10, 6))
         bar_batch["maximum"] = len(f_paths)
         bar_batch["value"] = 0
 
-        lbl_batch_status = tk.Label(frame, text=f"Queue ready: {len(f_paths)} files pending...", font=("Helvetica", 9), fg="#475569", bg="#f8fafc")
+        lbl_batch_status = tk.Label(frame, text=f"Queue ready: {len(f_paths)} files pending...", font=(self.font_family, 9), fg="#475569", bg="#f8fafc")
         lbl_batch_status.pack(anchor=tk.W, pady=(0, 8))
 
         tree_queue = ttk.Treeview(frame, columns=("file", "status"), show="headings", height=7)
@@ -2439,14 +2631,14 @@ class LinguaLensGUIApp:
         tree_queue.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
         for idx, p in enumerate(f_paths):
-            tree_queue.insert("", tk.END, iid=str(idx), values=(Path(p).name, "Pending ⏳"))
+            tree_queue.insert("", tk.END, iid=str(idx), values=(Path(p).name, "Pending"))
 
         def _do_batch_worker():
             fail_count = 0
             for idx, p_str in enumerate(f_paths):
                 f_name = Path(p_str).name
                 self.root.after_idle(lambda i=idx, n=f_name: (
-                    tree_queue.item(str(i), values=(n, "Processing 🚀")),
+                    tree_queue.item(str(i), values=(n, "Processing...")),
                     lbl_batch_status.config(text=f"Processing {i+1}/{len(f_paths)}: {n}..."),
                     bar_batch.config(value=i)
                 ))
@@ -2464,10 +2656,10 @@ class LinguaLensGUIApp:
                         model_size="small",
                         strategy="auto",
                     )
-                    self.root.after_idle(lambda i=idx, n=f_name: tree_queue.item(str(i), values=(n, "Completed ✅")))
+                    self.root.after_idle(lambda i=idx, n=f_name: tree_queue.item(str(i), values=(n, "Completed")))
                 except Exception as exc:
                     fail_count += 1
-                    self.root.after_idle(lambda i=idx, n=f_name, e=exc: tree_queue.item(str(i), values=(n, f"Error: {e} ❌")))
+                    self.root.after_idle(lambda i=idx, n=f_name, e=exc: tree_queue.item(str(i), values=(n, f"Error: {e}")))
 
             def _on_batch_finished(fc=fail_count):
                 bar_batch.config(value=len(f_paths))
@@ -2480,7 +2672,7 @@ class LinguaLensGUIApp:
                         f"Batch ingestion finished with {fc} failure(s) out of {len(f_paths)} files.\nCheck queue table for details.",
                     )
                 else:
-                    lbl_batch_status.config(text=f"🎉 All {len(f_paths)} audio files processed successfully!")
+                    lbl_batch_status.config(text=f"All {len(f_paths)} audio files processed successfully.")
                     messagebox.showinfo(
                         "Batch Complete",
                         f"Batch ingestion complete for {len(f_paths)} sessions!\nCheck Tab 4 for Longitudinal Trajectory.",
@@ -2521,7 +2713,7 @@ class LinguaLensGUIApp:
             mlu = metrics.get("mlu_words", metrics.get("mlu", "-"))
             ttr = metrics.get("ttr", metrics.get("type_token_ratio", "-"))
             f0 = metrics.get("f0_median_hz", "-")
-            status = "Attested ✅" if tr and tr.get("attested") else "Draft ⏳"
+            status = "Attested" if tr and tr.get("attested") else "Draft"
 
             self.tree_longitudinal.insert(
                 "", tk.END, iid=s_id,
@@ -2543,11 +2735,11 @@ class LinguaLensGUIApp:
                 first = session_metrics_list[0]
                 latest = session_metrics_list[-1]
                 self.lbl_longitudinal_summary.config(
-                    text=f"📊 Longitudinal Trajectory: {len(session_metrics_list)} sessions recorded | Baseline: {first['date']} ({first['utterances']} utts) ➔ Latest: {latest['date']} ({latest['utterances']} utts)"
+                    text=f"Longitudinal Trajectory: {len(session_metrics_list)} sessions recorded | Baseline: {first['date']} ({first['utterances']} utts) → Latest: {latest['date']} ({latest['utterances']} utts)"
                 )
             else:
                 self.lbl_longitudinal_summary.config(
-                    text=f"📊 1 session recorded for Case {self.active_case_id}. Ingest more sessions to visualize longitudinal trajectory."
+                    text=f"1 session recorded for Case {self.active_case_id}. Ingest more sessions to visualize longitudinal trajectory."
                 )
 
     def _on_longitudinal_session_selected(self, event: Any) -> None:
@@ -2782,7 +2974,7 @@ class LinguaLensGUIApp:
 
             if hasattr(self, "lbl_playback_status"):
                 self.lbl_playback_status.config(
-                    text=f"🏷️ Marked #{u_id} as *{target_spk}* (Press C/I/M on next row)"
+                    text=f"Marked #{u_id} as *{target_spk}* (Press C/I/M on next row)"
                 )
 
             # Move to next row
@@ -2819,7 +3011,7 @@ class LinguaLensGUIApp:
             self._refresh_transcript_and_findings()
             messagebox.showinfo(
                 "Speakers Refined",
-                "✅ Speakers refined by clinical dialogue flow:\n"
+                "Speakers refined by clinical dialogue flow:\n"
                 "• Examiner commands, questions, and praise assigned to INV/MOT\n"
                 "• Child answers following prompts assigned to CHI\n"
                 "⚠️ Findings marked as STALE until recalculated."
@@ -2841,7 +3033,7 @@ class LinguaLensGUIApp:
             self._refresh_transcript_and_findings()
             messagebox.showinfo(
                 "Speakers Swapped",
-                "🔄 All CHI and Adult (INV/MOT) speaker roles swapped across this session.\n"
+                "All CHI and Adult (INV/MOT) speaker roles swapped across this session.\n"
                 "⚠️ Findings marked as STALE until recalculated."
             )
 
@@ -2953,7 +3145,7 @@ class LinguaLensGUIApp:
         self._show_pitch_overlay = not self._show_pitch_overlay
         if hasattr(self, "btn_toggle_pitch"):
             self.btn_toggle_pitch.config(
-                text="📈 F0 Curve: ON" if self._show_pitch_overlay else "📈 F0 Curve: OFF"
+                text="F0 Pitch: ON" if self._show_pitch_overlay else "F0 Pitch: OFF"
             )
         self._redraw_waveform()
 
@@ -3051,9 +3243,9 @@ class LinguaLensGUIApp:
         if not self.active_audio_path or not os.path.exists(self.active_audio_path):
             self.canvas_waveform.create_text(
                 w // 2, h // 2,
-                text="📊 Waveform visualizer (Load audio in Tab 2 to visualize speech turns)",
+                text="Waveform visualizer (Load audio in Tab 2 to visualize speech turns)",
                 fill="#64748b",
-                font=("Helvetica", 9, "italic"),
+                font=(self.font_family, 9, "italic"),
             )
             return
 
@@ -3064,9 +3256,9 @@ class LinguaLensGUIApp:
         if not peaks:
             self.canvas_waveform.create_text(
                 w // 2, h // 2,
-                text="🎵 Audio waveform loaded",
+                text="Audio waveform loaded",
                 fill="#94a3b8",
-                font=("Helvetica", 9),
+                font=(self.font_family, 9),
             )
             return
 
@@ -3375,7 +3567,7 @@ class LinguaLensGUIApp:
     def _build_create_case_window(self) -> tk.Toplevel:
         """Construct the create case dialog window with dynamic geometry."""
         win = tk.Toplevel(self.root)
-        win.title("➕ Create Child Case — LinguaLens")
+        win.title("Create Child Case — LinguaLens")
         win.geometry("420x280")
         win.minsize(380, 240)
         win.bind("<Escape>", lambda e: win.destroy())
@@ -3435,7 +3627,7 @@ class LinguaLensGUIApp:
         """Construct the create session dialog window with dynamic geometry."""
         from datetime import date
         win = tk.Toplevel(self.root)
-        win.title("➕ Start Therapy Session — LinguaLens")
+        win.title("Start Therapy Session — LinguaLens")
         win.geometry("400x220")
         win.minsize(360, 200)
         win.bind("<Escape>", lambda e: win.destroy())
@@ -3924,14 +4116,14 @@ class LinguaLensGUIApp:
         frame = ttk.Frame(win, padding=16)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(frame, text="📋 Record Parental / Guardian Consent", font=("Helvetica", 12, "bold")).pack(anchor=tk.W, pady=(0, 6))
+        ttk.Label(frame, text="Record Parental / Guardian Consent", font=(self.font_family, 12, "bold")).pack(anchor=tk.W, pady=(0, 6))
 
         notice_lbl = ttk.Label(
             frame,
             text="Notice: This action records official consent received from or withdrawn by\n"
                  "the child's parent/guardian. Clicking confirm documents authorized status\n"
                  "and does not constitute direct parental consent.",
-            font=("Helvetica", 9),
+            font=(self.font_family, 9),
             foreground="#475569",
         )
         notice_lbl.pack(anchor=tk.W, pady=(0, 10))
@@ -4515,7 +4707,7 @@ class LinguaLensGUIApp:
                             self.combo_global_child.current(idx)
                             break
             else:
-                self.combo_global_child["values"] = ["(No Children — Click ➕ New Child)"]
+                self.combo_global_child["values"] = ["(No Children — Click New Child)"]
                 self.combo_global_child.current(0)
 
         if on_success:
@@ -4575,7 +4767,7 @@ class LinguaLensGUIApp:
 
         win = tk.Toplevel(self.root)
         win._dlg_token = str(uuid.uuid4())
-        win.title("➕ Create Child Profile (Assessment V2) — LinguaLens")
+        win.title("Create Child Profile (Assessment V2) — LinguaLens")
         win.geometry("450x280")
         win.minsize(400, 240)
         win.bind("<Escape>", lambda e: win.destroy())
@@ -4771,13 +4963,13 @@ class LinguaLensGUIApp:
         if hasattr(self, "lbl_assessment_ctx") and self.lbl_assessment_ctx.winfo_exists():
             if self.active_assessment_id:
                 self.lbl_assessment_ctx.config(
-                    text=f"🔬 V2 Assessment: {self.active_assessment_id}",
+                    text=f"Assessment V2: {self.active_assessment_id}",
                     bg="#f3e8ff",
                     fg="#6b21a8",
                 )
             elif is_v2 and getattr(self, "active_child_id", None):
                 self.lbl_assessment_ctx.config(
-                    text=f"🔬 V2 Child: {self.active_child_id}",
+                    text=f"Child V2: {self.active_child_id}",
                     bg="#f3e8ff",
                     fg="#6b21a8",
                 )
