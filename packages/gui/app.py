@@ -21,7 +21,7 @@ from typing import Any, Callable
 import urllib.error
 import uuid
 
-from packages.gui.audio_controller import AudioPlaybackController
+from packages.gui.audio_controller import AudioPlaybackController, AudioRecorder
 from packages.gui.dialogs import ClinicalDialogFactory
 from packages.gui.export_engine import ClinicalExportEngine
 from packages.gui.radar_renderer import RadarChartRenderer
@@ -92,14 +92,24 @@ class LinguaLensGUIApp:
 
         # Deep domain controllers
         self.audio_controller = AudioPlaybackController()
+        self.audio_recorder = AudioRecorder()
+        self._recording_timer_job: str | None = None
+        self._is_tech_details_visible: bool = False
         self.export_engine = ClinicalExportEngine()
         self.dialog_factory = ClinicalDialogFactory()
         self.radar_renderer: RadarChartRenderer | None = None
+
+        # 5-Step Guided Workflow widgets
+        self.step_frames: list[tk.Frame] = []
+        self.step_labels: list[tk.Label] = []
+        self.step_badges: list[tk.Label] = []
 
         self.root.bind("<Destroy>", lambda e: self._cleanup_timers() if e.widget == self.root else None, add="+")
 
         self._configure_styles()
         self._build_header()
+        self._build_stepper_bar()
+        self._build_next_action_ribbon()
         self._build_tabs()
         self._build_statusbar()
         self._bind_shortcuts()
@@ -445,9 +455,231 @@ class LinguaLensGUIApp:
         ttk.Button(ctx_bar, text="New Session", command=self._show_create_session_dialog).pack(side=tk.RIGHT, padx=(3, 0))
         ttk.Button(ctx_bar, text="New Child", command=self._show_create_child_dialog).pack(side=tk.RIGHT, padx=(3, 0))
 
+    # --- 5-Step Guided Therapist Workflow Builders ---
+    def _build_stepper_bar(self) -> None:
+        """Interactive 5-Step Guided Therapist Workflow Stepper Bar (THERAPIST_SIMPLE_WORKFLOW.md)."""
+        self.frame_stepper = tk.Frame(
+            self.root,
+            bg="#ffffff",
+            padx=12,
+            pady=6,
+            highlightthickness=1,
+            highlightbackground=self.border_light,
+        )
+        self.frame_stepper.pack(fill=tk.X, padx=12, pady=(4, 2))
+
+        self.step_frames: list[tk.Frame] = []
+        self.step_labels: list[tk.Label] = []
+        self.step_subtitles: list[tk.Label] = []
+        self.step_badges: list[tk.Label] = []
+
+        steps = [
+            ("1", "1. Open Case", "Child profile", 0),
+            ("2", "2. Add Session", "Therapy context", 0),
+            ("3", "3. Ingest Material", "Mic / Audio / Text", 1),
+            ("4", "4. Review Transcript", "QA & Sign-off", 2),
+            ("5", "5. Progress Report", "Findings & Export", 4),
+        ]
+
+        for i, (num, title, subtitle, tab_idx) in enumerate(steps):
+            f_step = tk.Frame(
+                self.frame_stepper,
+                bg="#f8fafc",
+                padx=8,
+                pady=5,
+                cursor="hand2",
+                highlightthickness=1,
+                highlightbackground="#e2e8f0",
+            )
+            f_step.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
+
+            badge = tk.Label(
+                f_step,
+                text=num,
+                font=(self.font_sys, 9, "bold"),
+                bg="#e2e8f0",
+                fg="#475569",
+                width=2,
+                padx=2,
+                pady=1,
+            )
+            badge.pack(side=tk.LEFT, padx=(0, 6))
+
+            t_box = tk.Frame(f_step, bg="#f8fafc")
+            t_box.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+            lbl_title = tk.Label(
+                t_box,
+                text=title,
+                font=(self.font_sys, 9, "bold"),
+                bg="#f8fafc",
+                fg=self.text_color,
+                anchor=tk.W,
+            )
+            lbl_title.pack(anchor=tk.W)
+
+            lbl_sub = tk.Label(
+                t_box,
+                text=subtitle,
+                font=(self.font_sys, 7),
+                bg="#f8fafc",
+                fg=self.text_muted,
+                anchor=tk.W,
+            )
+            lbl_sub.pack(anchor=tk.W)
+
+            def _make_click(target_t=tab_idx, s_num=i + 1):
+                return lambda e: self._nav_to_step(s_num, target_t)
+
+            handler = _make_click(tab_idx, i + 1)
+            f_step.bind("<Button-1>", handler)
+            badge.bind("<Button-1>", handler)
+            lbl_title.bind("<Button-1>", handler)
+            lbl_sub.bind("<Button-1>", handler)
+            t_box.bind("<Button-1>", handler)
+
+            self.step_frames.append(f_step)
+            self.step_labels.append(lbl_title)
+            self.step_subtitles.append(lbl_sub)
+            self.step_badges.append(badge)
+
+    def _build_next_action_ribbon(self) -> None:
+        """Contextual Next Action Ribbon per THERAPIST_SIMPLE_WORKFLOW.md."""
+        self.frame_next_action = tk.Frame(
+            self.root,
+            bg="#f0f9ff",
+            padx=12,
+            pady=4,
+            highlightthickness=1,
+            highlightbackground="#bae6fd",
+        )
+        self.frame_next_action.pack(fill=tk.X, padx=12, pady=(0, 4))
+
+        left_side = tk.Frame(self.frame_next_action, bg="#f0f9ff")
+        left_side.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self.lbl_next_action_tag = tk.Label(
+            left_side,
+            text="NEXT ACTION",
+            font=(self.font_sys, 8, "bold"),
+            bg="#0284c7",
+            fg="#ffffff",
+            padx=6,
+            pady=2,
+            relief=tk.FLAT,
+        )
+        self.lbl_next_action_tag.pack(side=tk.LEFT, padx=(0, 8))
+
+        self.lbl_next_action_text = tk.Label(
+            left_side,
+            text="Select or create a Child / Case profile from the list to begin.",
+            font=(self.font_sys, 9, "bold"),
+            bg="#f0f9ff",
+            fg="#0369a1",
+        )
+        self.lbl_next_action_text.pack(side=tk.LEFT)
+
+        self.btn_next_action = ttk.Button(
+            self.frame_next_action,
+            text="Open Case ➔",
+            style="Primary.TButton",
+            command=lambda: self._nav_to_step(1, 0),
+        )
+        self.btn_next_action.pack(side=tk.RIGHT)
+
+    def _nav_to_step(self, step_num: int, target_tab: int) -> None:
+        """Navigate cleanly to the target workflow step."""
+        if hasattr(self, "notebook"):
+            self.notebook.select(target_tab)
+            if step_num == 2 and hasattr(self, "combo_global_session"):
+                self.combo_global_session.focus_set()
+        self._update_stepper_state()
+
+    def _update_stepper_state(self) -> None:
+        """Compute workflow step status and update stepper bar and next action ribbon."""
+        if not hasattr(self, "step_frames") or not self.step_frames:
+            return
+
+        has_case = bool(self.active_case_id or self.active_child_id)
+        has_session = bool(self.active_session_id or self.active_assessment_id)
+        has_transcript = bool(self.active_transcript and self.active_transcript.get("utterances"))
+        is_attested = bool(self.active_transcript and self.active_transcript.get("attested"))
+
+        if not has_case:
+            active_step = 1
+            next_text = "Select or create a Case (or Child profile) to begin."
+            action_btn_text = "Open Case ➔"
+            action_cmd = lambda: self._nav_to_step(1, 0)
+        elif not has_session:
+            active_step = 2
+            case_label = self.active_case_id or self.active_child_id
+            next_text = f"Add or select a clinical session for Case: {case_label}."
+            action_btn_text = "Add Session ➔"
+            action_cmd = self._show_create_session_dialog
+        elif not has_transcript:
+            active_step = 3
+            sess_label = self.active_session_id or "Active Session"
+            next_text = f"Record speech via Live Mic, load audio clip, or load Thai dialogue for {sess_label}."
+            action_btn_text = "Ingest Material ➔"
+            action_cmd = lambda: self._nav_to_step(3, 1)
+        elif not is_attested:
+            active_step = 4
+            next_text = "Review transcript turns (CHI / INV), verify speech tags, and sign off."
+            action_btn_text = "Review Transcript ➔"
+            action_cmd = lambda: self._nav_to_step(4, 2)
+        else:
+            active_step = 5
+            next_text = "Transcript attested! Review Spider profile, Thai LSA metrics, and generate report."
+            action_btn_text = "Progress Report ➔"
+            action_cmd = lambda: self._nav_to_step(5, 4)
+
+        for idx in range(len(self.step_frames)):
+            step_idx = idx + 1
+            f_step = self.step_frames[idx]
+            badge = self.step_badges[idx]
+            lbl = self.step_labels[idx]
+            sub = self.step_subtitles[idx] if idx < len(self.step_subtitles) else None
+
+            if step_idx < active_step:
+                # Completed step
+                f_step.config(bg="#ecfdf5", highlightbackground="#a7f3d0")
+                badge.config(text="✓", bg="#10b981", fg="#ffffff")
+                lbl.config(bg="#ecfdf5", fg="#065f46")
+                if sub:
+                    sub.config(bg="#ecfdf5", fg="#047857")
+                for w in f_step.winfo_children():
+                    if isinstance(w, tk.Frame):
+                        w.config(bg="#ecfdf5")
+            elif step_idx == active_step:
+                # Current active step
+                f_step.config(bg="#e0f2fe", highlightbackground="#38bdf8")
+                badge.config(text=str(step_idx), bg="#0284c7", fg="#ffffff")
+                lbl.config(bg="#e0f2fe", fg="#0369a1")
+                if sub:
+                    sub.config(bg="#e0f2fe", fg="#0284c7")
+                for w in f_step.winfo_children():
+                    if isinstance(w, tk.Frame):
+                        w.config(bg="#e0f2fe")
+            else:
+                # Upcoming step
+                f_step.config(bg="#f8fafc", highlightbackground="#e2e8f0")
+                badge.config(text=str(step_idx), bg="#e2e8f0", fg="#64748b")
+                lbl.config(bg="#f8fafc", fg="#475569")
+                if sub:
+                    sub.config(bg="#f8fafc", fg="#94a3b8")
+                for w in f_step.winfo_children():
+                    if isinstance(w, tk.Frame):
+                        w.config(bg="#f8fafc")
+
+        if hasattr(self, "lbl_next_action_text"):
+            self.lbl_next_action_text.config(text=next_text)
+        if hasattr(self, "btn_next_action"):
+            self.btn_next_action.config(text=action_btn_text, command=action_cmd)
+
     def _build_tabs(self) -> None:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=12, pady=6)
+        self.notebook.bind("<<NotebookTabChanged>>", lambda e: self._update_stepper_state())
 
         # Tab 1: Cases & Sessions
         self.tab_cases = ttk.Frame(self.notebook)
@@ -636,6 +868,17 @@ class LinguaLensGUIApp:
             except Exception:
                 pass
             self._resize_job = None
+        if getattr(self, "_recording_timer_job", None):
+            try:
+                self.root.after_cancel(self._recording_timer_job)
+            except Exception:
+                pass
+            self._recording_timer_job = None
+        if hasattr(self, "audio_recorder") and getattr(self.audio_recorder, "is_recording", False):
+            try:
+                self.audio_recorder.stop_recording()
+            except Exception:
+                pass
 
     def _poll_async_queue(self) -> None:
         """Process completed background worker callbacks on the Tkinter main thread."""
@@ -873,8 +1116,65 @@ class LinguaLensGUIApp:
         )
         self.lbl_ingest_ctx.pack(anchor=tk.W, pady=(0, 12))
 
+        # Option A: Live Microphone Recording Card
+        card_live = ttk.LabelFrame(frame, text="Option A: Live Microphone Recording (Direct Clinical Speech Capture)", padding=12)
+        card_live.pack(fill=tk.X, pady=(0, 12))
+
+        lbl_rec_desc = ttk.Label(
+            card_live,
+            text="Record clinician and child speech directly via microphone (16kHz mono WAV).\n"
+            "Real-time VU meter level feedback monitors audio input prior to automated acoustic & transcript processing.",
+            font=self.font_body,
+        )
+        lbl_rec_desc.pack(anchor=tk.W, pady=(0, 8))
+
+        rec_ctrl_row = ttk.Frame(card_live)
+        rec_ctrl_row.pack(fill=tk.X, pady=(0, 6))
+
+        self.btn_start_record = ttk.Button(
+            rec_ctrl_row,
+            text="● Start Live Recording",
+            command=self._start_live_recording,
+        )
+        self.btn_start_record.pack(side=tk.LEFT, padx=(0, 8))
+
+        self.btn_stop_record = ttk.Button(
+            rec_ctrl_row,
+            text="■ Stop & Ingest Recording",
+            command=self._stop_live_recording,
+            state=tk.DISABLED,
+        )
+        self.btn_stop_record.pack(side=tk.LEFT, padx=(0, 12))
+
+        self.lbl_rec_timer = tk.Label(
+            rec_ctrl_row,
+            text="00:00",
+            font=(self.font_family, 11, "bold"),
+            fg="#dc2626",
+            bg="#fee2e2",
+            padx=8,
+            pady=2,
+            relief=tk.FLAT,
+        )
+        self.lbl_rec_timer.pack(side=tk.LEFT, padx=(0, 12))
+
+        self.lbl_rec_status = ttk.Label(
+            rec_ctrl_row,
+            text="Microphone ready",
+            font=self.font_caption,
+            foreground="#64748b",
+        )
+        self.lbl_rec_status.pack(side=tk.LEFT)
+
+        # VU Meter Canvas
+        vu_frame = ttk.Frame(card_live)
+        vu_frame.pack(fill=tk.X, pady=(2, 0))
+        ttk.Label(vu_frame, text="Mic Level:", font=self.font_caption, foreground="#64748b").pack(side=tk.LEFT, padx=(0, 6))
+        self.canvas_vu_meter = tk.Canvas(vu_frame, height=14, bg="#0f172a", highlightthickness=1, highlightbackground="#334155")
+        self.canvas_vu_meter.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
         # Audio/Video File Picker Card
-        card_audio = ttk.LabelFrame(frame, text="Option A: Ingest Local Audio / Video Clip", padding=12)
+        card_audio = ttk.LabelFrame(frame, text="Option B: Ingest Local Audio / Video Clip", padding=12)
         card_audio.pack(fill=tk.X, pady=(0, 12))
 
         lbl_desc = ttk.Label(
@@ -932,7 +1232,7 @@ class LinguaLensGUIApp:
         self.lbl_ingest_percent.pack(anchor=tk.W)
 
         # CHA / Text File Picker Card
-        card_text = ttk.LabelFrame(frame, text="Option B: Load Demo Dialogue or CHAT File", padding=12)
+        card_text = ttk.LabelFrame(frame, text="Option C: Load Demo Dialogue or CHAT File", padding=12)
         card_text.pack(fill=tk.BOTH, expand=True)
 
         btn_row = ttk.Frame(card_text)
@@ -1291,6 +1591,39 @@ class LinguaLensGUIApp:
         self.tree_guidelines.column("evidence", width=450)
         self.tree_guidelines.pack(fill=tk.BOTH, expand=True, pady=(0, 2))
 
+        # Collapsible Technical Disclosures (Advanced details per THERAPIST_SIMPLE_WORKFLOW.md)
+        self.frame_tech_details_container = ttk.Frame(self.subtab_table_features)
+        self.frame_tech_details_container.pack(fill=tk.X, pady=(6, 0))
+
+        self.btn_toggle_tech_details = ttk.Button(
+            self.frame_tech_details_container,
+            text="▶ Advanced: View Technical & Model Disclosures",
+            command=self._toggle_tech_details,
+        )
+        self.btn_toggle_tech_details.pack(anchor=tk.W)
+
+        self.frame_tech_details_content = tk.Frame(
+            self.frame_tech_details_container,
+            bg="#f8fafc",
+            padx=10,
+            pady=8,
+            highlightthickness=1,
+            highlightbackground="#cbd5e1",
+        )
+        lbl_tech_info = tk.Label(
+            self.frame_tech_details_content,
+            text="Pipeline Architecture & Clinical Decision-Support Safeguards:\n"
+                 "• Decision-Support Boundary: Non-diagnostic research tool (requires licensed clinician attestation).\n"
+                 "• ASR Architecture: OpenAI Whisper small / base with Thai fine-tuning & VAD segmentation.\n"
+                 "• Acoustic Feature Tracking: Autocorrelation / PyIN F0 extraction with pitch range IQR.\n"
+                 "• Thai LSA Engine: PyThaiNLP dictionary tokenization with question/negation/pronoun clinical regex.",
+            font=(self.font_sys, 8),
+            bg="#f8fafc",
+            fg="#475569",
+            justify=tk.LEFT,
+        )
+        lbl_tech_info.pack(anchor=tk.W)
+
         # Sub-tab 3: Longitudinal Assessment Trajectory
         self.subtab_longitudinal = ttk.Frame(self.findings_notebook, padding=8)
         self.findings_notebook.add(self.subtab_longitudinal, text="Longitudinal Trajectory")
@@ -1483,6 +1816,7 @@ class LinguaLensGUIApp:
             self.tree_cases.selection_set(first_case)
             self._on_case_selected(None)
         self._refresh_children()
+        self._update_stepper_state()
 
     def _refresh_cases(self) -> bool:
         try:
@@ -1907,6 +2241,22 @@ class LinguaLensGUIApp:
         else:
             self.tree_metrics.insert("", tk.END, values=("4. Acoustic & Prosody", "Acoustic Features (F0 / Prosody)", "N/A (No Audio)", "เซสชันนี้เป็นไฟล์ข้อความล้วน (.cha / text) — ไม่มีไฟล์เสียงบันทึก"))
 
+        # Domain 5: Thai Clinical Language Structure (LSA Engine)
+        try:
+            from src.clinical_speech.thai_lsa import ThaiClinicalLSA
+            thai_lsa = ThaiClinicalLSA.analyze_utterances(self.active_transcript.get("utterances", []))
+            if thai_lsa.total_child_words > 0 or thai_lsa.total_child_utterances > 0:
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Words (คำไทยทั้งหมด)", str(thai_lsa.total_child_words), "จำนวนคำภาษาไทยที่เด็กเปล่งเสียง (Word Segmentation)"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Unique Words", str(thai_lsa.unique_words_count), "คำศัพท์ภาษาไทยที่ไม่ซ้ำกัน"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai TTR (Lexical Diversity)", f"{thai_lsa.ttr:.3f}", "ความหลากหลายของคลังคำศัพท์ภาษาไทย"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Questions (ประโยคคำถาม)", str(thai_lsa.question_count), f"คำถามที่เด็กริเริ่มถาม (สัดส่วน: {thai_lsa.question_ratio:.1%})"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Negations (ประโยคปฏิเสธ)", str(thai_lsa.negation_count), f"การสื่อสารเชิงปฏิเสธ (สัดส่วน: {thai_lsa.negation_ratio:.1%})"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Pronouns (สรรพนาม)", str(thai_lsa.pronoun_count), "การใช้สรรพนามสื่อสาร"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Polite Particles (คำลงท้าย)", str(thai_lsa.polite_particle_count), "คำลงท้ายสุภาพ (เช่น ครับ/ค่ะ/จ๊ะ)"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Repetition Markers", str(thai_lsa.echolalia_count), "จำนวนการพูดซ้ำคำ/วลี (Immediate Repetition)"))
+        except Exception:
+            pass
+
         for g in findings.get("guideline_links", []):
             self.tree_guidelines.insert("", tk.END, values=(g.get("construct"), g.get("status"), g.get("description")))
 
@@ -1939,6 +2289,9 @@ class LinguaLensGUIApp:
         self._playhead_time_sec = 0.0
         self._current_playback_offset_sec = 0.0
         self._draw_playhead(0.0)
+
+        # Update 5-Step Stepper state
+        self._update_stepper_state()
         return True
 
     # --- Actions ---
@@ -2401,6 +2754,113 @@ class LinguaLensGUIApp:
                 self.frame_ingest_progress.pack_forget()
             except Exception:
                 pass
+
+    def _toggle_tech_details(self) -> None:
+        """Toggle visibility of technical diagnostic and model disclosures (THERAPIST_SIMPLE_WORKFLOW.md)."""
+        if getattr(self, "_is_tech_details_visible", False):
+            if hasattr(self, "frame_tech_details_content"):
+                self.frame_tech_details_content.pack_forget()
+            if hasattr(self, "btn_toggle_tech_details"):
+                self.btn_toggle_tech_details.config(text="▶ Advanced: View Technical & Model Disclosures")
+            self._is_tech_details_visible = False
+        else:
+            if hasattr(self, "frame_tech_details_content"):
+                self.frame_tech_details_content.pack(fill=tk.X, pady=(4, 0))
+            if hasattr(self, "btn_toggle_tech_details"):
+                self.btn_toggle_tech_details.config(text="▼ Hide Technical Details")
+            self._is_tech_details_visible = True
+
+    def _start_live_recording(self) -> None:
+        """Start microphone live recording session."""
+        if self._guard_v2_mode("Live recording"):
+            return
+
+        if not self.active_case_id:
+            new_c = self.client.create_case(f"C-{len(self.client.list_cases()) + 1:03d}", "2021-05", "th", "Live recording case")
+            self.active_case_id = new_c["case_id"]
+            self._refresh_cases()
+
+        if not self.active_session_id:
+            from datetime import date
+            new_s = self.client.create_session(
+                self.active_case_id,
+                date.today().isoformat(),
+                "Live recording session",
+            )
+            self.active_session_id = new_s["session_id"]
+            self._refresh_sessions_for_active_case()
+
+        started = self.audio_recorder.start_recording()
+        if not started:
+            messagebox.showerror("Recording Error", "Unable to start microphone stream. Please check audio permissions.")
+            return
+
+        if hasattr(self, "btn_start_record"):
+            self.btn_start_record.config(state=tk.DISABLED)
+        if hasattr(self, "btn_stop_record"):
+            self.btn_stop_record.config(state=tk.NORMAL)
+        if hasattr(self, "lbl_rec_status"):
+            self.lbl_rec_status.config(text="● Recording speech...", foreground="#dc2626")
+        if hasattr(self, "lbl_status"):
+            self.lbl_status.config(text="Live microphone recording in progress...")
+        self._update_live_recording_ui()
+
+    def _update_live_recording_ui(self) -> None:
+        """Periodic UI updater for recording duration timer and VU meter volume level."""
+        if not getattr(self, "audio_recorder", None) or not self.audio_recorder.is_recording:
+            return
+
+        dur = self.audio_recorder.get_recording_duration()
+        m, s = divmod(int(dur), 60)
+        if hasattr(self, "lbl_rec_timer"):
+            self.lbl_rec_timer.config(text=f"{m:02d}:{s:02d}")
+
+        if hasattr(self, "canvas_vu_meter"):
+            level = self.audio_recorder.get_current_meter_level()
+            w = self.canvas_vu_meter.winfo_width()
+            if w <= 1:
+                w = 200
+            fill_w = int(w * min(1.0, max(0.0, level)))
+
+            self.canvas_vu_meter.delete("vu")
+            if level < 0.7:
+                col = "#10b981"
+            elif level < 0.9:
+                col = "#f59e0b"
+            else:
+                col = "#ef4444"
+
+            if fill_w > 0:
+                self.canvas_vu_meter.create_rectangle(0, 0, fill_w, 14, fill=col, outline="", tags="vu")
+
+        self._recording_timer_job = self.root.after(50, self._update_live_recording_ui)
+
+    def _stop_live_recording(self) -> None:
+        """Stop microphone live recording and route audio file into processing pipeline."""
+        if getattr(self, "_recording_timer_job", None):
+            try:
+                self.root.after_cancel(self._recording_timer_job)
+            except Exception:
+                pass
+            self._recording_timer_job = None
+
+        if hasattr(self, "canvas_vu_meter"):
+            self.canvas_vu_meter.delete("vu")
+
+        output_wav = self.audio_recorder.stop_recording()
+
+        if hasattr(self, "btn_start_record"):
+            self.btn_start_record.config(state=tk.NORMAL)
+        if hasattr(self, "btn_stop_record"):
+            self.btn_stop_record.config(state=tk.DISABLED)
+        if hasattr(self, "lbl_rec_status"):
+            self.lbl_rec_status.config(text="Recording finished. Audio saved.", foreground="#047857")
+
+        if hasattr(self, "entry_audio_path"):
+            self.entry_audio_path.delete(0, tk.END)
+            self.entry_audio_path.insert(0, output_wav)
+
+        self._process_audio_file()
 
     def _process_audio_file(self) -> threading.Thread | None:
         if self._guard_v2_mode("Audio processing"):

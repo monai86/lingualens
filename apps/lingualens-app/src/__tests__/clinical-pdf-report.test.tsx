@@ -72,4 +72,28 @@ describe("ClinicalPdfReport", () => {
     render(<ClinicalPdfReport data={SAMPLE_DATA} />);
     expect(screen.queryByText(/Reviewed cues acknowledged:/i)).not.toBeInTheDocument();
   });
+
+  it("renders Thai Clinical LSA quantitative indicators when present", () => {
+    render(
+      <ClinicalPdfReport
+        data={{
+          ...SAMPLE_DATA,
+          thaiLsaMetrics: {
+            mluWords: 2.75,
+            ttr: 0.68,
+            questionCount: 4,
+            negationCount: 2,
+            pronounCount: 5,
+            politeParticleCount: 3,
+            echolaliaCount: 1,
+            turnTakingCount: 8,
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText(/ตัวชี้วัดทางภาษาไทยเชิงปริมาณ/i)).toBeInTheDocument();
+    expect(screen.getByText(/2.75/i)).toBeInTheDocument();
+    expect(screen.getByText(/68.0%/i)).toBeInTheDocument();
+    expect(screen.getByText(/การริเริ่มคำถาม/i)).toBeInTheDocument();
+  });
 });

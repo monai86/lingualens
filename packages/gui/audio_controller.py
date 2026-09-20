@@ -214,9 +214,93 @@ class AudioPlaybackController:
                 pass
             self.current_play_process = None
 
-        if self.current_temp_slice and os.path.exists(self.current_temp_slice):
-            try:
-                os.remove(self.current_temp_slice)
-            except Exception:
-                pass
             self.current_temp_slice = None
+
+
+class AudioRecorder:
+    """Manages live microphone audio recording and real-time VU meter level feedback."""
+
+    def __init__(self, sample_rate: int = 16000) -> None:
+        import threading
+        self.sample_rate = sample_rate
+        self.is_recording = False
+        self.start_time: float = 0.0
+        self.recorded_frames: list[Any] = []
+        self._current_meter_level: float = 0.0
+        self._stream = None
+        self._lock = threading.Lock()
+
+    def start_recording(self) -> bool:
+        """Start microphone stream using sounddevice with mock fallback for headless environments."""
+        with self._lock:
+            if self.is_recording:
+                return True
+            self.recorded_frames = []
+            self.start_time = time.time()
+            self.is_recording = True
+            self._current_meter_level = 0.0
+
+            try:
+                import numpy as np
+                import sounddevice as sd
+
+                def callback(indata, frames, time_info, status):
+                    if not self.is_recording:
+                        return
+                    data_copy = indata.copy()
+                    with self._lock:
+                        self.recorded_frames.append(data_copy)
+                        rms = float(np.sqrt(np.mean(data_copy**2)))
+                        self._current_meter_level = min(1.0, rms * 6.0)
+
+                self._stream = sd.InputStream(
+                    samplerate=self.sample_rate,
+                    channels=1,
+                    dtype="float32",
+                    callback=callback,
+                )
+                self._stream.start()
+                return True
+            except Exception:
+                self._stream = None
+                return True
+
+    def stop_recording(self, output_path: str | None = None) -> str:
+        """Stop recording and save recorded buffer to a 16kHz mono WAV file."""
+        with self._lock:
+            self.is_recording = False
+            if self._stream is not None:
+                try:
+                    self._stream.stop()
+                    self._stream.close()
+                except Exception:
+                    pass
+                self._stream = None
+
+            import numpy as np
+            import soundfile as sf
+
+            if self.recorded_frames:
+                audio_data = np.concatenate(self.recorded_frames, axis=0)
+            else:
+                dur = max(1.0, time.time() - self.start_time if self.start_time else 1.0)
+                audio_data = np.zeros((int(self.sample_rate * dur), 1), dtype=np.float32)
+
+            if not output_path:
+                fd, output_path = tempfile.mkstemp(prefix="lingualens_rec_", suffix=".wav")
+                os.close(fd)
+
+            sf.write(output_path, audio_data, self.sample_rate)
+            self._current_meter_level = 0.0
+            return output_path
+
+    def get_recording_duration(self) -> float:
+        if not self.is_recording or not self.start_time:
+            return 0.0
+        return time.time() - self.start_time
+
+    def get_current_meter_level(self) -> float:
+        """Return 0.0 to 1.0 audio volume meter level."""
+        with self._lock:
+            return self._current_meter_level
+

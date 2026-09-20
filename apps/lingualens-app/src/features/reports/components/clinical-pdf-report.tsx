@@ -23,6 +23,24 @@ export interface ClinicalReportData {
   receptiveScore?: number;
   expressiveScore?: number;
 
+  /* Thai LSA Quantitative Linguistic Indicators */
+  thaiLsaMetrics?: {
+    mluWords?: number;
+    mluMorphemes?: number;
+    ttr?: number;
+    totalWords?: number;
+    uniqueWords?: number;
+    questionCount?: number;
+    questionRatio?: number;
+    negationCount?: number;
+    negationRatio?: number;
+    pronounCount?: number;
+    politeParticleCount?: number;
+    echolaliaCount?: number;
+    turnTakingCount?: number;
+    speechRateWpm?: number;
+  };
+
   /* Recommendations */
   recommendations?: string[];
 
@@ -137,6 +155,77 @@ export function ClinicalPdfReport({ data }: { data: ClinicalReportData }) {
               </section>
             )}
 
+            {/* ── Thai Clinical Language Sample Analysis (Thai LSA) ── */}
+            {data.thaiLsaMetrics && (
+              <section className="print:break-inside-avoid">
+                <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-200 pb-1 flex items-center justify-between">
+                  <span>ตัวชี้วัดทางภาษาไทยเชิงปริมาณ (Thai Clinical LSA Indicators)</span>
+                  <span className="text-[10px] font-normal lowercase text-slate-500">PyThaiNLP Dict / Morphological Analysis</span>
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  {data.thaiLsaMetrics.mluWords != null && (
+                    <div className="rounded border border-slate-200 bg-slate-50/70 p-2.5">
+                      <div className="text-slate-500 text-[11px]">ความยาวประโยค (MLU-w)</div>
+                      <div className="text-base font-bold text-slate-900 mt-0.5">{data.thaiLsaMetrics.mluWords.toFixed(2)} <span className="text-[10px] font-normal text-slate-500">คำ/ประโยค</span></div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Mean Length of Utterance</div>
+                    </div>
+                  )}
+                  {data.thaiLsaMetrics.ttr != null && (
+                    <div className="rounded border border-slate-200 bg-slate-50/70 p-2.5">
+                      <div className="text-slate-500 text-[11px]">ความหลากหลายคำศัพท์ (TTR)</div>
+                      <div className="text-base font-bold text-slate-900 mt-0.5">{(data.thaiLsaMetrics.ttr * 100).toFixed(1)}%</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Type-Token Ratio</div>
+                    </div>
+                  )}
+                  {data.thaiLsaMetrics.questionCount != null && (
+                    <div className="rounded border border-slate-200 bg-slate-50/70 p-2.5">
+                      <div className="text-slate-500 text-[11px]">การริเริ่มคำถาม (Questions)</div>
+                      <div className="text-base font-bold text-slate-900 mt-0.5">{data.thaiLsaMetrics.questionCount} <span className="text-[10px] font-normal text-slate-500">ครั้ง</span></div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Initiated Question Particles</div>
+                    </div>
+                  )}
+                  {data.thaiLsaMetrics.negationCount != null && (
+                    <div className="rounded border border-slate-200 bg-slate-50/70 p-2.5">
+                      <div className="text-slate-500 text-[11px]">การสื่อสารปฏิเสธ (Negations)</div>
+                      <div className="text-base font-bold text-slate-900 mt-0.5">{data.thaiLsaMetrics.negationCount} <span className="text-[10px] font-normal text-slate-500">ครั้ง</span></div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Thai Negation Structures</div>
+                    </div>
+                  )}
+                  {data.thaiLsaMetrics.pronounCount != null && (
+                    <div className="rounded border border-slate-200 bg-slate-50/70 p-2.5">
+                      <div className="text-slate-500 text-[11px]">การใช้สรรพนาม (Pronouns)</div>
+                      <div className="text-base font-bold text-slate-900 mt-0.5">{data.thaiLsaMetrics.pronounCount} <span className="text-[10px] font-normal text-slate-500">ครั้ง</span></div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Self/Other Reference Markers</div>
+                    </div>
+                  )}
+                  {data.thaiLsaMetrics.politeParticleCount != null && (
+                    <div className="rounded border border-slate-200 bg-slate-50/70 p-2.5">
+                      <div className="text-slate-500 text-[11px]">คำลงท้ายสุภาพ (Polite)</div>
+                      <div className="text-base font-bold text-slate-900 mt-0.5">{data.thaiLsaMetrics.politeParticleCount} <span className="text-[10px] font-normal text-slate-500">ครั้ง</span></div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Pragmatic Politeness Tokens</div>
+                    </div>
+                  )}
+                  {data.thaiLsaMetrics.echolaliaCount != null && (
+                    <div className="rounded border border-slate-200 bg-slate-50/70 p-2.5">
+                      <div className="text-slate-500 text-[11px]">การพูดซ้ำทันที (Repetition)</div>
+                      <div className="text-base font-bold text-slate-900 mt-0.5">{data.thaiLsaMetrics.echolaliaCount} <span className="text-[10px] font-normal text-slate-500">ครั้ง</span></div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Immediate Echo Turns</div>
+                    </div>
+                  )}
+                  {data.thaiLsaMetrics.turnTakingCount != null && (
+                    <div className="rounded border border-slate-200 bg-slate-50/70 p-2.5">
+                      <div className="text-slate-500 text-[11px]">การสลับบทสนทนา (Turn-Taking)</div>
+                      <div className="text-base font-bold text-slate-900 mt-0.5">{data.thaiLsaMetrics.turnTakingCount} <span className="text-[10px] font-normal text-slate-500">รอบ</span></div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Conversational Exchange Turns</div>
+                    </div>
+                  )}
+                </div>
+                <p className="mt-2 text-[10px] text-slate-400 italic">
+                  การวิเคราะห์ตัวอย่างภาษาพูด (LSA) ด้วยระบบประมวลผลภาษาธรรมชาติภาษาไทย สำหรับเป็นข้อมูลประกอบการวินิจฉัยของนักอรรถบำบัด
+                </p>
+              </section>
+            )}
+
             {/* ── Assessment Findings ── */}
             <section className="space-y-5 print:break-inside-avoid">
               <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-200 pb-1">
@@ -216,19 +305,23 @@ export function ClinicalPdfReport({ data }: { data: ClinicalReportData }) {
       </div>
 
       {/* Print CSS */}
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 0;
-          }
-          body {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          .print\\:hidden { display: none !important; }
-        }
-      `}</style>
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page {
+                size: A4 portrait;
+                margin: 0;
+              }
+              body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+              }
+              .print\\:hidden { display: none !important; }
+            }
+          `,
+        }}
+      />
     </div>
   );
 }

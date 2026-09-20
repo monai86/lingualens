@@ -398,7 +398,9 @@ not pretend to validate CLAN readiness.
 ### Terminal TUI and Desktop GUI Companion Clients (`packages/tui/`, `packages/gui/`)
 
 The terminal TUI (`packages/tui/`) and desktop companion GUI (`packages/gui/`) provide clinician
-companion workflows. In live mode (`mock_mode=False`), all client operations communicate strictly
+companion workflows. The desktop GUI features a **Therapist 5-Step Guided Workflow** (`Open Case` ➔ `Add Session` ➔ `Ingest Material` ➔ `Review Transcript` ➔ `Progress Report`) with interactive step progress badges, a dynamic Next Action Ribbon, collapsible technical diagnostic disclosures, **Live Microphone Recording** with a real-time VU meter, and a **Deep Thai Clinical Language Sample Analyzer (Thai LSA Engine)** powered by `pythainlp`.
+
+In live mode (`mock_mode=False`), all client operations communicate strictly
 with the backend REST API (`apps/api`) or fail closed with structured, sanitized exceptions
 (`LinguaLensApiError`). Live mode never mutates local mock state, and unsupported operations fail
 explicitly without fabricating local success. Explicit local mock mode (`mock_mode=True`) is

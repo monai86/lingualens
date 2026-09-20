@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Added
+- Implemented Therapist Simple 5-Step Guided Workflow UI in Desktop GUI (`packages/gui/app.py`):
+  interactive 5-step stepper bar with progress badges (`Open Case` -> `Add Session` -> `Ingest Material` -> `Review Transcript` -> `Progress Report`), dynamic contextual Next Action Ribbon providing single-click workflow guidance, and collapsible disclosures (`View Details` / `Advanced`) for technical acoustic and model parameters.
+- Added Live Microphone Recording in Desktop GUI (`packages/gui/audio_controller.py`, `packages/gui/app.py`):
+  thread-safe direct speech capture using `sounddevice` with headless fallback, real-time audio volume VU meter feedback, duration tracking, auto-saving to 16kHz mono WAV, and immediate handoff to the acoustic/transcript analysis pipeline.
+- Implemented Deep Thai Clinical Language Sample Analyzer (LSA Engine in `src/clinical_speech/thai_lsa.py`):
+  quantitative morphological analysis using `pythainlp` tokenization for Thai child speech samples, evaluating Mean Length of Utterance in words (MLU-w), Type-Token Ratio (TTR), question particle detection, negation usage, pronouns, polite particles, and immediate repetition/echolalia markers.
+- Modernized Web App Clinical PDF Report (`apps/lingualens-app/src/features/reports/components/clinical-pdf-report.tsx`):
+  high-fidelity A4 clinical print stylesheet, structured grid presentation for quantitative Thai LSA indicators, and enhanced verification testing.
 - Added an explicit v2 research transcript contract with 8 conversational
   fields. Benchmarks use 21 non-age inputs (13 v1 + 8 v2); synchronized local
   exports contain 22 numeric fields when `age_months` is included and are bound
