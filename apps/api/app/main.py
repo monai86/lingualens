@@ -1,12 +1,31 @@
+from contextlib import asynccontextmanager
+import logging
+import sys
+import traceback
 from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-import logging
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.v1.routes import ai_review, audit, cases, dashboard, evaluation, features, jobs, ml_review, organization_admin, privacy, reports, sessions, settings, therapy_goals, transcripts
+from app.api.v1.routes import (
+    ai_review,
+    audit,
+    cases,
+    dashboard,
+    evaluation,
+    features,
+    jobs,
+    ml_review,
+    organization_admin,
+    privacy,
+    reports,
+    sessions,
+    settings,
+    therapy_goals,
+    transcripts,
+)
 from app.assessment_v2 import routes as assessment_v2_routes
 from app.assessment_v2.db.migrations_runner import upgrade_assessment_database
 from app.assessment_v2.errors import assessment_error_response
@@ -17,15 +36,35 @@ from app.core.rate_limit import RateLimitMiddleware
 from app.core.security import OriginGuardMiddleware
 from app.db.migrations_runner import run_alembic_upgrade_head
 
-
 configure_logging()
 settings_obj = get_settings()
 logger = logging.getLogger("therapist_app_v2.startup")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if settings_obj.run_migrations_on_startup:
+        try:
+            run_alembic_upgrade_head()
+        except Exception:
+            logger.exception("Startup v1 migration failed.")
+            traceback.print_exc(file=sys.stderr)
+            raise
+    if settings_obj.run_assessment_migrations_on_startup:
+        try:
+            upgrade_assessment_database()
+        except Exception:
+            logger.exception("Startup assessment v2 migration failed.")
+            traceback.print_exc(file=sys.stderr)
+            raise
+    yield
+
 
 app = FastAPI(
     title=settings_obj.app_name,
     version="1.6.3",
     description="Human-in-the-loop clinical decision-support API for lingualens.",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -125,22 +164,6 @@ async def handle_unexpected_error(request: Request, exception: Exception):
             "The clinical operation could not be completed.",
         )
     raise exception
-
-
-@app.on_event("startup")
-def apply_startup_migrations() -> None:
-    if settings_obj.run_migrations_on_startup:
-        try:
-            run_alembic_upgrade_head()
-        except Exception:
-            logger.error("Startup v1 migration failed.")
-            raise
-    if settings_obj.run_assessment_migrations_on_startup:
-        try:
-            upgrade_assessment_database()
-        except Exception:
-            logger.error("Startup assessment v2 migration failed.")
-            raise
 
 
 @app.get("/health")

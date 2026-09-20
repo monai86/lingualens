@@ -50,6 +50,24 @@ Do not add new product behavior to these legacy paths.
 - `tests/` — research/runtime regression tests
 - `apps/api/tests/` — API-focused tests for the active therapist backend
 
+## Root-level documentation and clinical guidelines
+
+- `AGENTS.md` / `CLAUDE.md` — AI agent guardrails, rules, and canonical source-of-truth pointers
+- `README.md` / `PROJECT_STATUS.md` — project introduction, architecture overview, and maintained status
+- `CHANGELOG.md` — version release notes and system changes
+- `DEVELOPER_SETUP.md` — local development onboarding and environment instructions
+- `CONTEXT.md` — project glossary and clinical terminology reference
+- `PRODUCT.md` — product personality, clinical teal design principles, and UI tokens
+- `CLINICAL_GUIDELINE_MAPPING.md` & `clinical-guidelines/` — clinical construct mappings and raw guidelines (ASHA, NICE, DSPM)
+- `REPORT_SPECIFICATION.md` — clinical progress report requirements and guardrails
+- `THERAPIST_SIMPLE_WORKFLOW.md` & `SCOPE_AND_DELIVERABLES.md` — therapist workflow specs and deliverables
+- `KNOWN_LIMITATIONS.md` — prototype constraints and clinical safety boundaries
+
+## Desktop and terminal launchers
+
+- `lingualens` / `run_gui.sh` — launcher for LinguaLens Desktop GUI (`scripts/lingualens_gui.py`)
+- `run_tui.sh` — launcher for LinguaLens Terminal TUI (`scripts/lingualens_tui.py`)
+
 ## Generated and local-only files
 
 These may exist locally but are not source:
@@ -61,3 +79,5 @@ These may exist locally but are not source:
 - `__pycache__/`
 - `.pytest_cache/`
 - `*.tsbuildinfo`
+- `.worktrees/`
+

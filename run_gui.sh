@@ -12,4 +12,4 @@ else
 fi
 
 export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
-"$PYTHON_BIN" scripts/lingualens_gui.py "$@"
+"$PYTHON_BIN" scripts/lingualens_gui.py "$@" 2> >(grep -v -E 'libmpg123|id3\.c' >&2)
