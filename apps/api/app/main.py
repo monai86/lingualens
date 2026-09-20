@@ -41,8 +41,7 @@ settings_obj = get_settings()
 logger = logging.getLogger("therapist_app_v2.startup")
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
+def apply_startup_migrations() -> None:
     if settings_obj.run_migrations_on_startup:
         try:
             run_alembic_upgrade_head()
@@ -57,6 +56,11 @@ async def lifespan(app: FastAPI):
             logger.exception("Startup assessment v2 migration failed.")
             traceback.print_exc(file=sys.stderr)
             raise
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    apply_startup_migrations()
     yield
 
 
