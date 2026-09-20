@@ -31,8 +31,11 @@ from .chatter_validator import (
     validate_chat_file,
 )
 from .pipeline import audio_to_cha
+from .analyzer import AudioSessionAnalyzer, AudioSessionAnalysis
 
 __all__ = [
+    "AudioSessionAnalyzer",
+    "AudioSessionAnalysis",
     "WhisperTranscriber",
     "WordSegment",
     "UtteranceSegment",
