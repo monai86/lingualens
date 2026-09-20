@@ -1,4 +1,10 @@
-"""Clinical workflow repository support for the therapist pilot."""
+"""Legacy clinical workflow repository compatibility surface.
+
+NOTICE: This module is retained strictly for backward compatibility with research
+pilot tests and legacy workflows. For production development, use canonical
+repositories in `apps.api.app.repositories`. See `src/clinical_workflow/README.md`
+and `docs/PROJECT_SOURCE_OF_TRUTH.md`.
+"""
 
 from .repository_interface import ClinicalRepository
 from .mock_repository import MockClinicalRepository

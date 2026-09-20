@@ -1,4 +1,8 @@
-"""Deterministic mock repository for the therapist clinical workspace."""
+"""Deterministic mock repository for legacy therapist clinical research workspace.
+
+DEPRECATED: Retained for research baseline test compatibility.
+For canonical production persistence, use `apps.api.app.repositories.mock_repository`.
+"""
 
 from __future__ import annotations
 

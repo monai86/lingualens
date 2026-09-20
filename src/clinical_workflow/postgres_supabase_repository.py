@@ -1,8 +1,7 @@
-"""PostgreSQL/Supabase repository implementation using supabase-py.
+"""PostgreSQL/Supabase repository implementation for legacy research workflows.
 
-Uses the PostgREST query builder via `supabase-py` which automatically
-enforces Row Level Security through the JWT token.  Application-level
-ownership checks are maintained for defense-in-depth.
+DEPRECATED: Retained for research baseline test compatibility.
+For canonical production database persistence, use `apps.api.app.repositories.sqlalchemy_repository`.
 """
 
 from __future__ import annotations

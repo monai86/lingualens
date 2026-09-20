@@ -1,3 +1,9 @@
+"""Abstract base repository contract for legacy ASD pilot persistence.
+
+DEPRECATED: For canonical production repository interface, see
+`apps.api.app.repositories.base.ClinicalRepository`.
+"""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
