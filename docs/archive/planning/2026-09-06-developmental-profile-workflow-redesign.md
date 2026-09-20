@@ -2,7 +2,9 @@
 
 **Date:** 2026-09-06
 
-**Status:** Design approved in conversation; implementation not started
+**Status:** Design approved; Foundation and Capture V2 vertical slice implemented
+in `apps/api`; Figma/UX and later Evidence, Clinical Review, Longitudinal, and
+Thin Client slices remain separate delivery gates.
 
 **Product boundary:** Research and clinical decision-support prototype; not an automated diagnostic system
 

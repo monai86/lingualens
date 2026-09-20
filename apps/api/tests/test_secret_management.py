@@ -12,6 +12,7 @@ def _production_base_settings() -> dict[str, object]:
         "cors_allowed_origins": "https://clinic.example",
         "repository_mode": "sql",
         "database_url": "postgresql+psycopg://prod_user:prod_password@db.example/therapist_app_v2",
+        "assessment_database_url": "postgresql+psycopg://prod_user:prod_password@db.example/lingualens_assessment_v2",
         "sql_create_schema": False,
         "storage_mode": "private",
         "job_queue_mode": "redis",

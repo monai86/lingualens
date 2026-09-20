@@ -61,6 +61,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "X-RateLimit-Window": str(settings.rate_limit_window_seconds),
         }
         if not allowed:
+            if request.url.path.startswith(settings.assessment_api_prefix):
+                from app.assessment_v2.errors import assessment_error_response
+
+                response = assessment_error_response(
+                    request,
+                    "rate_limit_exceeded",
+                    429,
+                    "Too many requests.",
+                )
+                response.headers.update({**headers, "Retry-After": str(retry_after)})
+                return response
             return JSONResponse(
                 {"detail": "Too many requests."},
                 status_code=429,

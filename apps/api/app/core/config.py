@@ -1,13 +1,26 @@
 from functools import lru_cache
 import os
 from pathlib import Path
+import re
+from urllib.parse import urlparse
 import warnings
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from sqlalchemy.engine import URL, make_url
+from sqlalchemy.exc import ArgumentError
 
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://therapist:therapist@localhost/therapist_app_v2"
+DEFAULT_ASSESSMENT_DATABASE_URL = (
+    "postgresql+psycopg://therapist:therapist@localhost/lingualens_assessment_v2"
+)
 DEFAULT_REDIS_URL = "redis://localhost:6379/0"
+MEBIBYTE = 1024 * 1024
+DEFAULT_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS = 7200
+DEFAULT_SUPABASE_STORAGE_SIGNED_DOWNLOAD_TTL_SECONDS = 900
+SUPABASE_TUS_CHUNK_SIZE_BYTES = 6 * MEBIBYTE
+MAX_CAPTURE_UPLOAD_SIZE_BYTES = 250 * MEBIBYTE
+DEFAULT_CAPTURE_MAX_UPLOAD_SIZE_BYTES = MAX_CAPTURE_UPLOAD_SIZE_BYTES
 PRODUCTION_STORAGE_MODES = {"private", "supabase_private"}
 # Keep this list aligned with implemented queue adapters. Celery is not
 # installed or implemented in this repository, so it must not pass production
@@ -22,6 +35,12 @@ PRODUCTION_SECRET_STORE_PROVIDERS = {
     "infisical",
     "vault",
 }
+_POSTGRESQL_DEFAULT_PORT = 5432
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "[::1]"})
+_SUPABASE_BUCKET_NAME_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,62}")
+_SUPABASE_PROJECT_HOST_RE = re.compile(
+    r"(?P<project_ref>[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)\.supabase\.co"
+)
 
 
 def getenv_compat(new_name: str, legacy_name: str, default: str = "") -> str:
@@ -37,9 +56,99 @@ def getenv_compat(new_name: str, legacy_name: str, default: str = "") -> str:
     return default
 
 
+def _parse_database_url(value: str) -> URL | None:
+    try:
+        parsed = make_url(value)
+        _ = parsed.port
+    except (ArgumentError, ValueError):
+        return None
+    return parsed
+
+
+def _postgresql_target(value: URL) -> tuple[str, int, str]:
+    host = value.host or str(value.query.get("host", ""))
+    normalized_host = host.strip().rstrip(".").lower()
+    if normalized_host in _LOOPBACK_HOSTS:
+        normalized_host = "loopback"
+    return (
+        normalized_host,
+        value.port if value.port is not None else _POSTGRESQL_DEFAULT_PORT,
+        value.database or "",
+    )
+
+
+def _is_valid_https_url(value: str) -> bool:
+    if not isinstance(value, str) or value != value.strip():
+        return False
+    parsed = urlparse(value)
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        return False
+    try:
+        _ = parsed.port
+    except ValueError:
+        return False
+    return True
+
+
+def _is_valid_supabase_tus_endpoint(value: str) -> bool:
+    if not _is_valid_https_url(value):
+        return False
+    return urlparse(value).path.rstrip("/") == "/storage/v1/upload/resumable"
+
+
+def _supabase_project_ref_from_host(host: str) -> str | None:
+    normalized_host = host.casefold()
+    match = _SUPABASE_PROJECT_HOST_RE.fullmatch(normalized_host)
+    return match.group("project_ref") if match else None
+
+
+def _is_valid_supabase_project_url(value: str) -> bool:
+    if not _is_valid_https_url(value):
+        return False
+    parsed = urlparse(value)
+    return parsed.path in {"", "/"} and _supabase_project_ref_from_host(parsed.hostname or "") is not None
+
+
+def _allowed_supabase_storage_hosts(storage_url: str) -> frozenset[str]:
+    if not _is_valid_supabase_project_url(storage_url):
+        return frozenset()
+    project_ref = _supabase_project_ref_from_host(urlparse(storage_url).hostname or "")
+    if project_ref is None:
+        return frozenset()
+    return frozenset(
+        {
+            f"{project_ref}.supabase.co",
+            f"{project_ref}.storage.supabase.co",
+        }
+    )
+
+
+def _is_valid_supabase_tus_endpoint_for_project(value: str, storage_url: str) -> bool:
+    return _is_valid_supabase_tus_endpoint(value) and (
+        urlparse(value).hostname or ""
+    ).casefold() in _allowed_supabase_storage_hosts(storage_url)
+
+
+def _is_valid_supabase_service_role_key(value: str) -> bool:
+    return isinstance(value, str) and bool(value) and value == value.strip() and not any(
+        character.isspace() for character in value
+    )
+
+
+def _is_valid_supabase_bucket_name(value: str) -> bool:
+    return isinstance(value, str) and _SUPABASE_BUCKET_NAME_RE.fullmatch(value) is not None
+
+
+def _is_positive_int(value: int) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
 class Settings(BaseModel):
     app_name: str = "lingualens API"
     api_prefix: str = "/api/v1"
+    assessment_api_prefix: str = "/api/v2"
     mock_mode: bool = True
     auth_mode: str = "mock"
     supabase_jwt_verification_mode: str = "hs256_shared_secret"
@@ -52,16 +161,27 @@ class Settings(BaseModel):
     supabase_require_mfa: bool = True
     supabase_require_invitation: bool = True
     debug_feature_override: bool = False
-    max_audio_file_size_mb: int = 250
+    max_audio_file_size_mb: int = DEFAULT_CAPTURE_MAX_UPLOAD_SIZE_BYTES // MEBIBYTE
     repository_mode: str = "json"
     json_repository_path: str = ".local/lingualens-app-repository.json"
     database_url: str = DEFAULT_DATABASE_URL
+    assessment_database_url: str = DEFAULT_ASSESSMENT_DATABASE_URL
     sql_create_schema: bool = True
     run_migrations_on_startup: bool = False
+    run_assessment_migrations_on_startup: bool = False
     job_queue_mode: str = "memory"
     redis_url: str = DEFAULT_REDIS_URL
     storage_mode: str = "local_private"
     local_storage_root: str = ".local/storage"
+    supabase_storage_url: str = ""
+    supabase_storage_service_role_key: str = Field(default="", repr=False)
+    supabase_storage_bucket: str = ""
+    supabase_storage_tus_endpoint: str = ""
+    supabase_storage_signed_upload_ttl_seconds: int = DEFAULT_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS
+    supabase_storage_signed_download_ttl_seconds: int = DEFAULT_SUPABASE_STORAGE_SIGNED_DOWNLOAD_TTL_SECONDS
+    supabase_storage_tus_chunk_size_bytes: int = SUPABASE_TUS_CHUNK_SIZE_BYTES
+    capture_max_upload_size_bytes: int = DEFAULT_CAPTURE_MAX_UPLOAD_SIZE_BYTES
+    capture_worker_organization_ids: str = ""
     cors_allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     csrf_origin_guard_enabled: bool = True
     ai_report_drafting_enabled: bool = False
@@ -87,6 +207,26 @@ class Settings(BaseModel):
     @property
     def parsed_cors_allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def has_valid_supabase_private_storage_configuration(self) -> bool:
+        return (
+            self.storage_mode == "supabase_private"
+            and _is_valid_supabase_project_url(self.supabase_storage_url)
+            and _is_valid_supabase_service_role_key(self.supabase_storage_service_role_key)
+            and _is_valid_supabase_bucket_name(self.supabase_storage_bucket)
+            and _is_valid_supabase_tus_endpoint_for_project(
+                self.supabase_storage_tus_endpoint,
+                self.supabase_storage_url,
+            )
+            and self.supabase_storage_signed_upload_ttl_seconds
+            == DEFAULT_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS
+            and _is_positive_int(self.supabase_storage_signed_download_ttl_seconds)
+            and self.supabase_storage_signed_download_ttl_seconds
+            <= DEFAULT_SUPABASE_STORAGE_SIGNED_DOWNLOAD_TTL_SECONDS
+            and self.supabase_storage_tus_chunk_size_bytes == SUPABASE_TUS_CHUNK_SIZE_BYTES
+            and 0 < self.capture_max_upload_size_bytes <= MAX_CAPTURE_UPLOAD_SIZE_BYTES
+        )
 
     def validate_runtime_security(self) -> "Settings":
         origins = self.parsed_cors_allowed_origins
@@ -122,8 +262,26 @@ class Settings(BaseModel):
                 raise ValueError("Production repository mode must be sql.")
             if self.database_url == DEFAULT_DATABASE_URL or "localhost" in self.database_url:
                 raise ValueError("Production database URL must come from managed secrets and cannot use demo defaults.")
+            if self.assessment_database_url == DEFAULT_ASSESSMENT_DATABASE_URL or "localhost" in self.assessment_database_url:
+                raise ValueError(
+                    "Production assessment database URL must come from managed secrets and cannot use demo defaults."
+                )
+            assessment_url = _parse_database_url(self.assessment_database_url)
+            if assessment_url is None or assessment_url.get_backend_name() != "postgresql":
+                raise ValueError("Production assessment database URL must use PostgreSQL.")
+            v1_url = _parse_database_url(self.database_url)
+            if (
+                v1_url is not None
+                and v1_url.get_backend_name() == "postgresql"
+                and _postgresql_target(v1_url) == _postgresql_target(assessment_url)
+            ):
+                raise ValueError("Production v1 and assessment v2 database URLs must be different.")
+            if self.run_assessment_migrations_on_startup:
+                raise ValueError("Production assessment migrations must be run as a controlled release action, not startup automation.")
             if self.storage_mode not in PRODUCTION_STORAGE_MODES:
                 raise ValueError("Production storage mode must use private managed storage.")
+            if self.storage_mode == "supabase_private" and not self.has_valid_supabase_private_storage_configuration:
+                raise ValueError("Production Supabase private storage configuration is missing or invalid.")
             if self.job_queue_mode not in PRODUCTION_JOB_QUEUE_MODES:
                 raise ValueError("Production job queue mode must use a durable managed queue.")
             if self.redis_url == DEFAULT_REDIS_URL or "localhost" in self.redis_url:
@@ -199,6 +357,7 @@ class Settings(BaseModel):
                 ".local/lingualens-app-repository.json",
             ),
             database_url=getenv_compat("LINGUALENS_DATABASE_URL", "THERAPIST_APP_V2_DATABASE_URL", DEFAULT_DATABASE_URL),
+            assessment_database_url=os.getenv("LINGUALENS_ASSESSMENT_DATABASE_URL", DEFAULT_ASSESSMENT_DATABASE_URL),
             sql_create_schema=getenv_compat(
                 "LINGUALENS_SQL_CREATE_SCHEMA",
                 "THERAPIST_APP_V2_SQL_CREATE_SCHEMA",
@@ -211,6 +370,10 @@ class Settings(BaseModel):
                 "false",
             ).lower()
             == "true",
+            run_assessment_migrations_on_startup=os.getenv(
+                "LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP", "false"
+            ).lower()
+            == "true",
             job_queue_mode=getenv_compat("LINGUALENS_JOB_QUEUE_MODE", "THERAPIST_APP_V2_JOB_QUEUE_MODE", "memory"),
             redis_url=os.getenv("REDIS_URL", DEFAULT_REDIS_URL),
             storage_mode=getenv_compat("LINGUALENS_STORAGE_MODE", "THERAPIST_APP_V2_STORAGE_MODE", "local_private"),
@@ -218,6 +381,57 @@ class Settings(BaseModel):
                 "LINGUALENS_LOCAL_STORAGE_ROOT",
                 "THERAPIST_APP_V2_LOCAL_STORAGE_ROOT",
                 ".local/storage",
+            ),
+            supabase_storage_url=getenv_compat(
+                "LINGUALENS_SUPABASE_STORAGE_URL",
+                "THERAPIST_APP_V2_SUPABASE_STORAGE_URL",
+                "",
+            ),
+            supabase_storage_service_role_key=getenv_compat(
+                "LINGUALENS_SUPABASE_STORAGE_SERVICE_ROLE_KEY",
+                "THERAPIST_APP_V2_SUPABASE_STORAGE_SERVICE_ROLE_KEY",
+                "",
+            ),
+            supabase_storage_bucket=getenv_compat(
+                "LINGUALENS_SUPABASE_STORAGE_BUCKET",
+                "THERAPIST_APP_V2_SUPABASE_STORAGE_BUCKET",
+                "",
+            ),
+            supabase_storage_tus_endpoint=getenv_compat(
+                "LINGUALENS_SUPABASE_STORAGE_TUS_ENDPOINT",
+                "THERAPIST_APP_V2_SUPABASE_STORAGE_TUS_ENDPOINT",
+                "",
+            ),
+            supabase_storage_signed_upload_ttl_seconds=int(
+                getenv_compat(
+                    "LINGUALENS_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS",
+                    "THERAPIST_APP_V2_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS",
+                    str(DEFAULT_SUPABASE_STORAGE_SIGNED_UPLOAD_TTL_SECONDS),
+                )
+            ),
+            supabase_storage_signed_download_ttl_seconds=int(
+                getenv_compat(
+                    "LINGUALENS_SUPABASE_STORAGE_SIGNED_DOWNLOAD_TTL_SECONDS",
+                    "THERAPIST_APP_V2_SUPABASE_STORAGE_SIGNED_DOWNLOAD_TTL_SECONDS",
+                    str(DEFAULT_SUPABASE_STORAGE_SIGNED_DOWNLOAD_TTL_SECONDS),
+                )
+            ),
+            supabase_storage_tus_chunk_size_bytes=int(
+                getenv_compat(
+                    "LINGUALENS_SUPABASE_STORAGE_TUS_CHUNK_SIZE_BYTES",
+                    "THERAPIST_APP_V2_SUPABASE_STORAGE_TUS_CHUNK_SIZE_BYTES",
+                    str(SUPABASE_TUS_CHUNK_SIZE_BYTES),
+                )
+            ),
+            capture_max_upload_size_bytes=int(
+                getenv_compat(
+                    "LINGUALENS_SUPABASE_STORAGE_MAX_UPLOAD_SIZE_BYTES",
+                    "THERAPIST_APP_V2_SUPABASE_STORAGE_MAX_UPLOAD_SIZE_BYTES",
+                    str(DEFAULT_CAPTURE_MAX_UPLOAD_SIZE_BYTES),
+                )
+            ),
+            capture_worker_organization_ids=os.getenv(
+                "LINGUALENS_CAPTURE_WORKER_ORGANIZATION_IDS", ""
             ),
             cors_allowed_origins=getenv_compat(
                 "LINGUALENS_CORS_ALLOWED_ORIGINS",

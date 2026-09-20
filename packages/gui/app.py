@@ -7,6 +7,7 @@ acoustic prosody feature extraction, transcript QA review, and report sign-off.
 
 from __future__ import annotations
 
+from datetime import datetime
 import os
 from pathlib import Path
 import queue
@@ -17,8 +18,16 @@ import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, Callable
+import urllib.error
+import uuid
 
-from packages.tui.client import LinguaLensClient
+from packages.tui.client import (
+    LinguaLensApiError,
+    LinguaLensAuthError,
+    LinguaLensClient,
+    LinguaLensPermissionError,
+    LinguaLensServerError,
+)
 
 
 class LinguaLensGUIApp:
@@ -36,6 +45,15 @@ class LinguaLensGUIApp:
         self.active_transcript: dict[str, Any] | None = None
         self.active_report: dict[str, Any] | None = None
         self.active_audio_path: str | None = None
+        # Assessment V2 context state
+        self.active_child_id: str | None = None
+        self.active_child: dict[str, Any] | None = None
+        self.active_consent: dict[str, Any] | None = None
+        self.active_assessment_id: str | None = None
+        self.active_assessment: dict[str, Any] | None = None
+        self._current_mode: str = "legacy"
+        self._legacy_context_generation: int = 0
+        self._current_child_request_id: str = ""
         self.is_busy: bool = False
         self.is_findings_stale: bool = False
         self._resize_job: str | None = None
@@ -59,6 +77,16 @@ class LinguaLensGUIApp:
         self._current_temp_slice: str | None = None
         self._show_pitch_overlay: bool = True
         self._audio_f0_contour: list[tuple[float, float]] = []
+        self._poll_job: str | None = None
+        self._resize_job: str | None = None
+        self._current_session_generation: int = 1
+        self._current_child_request_id: str | None = None
+        self._child_selection_generation: int = 0
+        self._current_refresh_request_id: str | None = None
+        self._consent_request_id: str | None = None
+        self._consent_loaded_at: str | None = None
+
+        self.root.bind("<Destroy>", lambda e: self._cleanup_timers() if e.widget == self.root else None, add="+")
 
         self._configure_styles()
         self._build_header()
@@ -138,6 +166,12 @@ class LinguaLensGUIApp:
         )
         status_lbl.pack(side=tk.RIGHT)
 
+        # Mode indicator badge (MOCK vs LIVE)
+        mode_text = "[LOCAL RESEARCH MOCK]" if self.client.mock_mode else "[CLINICAL LIVE - FASTAPI]"
+        mode_fg = "#0f766e" if self.client.mock_mode else "#0284c7"
+        self.lbl_mode = tk.Label(header_frame, text=mode_text, font=("Helvetica", 9, "bold"), fg=mode_fg, bg="#ffffff")
+        self.lbl_mode.pack(side=tk.RIGHT, padx=(0, 8))
+
         # Subtle safety note
         safety_banner = tk.Frame(self.root, bg="#fffbeb", padx=14, pady=3, highlightthickness=1, highlightbackground="#fef3c7")
         safety_banner.pack(fill=tk.X)
@@ -161,20 +195,84 @@ class LinguaLensGUIApp:
         self.entry_case_search.bind("<KeyRelease>", self._on_case_search_typing)
 
         tk.Label(ctx_bar, text="👤 Case:", font=("Helvetica", 9, "bold"), bg="#f1f5f9", fg="#0f172a").pack(side=tk.LEFT, padx=(0, 2))
-        self.combo_global_case = ttk.Combobox(ctx_bar, state="readonly", width=28, font=("Helvetica", 9))
-        self.combo_global_case.pack(side=tk.LEFT, padx=(0, 8))
+        self.combo_global_case = ttk.Combobox(ctx_bar, state="readonly", width=24, font=("Helvetica", 9))
+        self.combo_global_case.pack(side=tk.LEFT, padx=(0, 6))
         self.combo_global_case.bind("<<ComboboxSelected>>", self._on_global_case_changed)
 
         # Session Selector
         tk.Label(ctx_bar, text="🗓️ Session:", font=("Helvetica", 9, "bold"), bg="#f1f5f9", fg="#0f172a").pack(side=tk.LEFT, padx=(0, 2))
-        self.combo_global_session = ttk.Combobox(ctx_bar, state="readonly", width=26, font=("Helvetica", 9))
-        self.combo_global_session.pack(side=tk.LEFT, padx=(0, 8))
+        self.combo_global_session = ttk.Combobox(ctx_bar, state="readonly", width=20, font=("Helvetica", 9))
+        self.combo_global_session.pack(side=tk.LEFT, padx=(0, 6))
         self.combo_global_session.bind("<<ComboboxSelected>>", self._on_global_session_changed)
+
+        # Child Selector (Assessment V2)
+        tk.Label(ctx_bar, text="👶 Child:", font=("Helvetica", 9, "bold"), bg="#f1f5f9", fg="#0f172a").pack(side=tk.LEFT, padx=(4, 2))
+        self.combo_global_child = ttk.Combobox(ctx_bar, state="readonly", width=20, font=("Helvetica", 9))
+        self.combo_global_child.pack(side=tk.LEFT, padx=(0, 6))
+        self.combo_global_child.bind("<<ComboboxSelected>>", self._on_global_child_changed)
+
+        # Consent Status Badge & Actions (Subtask B)
+        self.lbl_consent_status = tk.Label(
+            ctx_bar,
+            text="[Consent Not Loaded]",
+            font=("Helvetica", 8, "bold"),
+            bg="#f1f5f9",
+            fg="#64748b",
+            padx=4,
+            pady=1,
+            relief=tk.GROOVE,
+        )
+        self.lbl_consent_status.pack(side=tk.LEFT, padx=(2, 2))
+
+        self.lbl_consent_loaded_at = tk.Label(
+            ctx_bar,
+            text="",
+            font=("Helvetica", 8),
+            bg="#f1f5f9",
+            fg="#94a3b8",
+        )
+        self.lbl_consent_loaded_at.pack(side=tk.LEFT, padx=(0, 4))
+
+        self.btn_refresh_consent = ttk.Button(
+            ctx_bar,
+            text="🔄",
+            width=3,
+            command=self._refresh_consent,
+        )
+        self.btn_refresh_consent.pack(side=tk.LEFT, padx=(0, 2))
+
+        self.btn_record_consent = ttk.Button(
+            ctx_bar,
+            text="📋 Record Consent",
+            command=self._show_record_consent_dialog,
+        )
+        self.btn_record_consent.pack(side=tk.LEFT, padx=(2, 4))
+
+        self.lbl_assessment_ctx = tk.Label(
+            ctx_bar,
+            text="",
+            font=("Helvetica", 8, "bold"),
+            bg="#f1f5f9",
+            fg="#7e22ce",
+            padx=4,
+            pady=1,
+            relief=tk.GROOVE,
+        )
+        self.lbl_assessment_ctx.pack(side=tk.LEFT, padx=(2, 2))
+
+        self.btn_create_assessment = ttk.Button(
+            ctx_bar,
+            text="➕ New Assessment",
+            command=self._show_create_assessment_dialog,
+        )
+        self.btn_create_assessment.pack(side=tk.LEFT, padx=(2, 6))
 
         # Quick Buttons & Refresh
         ttk.Button(ctx_bar, text="🔄 Refresh", command=self._refresh_all_data).pack(side=tk.LEFT, padx=(2, 0))
         ttk.Button(ctx_bar, text="➕ New Case", command=self._show_create_case_dialog).pack(side=tk.RIGHT, padx=(3, 0))
         ttk.Button(ctx_bar, text="➕ New Session", command=self._show_create_session_dialog).pack(side=tk.RIGHT, padx=(3, 0))
+        ttk.Button(ctx_bar, text="➕ New Child", command=self._show_create_child_dialog).pack(side=tk.RIGHT, padx=(3, 0))
+
 
     def _build_tabs(self) -> None:
         self.notebook = ttk.Notebook(self.root)
@@ -232,31 +330,101 @@ class LinguaLensGUIApp:
         self.root.bind("<Command-e>", lambda e: self._export_report())
         self.root.bind("<space>", lambda e: self._handle_space_shortcut(e))
 
+    @property
+    def current_mode(self) -> str:
+        return getattr(self, "_current_mode", "legacy")
+
+    @current_mode.setter
+    def current_mode(self, mode: str) -> None:
+        prev_mode = getattr(self, "_current_mode", "legacy")
+        self._current_mode = mode
+        if mode == "v2":
+            self.active_case_id = None
+            self.active_session_id = None
+            self.active_transcript = None
+            self.active_report = None
+            self.active_audio_path = None
+            if getattr(self, "_is_continuous_playing", False):
+                self._stop_playback()
+            if getattr(self, "_current_busy_mode", None) == "legacy":
+                self._set_busy_state(False, "Ready")
+        elif mode == "legacy":
+            self.active_child_id = None
+            self.active_child = None
+            self.active_consent = None
+            self.active_assessment_id = None
+            self.active_assessment = None
+            self._cached_assessments = []
+            if getattr(self, "_current_busy_mode", None) == "v2":
+                self._set_busy_state(False, "Ready")
+
+    def _is_v2_mode(self) -> bool:
+        """Return True if the active GUI context is in Assessment V2 mode."""
+        return (
+            getattr(self, "current_mode", "legacy") == "v2"
+            or getattr(self, "active_child_id", None) is not None
+            or getattr(self, "active_assessment_id", None) is not None
+        )
+
+    def _guard_v2_mode(self, action_name: str = "This action") -> bool:
+        """Return True and show warning if in V2 mode, blocking legacy operations."""
+        if self._is_v2_mode():
+            messagebox.showwarning(
+                "Assessment V2 Mode Active",
+                f"{action_name} is not applicable in Assessment V2 mode. Downstream V2 capture/review will be available in subsequent stages.",
+            )
+            return True
+        return False
+
     def _handle_space_shortcut(self, event: Any) -> None:
         """Toggle playback when space is pressed outside text entry inputs."""
-        widget = self.root.focus_get()
-        if isinstance(widget, (tk.Entry, ttk.Entry, tk.Text)):
+        if self._is_v2_mode():
             return
-        if self._is_continuous_playing:
+        focus_w = self.root.focus_get()
+        # Don't trigger playback toggle if user is editing inside a Text or Entry widget
+        if isinstance(focus_w, (tk.Text, tk.Entry, ttk.Entry)):
+            return
+
+        if getattr(self, "_is_continuous_playing", False):
             self._stop_playback()
         else:
-            sel = self.tree_utterances.selection() if hasattr(self, "tree_utterances") else ()
-            if sel:
-                self._play_selected_utterance()
+            if hasattr(self, "_toggle_continuous_playback"):
+                self._toggle_continuous_playback()
             else:
                 self._toggle_continuous_playback()
 
     def _handle_ctrl_s(self) -> None:
         """Handle quick save depending on current tab."""
+        if self._guard_v2_mode("Save"):
+            return
         current_tab = self.notebook.index("current")
         if current_tab == 2:  # Review tab
             self._save_utterance_edit()
         elif current_tab == 4:  # Report tab
             self._export_report()
 
-    def _set_busy_state(self, busy: bool, message: str = "Ready") -> None:
-        """Update UI busy cursor and progress bar indicator."""
-        self.is_busy = busy
+
+    def _set_busy_state(
+        self,
+        busy: bool,
+        message: str = "Ready",
+        request_id: str | None = None,
+        mode: str | None = None,
+    ) -> None:
+        """Update UI busy cursor and progress bar indicator, scoped to request_id and mode."""
+        if busy:
+            self.is_busy = True
+            if request_id is not None:
+                self._current_busy_request_id = request_id
+            self._current_busy_mode = mode or getattr(self, "current_mode", "legacy")
+        else:
+            current_busy_id = getattr(self, "_current_busy_request_id", None)
+            if request_id is not None and current_busy_id is not None and request_id != current_busy_id:
+                return  # Do not clear busy state belonging to a newer request
+            self.is_busy = False
+            self._current_busy_request_id = None
+            self._current_busy_mode = None
+
         if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
             self.lbl_status.config(text=message)
         if busy:
@@ -283,6 +451,21 @@ class LinguaLensGUIApp:
                     pass
                 self.prog_bar.pack_forget()
 
+    def _cleanup_timers(self) -> None:
+        """Cancel pending Tk after callbacks when the application window is destroyed."""
+        if getattr(self, "_poll_job", None):
+            try:
+                self.root.after_cancel(self._poll_job)
+            except Exception:
+                pass
+            self._poll_job = None
+        if getattr(self, "_resize_job", None):
+            try:
+                self.root.after_cancel(self._resize_job)
+            except Exception:
+                pass
+            self._resize_job = None
+
     def _poll_async_queue(self) -> None:
         """Process completed background worker callbacks on the Tkinter main thread."""
         try:
@@ -293,11 +476,16 @@ class LinguaLensGUIApp:
         except Exception:
             pass
 
-        if self.root.winfo_exists():
-            try:
-                self.root.after(30, self._poll_async_queue)
-            except Exception:
-                pass
+        try:
+            if not self.root.winfo_exists():
+                return
+        except Exception:
+            return
+
+        try:
+            self._poll_job = self.root.after(30, self._poll_async_queue)
+        except Exception:
+            self._poll_job = None
 
     def _run_async_task(
         self,
@@ -305,16 +493,32 @@ class LinguaLensGUIApp:
         on_success: Callable[[Any], None],
         on_error: Callable[[Exception], None] | None = None,
         busy_msg: str = "Processing...",
+        request_id: str | None = None,
     ) -> threading.Thread:
         """Execute long-running work in a background thread and post results safely via queue."""
-        self._set_busy_state(True, busy_msg)
+        if request_id is None:
+            request_id = f"task-{uuid.uuid4().hex[:8]}"
+        task_mode = getattr(self, "current_mode", "legacy")
+        expected_gen = getattr(self, "_legacy_context_generation", 0)
+        session_gen = self._get_current_session_generation()
+        self._set_busy_state(True, busy_msg, request_id=request_id, mode=task_mode)
 
         def worker() -> None:
             try:
                 res = target()
-                self._async_queue.put((lambda r=res: self._on_task_done(r, on_success, None), None))
+                self._async_queue.put((
+                    lambda r=res: self._on_task_done(
+                        r, on_success, None, task_mode=task_mode, expected_gen=expected_gen, request_id=request_id, session_gen=session_gen
+                    ),
+                    None,
+                ))
             except Exception as exc:
-                self._async_queue.put((lambda e=exc: self._on_task_done(None, on_error, e), exc))
+                self._async_queue.put((
+                    lambda e=exc: self._on_task_done(
+                        None, on_error, e, task_mode=task_mode, expected_gen=expected_gen, request_id=request_id, session_gen=session_gen
+                    ),
+                    exc,
+                ))
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
@@ -325,9 +529,45 @@ class LinguaLensGUIApp:
         result: Any,
         callback: Callable[[Any], None] | None,
         error: Exception | None,
+        task_mode: str = "legacy",
+        expected_gen: int = 0,
+        request_id: str | None = None,
+        session_gen: int | None = None,
     ) -> None:
         """Handle task completion on Tkinter main thread."""
-        self._set_busy_state(False, "Ready")
+        current_session_gen = self._get_current_session_generation()
+
+        # 1. Auth invalidation check: HTTP 401 must be handled for the current auth session
+        # regardless of mode switches, selection changes, or cancellation.
+        from packages.tui.client import LinguaLensAuthError
+        if error is not None:
+            is_auth_error = isinstance(error, LinguaLensAuthError) or (
+                hasattr(error, "status_code") and getattr(error, "status_code", None) == 401
+            )
+            if is_auth_error:
+                if session_gen is None or session_gen == current_session_gen:
+                    self._set_busy_state(False, "Ready", request_id=request_id)
+                    self._handle_auth_error(error, session_generation=session_gen)
+                    if callback and callable(callback):
+                        try:
+                            callback(error)
+                        except Exception:
+                            pass
+                return
+
+        # 2. Check session staleness for successes or non-auth errors
+        if session_gen is not None and session_gen != current_session_gen:
+            # Discard completion from an earlier invalidated session
+            return
+
+        # 3. Check legacy/V2 mode and context staleness
+        current_mode = getattr(self, "current_mode", "legacy")
+        current_gen = getattr(self, "_legacy_context_generation", 0)
+        if task_mode == "legacy" and (current_mode != "legacy" or current_gen != expected_gen):
+            # Discard stale legacy worker completion: mode switched to V2 or legacy context was invalidated
+            return
+
+        self._set_busy_state(False, "Ready", request_id=request_id)
         if error:
             if callback and callable(callback):
                 callback(error)
@@ -335,6 +575,7 @@ class LinguaLensGUIApp:
                 messagebox.showerror("Operation Failed", str(error))
         elif callback and callable(callback):
             callback(result)
+
 
     # --- Tab 1: Cases & Sessions UI ---
     def _build_tab_cases(self) -> None:
@@ -395,9 +636,58 @@ class LinguaLensGUIApp:
 
         # Button Bar for Sessions
         btn_bar_s = ttk.Frame(frame)
-        btn_bar_s.pack(fill=tk.X)
+        btn_bar_s.pack(fill=tk.X, pady=(0, 12))
         ttk.Button(btn_bar_s, text="➕ Start New Session", command=self._show_create_session_dialog).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(btn_bar_s, text="🚀 Open in Ingestion Workspace ➔", command=lambda: self.notebook.select(1)).pack(side=tk.LEFT)
+
+        # Active Children Directory (Assessment V2)
+        lbl_ch = ttk.Label(frame, text="Active Children Directory (Assessment V2)", font=("Helvetica", 12, "bold"))
+        lbl_ch.pack(anchor=tk.W, pady=(8, 4))
+
+        columns_ch = ("child_id", "display_code", "birth_ym", "lang")
+        self.tree_children = ttk.Treeview(frame, columns=columns_ch, show="headings", height=4)
+        self.tree_children.heading("child_id", text="Child ID")
+        self.tree_children.heading("display_code", text="Display Code")
+        self.tree_children.heading("birth_ym", text="Birth YYYY-MM")
+        self.tree_children.heading("lang", text="Primary Lang")
+
+        self.tree_children.column("child_id", width=160)
+        self.tree_children.column("display_code", width=140)
+        self.tree_children.column("birth_ym", width=120, anchor=tk.CENTER)
+        self.tree_children.column("lang", width=100, anchor=tk.CENTER)
+
+        self.tree_children.pack(fill=tk.X, pady=(0, 6))
+        self.tree_children.bind("<<TreeviewSelect>>", self._on_child_selected)
+
+        btn_bar_ch = ttk.Frame(frame)
+        btn_bar_ch.pack(fill=tk.X, pady=(0, 10))
+        ttk.Button(btn_bar_ch, text="➕ Create Child Profile (V2)", command=self._show_create_child_dialog).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_bar_ch, text="➕ Create Assessment (V2)", command=self._show_create_assessment_dialog).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_bar_ch, text="🔄 Refresh Children", command=self._refresh_children).pack(side=tk.LEFT)
+
+        # Assessments Directory (Assessment V2)
+        lbl_asmt = ttk.Label(frame, text="Assessments Directory (Assessment V2)", font=("Helvetica", 12, "bold"))
+        lbl_asmt.pack(anchor=tk.W, pady=(4, 4))
+
+        columns_asmt = ("asmt_id", "child_id", "purpose", "state", "clinician", "version")
+        self.tree_assessments = ttk.Treeview(frame, columns=columns_asmt, show="headings", height=4)
+        self.tree_assessments.heading("asmt_id", text="Assessment ID")
+        self.tree_assessments.heading("child_id", text="Child ID")
+        self.tree_assessments.heading("purpose", text="Purpose")
+        self.tree_assessments.heading("state", text="State")
+        self.tree_assessments.heading("clinician", text="Clinician")
+        self.tree_assessments.heading("version", text="Ver")
+
+        self.tree_assessments.column("asmt_id", width=160)
+        self.tree_assessments.column("child_id", width=120)
+        self.tree_assessments.column("purpose", width=90, anchor=tk.CENTER)
+        self.tree_assessments.column("state", width=90, anchor=tk.CENTER)
+        self.tree_assessments.column("clinician", width=140)
+        self.tree_assessments.column("version", width=50, anchor=tk.CENTER)
+
+        self.tree_assessments.pack(fill=tk.X, pady=(0, 6))
+        self.tree_assessments.bind("<<TreeviewSelect>>", self._on_assessment_selected)
+
 
     # --- Tab 2: Ingestion UI ---
     def _build_tab_ingestion(self) -> None:
@@ -428,9 +718,12 @@ class LinguaLensGUIApp:
         f_picker.pack(fill=tk.X)
         self.entry_audio_path = ttk.Entry(f_picker, font=("Helvetica", 10))
         self.entry_audio_path.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
-        ttk.Button(f_picker, text="📂 Browse...", command=self._browse_audio_file).pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Button(f_picker, text="⚡ Process", command=self._process_audio_file).pack(side=tk.LEFT, padx=(0, 6))
-        ttk.Button(f_picker, text="📦 Batch Ingest...", command=self._batch_ingest_audio_files).pack(side=tk.LEFT)
+        self.btn_select_audio = ttk.Button(f_picker, text="📂 Browse...", command=self._browse_audio_file)
+        self.btn_select_audio.pack(side=tk.LEFT, padx=(0, 6))
+        self.btn_process_audio = ttk.Button(f_picker, text="⚡ Process", command=self._process_audio_file)
+        self.btn_process_audio.pack(side=tk.LEFT, padx=(0, 6))
+        self.btn_batch_ingest = ttk.Button(f_picker, text="📦 Batch Ingest...", command=self._batch_ingest_audio_files)
+        self.btn_batch_ingest.pack(side=tk.LEFT)
 
         # Dedicated Audio Ingestion Progress Panel (Hidden by default, shown during processing)
         self.frame_ingest_progress = tk.Frame(
@@ -473,8 +766,10 @@ class LinguaLensGUIApp:
 
         btn_row = ttk.Frame(card_text)
         btn_row.pack(anchor=tk.W, pady=(0, 8))
-        ttk.Button(btn_row, text="✨ Load Demo Thai Play Dialogue", command=self._load_demo_dialogue).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(btn_row, text="📂 Load .cha / .txt File...", command=self._browse_text_file).pack(side=tk.LEFT)
+        self.btn_ingest_demo = ttk.Button(btn_row, text="✨ Load Demo Thai Play Dialogue", command=self._load_demo_dialogue)
+        self.btn_ingest_demo.pack(side=tk.LEFT, padx=(0, 8))
+        self.btn_browse_text = ttk.Button(btn_row, text="📂 Load .cha / .txt File...", command=self._browse_text_file)
+        self.btn_browse_text.pack(side=tk.LEFT)
 
         lbl_raw = ttk.Label(card_text, text="Or enter dialogue text manually below (format: 'INV: ...' and 'CHI: ...'):", font=("Helvetica", 9, "italic"))
         lbl_raw.pack(anchor=tk.W, pady=(0, 4))
@@ -482,7 +777,9 @@ class LinguaLensGUIApp:
         self.txt_manual = tk.Text(card_text, height=8, font=("Courier", 10))
         self.txt_manual.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
 
-        ttk.Button(card_text, text="📥 Ingest Typed Dialogue Text", command=self._ingest_typed_text).pack(anchor=tk.E)
+        self.btn_ingest_text = ttk.Button(card_text, text="📥 Ingest Typed Dialogue Text", command=self._ingest_typed_text)
+        self.btn_ingest_text.pack(anchor=tk.E)
+
 
     # --- Tab 3: Review UI (TalkBank / CHAT + Table Editor) ---
     def _build_tab_review(self) -> None:
@@ -1029,7 +1326,21 @@ class LinguaLensGUIApp:
     # --- Data Operations & Global Context Handlers ---
     def _on_case_search_typing(self, event: Any) -> None:
         query = self.entry_case_search.get().strip().lower()
-        cases = self.client.list_cases()
+        try:
+            cases = self.client.list_cases()
+        except LinguaLensAuthError as exc:
+            self._handle_auth_error(exc)
+            return
+        except LinguaLensPermissionError as exc:
+            self._handle_permission_error(exc)
+            if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                self.lbl_status.config(text="⚠️ Permission denied searching cases.")
+            return
+        except (LinguaLensApiError, urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
+            if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                self.lbl_status.config(text=f"⚠️ Search failed: {exc}")
+            return
+
         matched = []
         for c in cases:
             c_str = f"{c.get('case_id')} {c.get('child_id')} {c.get('clinical_notes')}".lower()
@@ -1040,22 +1351,59 @@ class LinguaLensGUIApp:
             self.combo_global_case.current(0)
             self._on_global_case_changed(None)
 
-    def _refresh_all_data(self) -> None:
-        self._refresh_cases()
-        self._refresh_sessions_for_active_case()
-        messagebox.showinfo("Refreshed", "Data refreshed successfully from repository / API.")
+    def _refresh_all_data(self) -> bool:
+        cases_ok = self._refresh_cases()
+        sessions_ok = True
+        if self.active_case_id:
+            sessions_ok = self._refresh_sessions_for_active_case()
+
+        if not cases_ok or not sessions_ok:
+            self._refresh_children()
+            messagebox.showerror(
+                "Refresh Failed",
+                "Failed to refresh cases, sessions, or transcript from repository / API. See status bar for details.",
+            )
+            return False
+
+        def _on_all_success() -> None:
+            messagebox.showinfo("Refreshed", "Data refreshed successfully from repository / API.")
+
+        def _on_all_error(exc: Exception) -> None:
+            messagebox.showerror(
+                "Refresh Failed",
+                f"Failed to refresh children from repository / API: {exc}",
+            )
+
+        self._refresh_children(on_success=_on_all_success, on_error=_on_all_error)
+        return True
 
     def _load_initial_data(self) -> None:
-        self._refresh_cases()
-        if self.tree_cases.get_children():
+        cases_ok = self._refresh_cases()
+        if cases_ok and self.tree_cases.get_children():
             first_case = self.tree_cases.get_children()[0]
             self.tree_cases.selection_set(first_case)
             self._on_case_selected(None)
+        self._refresh_children()
 
-    def _refresh_cases(self) -> None:
+    def _refresh_cases(self) -> bool:
+        try:
+            cases = self.client.list_cases()
+        except LinguaLensAuthError as exc:
+            self._handle_auth_error(exc)
+            return False
+        except LinguaLensPermissionError as exc:
+            self._handle_permission_error(exc)
+            if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                self.lbl_status.config(text="⚠️ Permission denied listing cases.")
+            return False
+        except (LinguaLensApiError, urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
+            if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                self.lbl_status.config(text=f"⚠️ Failed to load cases: {exc}")
+            return False
+
         for item in self.tree_cases.get_children():
             self.tree_cases.delete(item)
-        cases = self.client.list_cases()
+
         case_options = []
         for c in cases:
             c_id = c.get("case_id")
@@ -1089,12 +1437,37 @@ class LinguaLensGUIApp:
             self.lbl_ingest_ctx.config(text="Active Context: Please create a Case to begin (Click ➕ New Case)")
             self._refresh_transcript_and_findings()
 
+        return True
+
     def _on_global_case_changed(self, event: Any) -> None:
         sel_text = self.combo_global_case.get()
         if not sel_text or sel_text.startswith("("):
             return
         case_id = sel_text.split(" | ")[0].strip()
+
+        # Transition back to legacy mode and clear V2 context
+        self.current_mode = "legacy"
+        self._child_selection_generation = getattr(self, "_child_selection_generation", 0) + 1
+        self._current_child_request_id = ""
+        self.active_child_id = None
+        self.active_child = None
+        self.active_consent = None
+        self.active_assessment_id = None
+        self.active_assessment = None
+        self._cached_assessments = []
+
+        if hasattr(self, "tree_children") and self.tree_children.winfo_exists():
+            sel_children = self.tree_children.selection()
+            if sel_children:
+                self.tree_children.selection_remove(*sel_children)
+        if hasattr(self, "combo_global_child") and self.combo_global_child.winfo_exists():
+            self.combo_global_child.set("")
+        if hasattr(self, "tree_assessments") and self.tree_assessments.winfo_exists():
+            for item in self.tree_assessments.get_children():
+                self.tree_assessments.delete(item)
+
         self.active_case_id = case_id
+        self._update_downstream_tabs_mode()
 
         # Sync Tab 1 treeview
         if case_id in self.tree_cases.get_children():
@@ -1122,18 +1495,47 @@ class LinguaLensGUIApp:
         self.lbl_ingest_ctx.config(text=f"Active Context: Case {self.active_case_id} > Session {self.active_session_id}")
         self._refresh_transcript_and_findings()
 
-    def _refresh_sessions_for_active_case(self) -> None:
+    def _invalidate_session_context(self, error_msg: str = "") -> None:
+        """Clear active session state, treeview rows, and dependent transcript/findings."""
+        for item in self.tree_sessions.get_children():
+            self.tree_sessions.delete(item)
+        self.active_session_id = None
+        self.active_transcript = None
+        err_display = f"⚠️ {error_msg}" if error_msg else "(No Active Session)"
+        self.combo_global_session["values"] = [err_display]
+        self.combo_global_session.current(0)
+        self.lbl_ingest_ctx.config(text=f"Active Context: Case {self.active_case_id or '-'} > {err_display}")
+        self._refresh_transcript_and_findings()
+
+    def _refresh_sessions_for_active_case(self) -> bool | None:
+        if self._is_v2_mode():
+            self._guard_v2_mode("Session refresh")
+            return None
+        if not self.active_case_id:
+            self._invalidate_session_context("(No Active Case)")
+            return True
+
+        try:
+            sessions = self.client.list_sessions(self.active_case_id)
+        except LinguaLensAuthError as exc:
+            self._handle_auth_error(exc)
+            self._invalidate_session_context("Authentication Error")
+            return False
+        except LinguaLensPermissionError as exc:
+            self._handle_permission_error(exc)
+            if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                self.lbl_status.config(text="⚠️ Permission denied listing sessions.")
+            self._invalidate_session_context("Permission Denied")
+            return False
+        except (LinguaLensApiError, urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
+            if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                self.lbl_status.config(text=f"⚠️ Failed to load sessions: {exc}")
+            self._invalidate_session_context(f"Failed to load sessions: {exc}")
+            return False
+
         for item in self.tree_sessions.get_children():
             self.tree_sessions.delete(item)
 
-        if not self.active_case_id:
-            self.combo_global_session["values"] = ["(No Active Case)"]
-            self.combo_global_session.current(0)
-            self.active_session_id = None
-            self._refresh_transcript_and_findings()
-            return
-
-        sessions = self.client.list_sessions(self.active_case_id)
         session_options = []
         for s in sessions:
             s_id = s.get("session_id")
@@ -1168,13 +1570,37 @@ class LinguaLensGUIApp:
             self.active_session_id = None
             self.lbl_ingest_ctx.config(text=f"Active Context: Case {self.active_case_id} > (No Session - Click ➕ New Session)")
 
-        self._refresh_transcript_and_findings()
+        return self._refresh_transcript_and_findings()
 
     def _on_case_selected(self, event: Any) -> None:
         selected = self.tree_cases.selection()
         if not selected:
             return
-        self.active_case_id = selected[0]
+        case_id = selected[0]
+
+        # Transition back to legacy mode and clear V2 context
+        self.current_mode = "legacy"
+        self._child_selection_generation = getattr(self, "_child_selection_generation", 0) + 1
+        self._current_child_request_id = ""
+        self.active_child_id = None
+        self.active_child = None
+        self.active_consent = None
+        self.active_assessment_id = None
+        self.active_assessment = None
+        self._cached_assessments = []
+
+        if hasattr(self, "tree_children") and self.tree_children.winfo_exists():
+            sel_children = self.tree_children.selection()
+            if sel_children:
+                self.tree_children.selection_remove(*sel_children)
+        if hasattr(self, "combo_global_child") and self.combo_global_child.winfo_exists():
+            self.combo_global_child.set("")
+        if hasattr(self, "tree_assessments") and self.tree_assessments.winfo_exists():
+            for item in self.tree_assessments.get_children():
+                self.tree_assessments.delete(item)
+
+        self.active_case_id = case_id
+        self._update_downstream_tabs_mode()
 
         # Sync Global Case Dropdown
         for idx, val in enumerate(self.combo_global_case["values"]):
@@ -1200,13 +1626,20 @@ class LinguaLensGUIApp:
         self._refresh_transcript_and_findings()
 
     def _copy_chat_text(self) -> None:
+        if self._guard_v2_mode("Copy transcript"):
+            return
         chat_content = self.txt_chat_view.get("1.0", tk.END).strip()
         if chat_content:
             self.root.clipboard_clear()
             self.root.clipboard_append(chat_content)
             messagebox.showinfo("Copied", "TalkBank / CHAT transcript copied to clipboard!")
 
-    def _refresh_transcript_and_findings(self) -> None:
+    def _refresh_transcript_and_findings(self) -> bool:
+        if self._is_v2_mode():
+            return False
+        # Invalidate existing transcript immediately
+        self.active_transcript = None
+
         # Clear QA table
         for item in self.tree_utterances.get_children():
             self.tree_utterances.delete(item)
@@ -1226,16 +1659,23 @@ class LinguaLensGUIApp:
             self.txt_chat_view.insert(tk.END, "% Please select or create a Case and Session to begin.", "header")
             self.tree_metrics.insert("", tk.END, values=("Info", "Status", "No Session", "กรุณาเลือกหรือสร้าง Case และ Session ก่อน"))
             self._draw_spider_diagram({})
-            return
+            return True
 
-        self.active_transcript = self.client.get_session_transcript(self.active_session_id)
+        try:
+            self.active_transcript = self.client.get_session_transcript(self.active_session_id)
+        except LinguaLensAuthError as exc:
+            self._handle_auth_error(exc)
+            return False
+        except (LinguaLensApiError, urllib.error.URLError, TimeoutError, ConnectionError, OSError) as exc:
+            self.lbl_review_status.config(text=f"Transcript Status: ⚠️ Failed to fetch transcript: {exc}", foreground="red")
+            return False
 
         if not self.active_transcript or not self.active_transcript.get("utterances"):
             self.lbl_review_status.config(text="Transcript Status: No transcript loaded for this session", foreground="gray")
             self.txt_chat_view.insert(tk.END, "% No transcript recorded for this session yet.\n% Ingest audio or text in Tab 2 to begin.", "header")
             self.tree_metrics.insert("", tk.END, values=("Info", "Status", "No Data", "เซสชันนี้ยังไม่มีข้อมูลการประเมิน — กรุณา Ingest ใน Tab 2"))
             self._draw_spider_diagram({})
-            return
+            return True
 
         attested = self.active_transcript.get("attested", False)
         status_txt = f"Transcript Status: {'✓ Attested / Signed-Off' if attested else '⚠️ Needs Clinician Review'}"
@@ -1280,7 +1720,8 @@ class LinguaLensGUIApp:
 
             self.txt_chat_view.insert(tk.END, "\n@End\n", "header")
 
-        for u in self.active_transcript["utterances"]:
+        for idx, u in enumerate(self.active_transcript["utterances"], start=1):
+            u_id = str(u.get("id") or f"utt-{idx}")
             if u.get("start_time") is not None and u.get("end_time") is not None:
                 time_str = f"{u['start_time']:.1f} - {u['end_time']:.1f}"
             else:
@@ -1291,8 +1732,8 @@ class LinguaLensGUIApp:
             self.tree_utterances.insert(
                 "",
                 tk.END,
-                iid=u["id"],
-                values=(u["id"], spk, time_str, u.get("text"), flags),
+                iid=u_id,
+                values=(u_id, spk, time_str, u.get("text"), flags),
             )
 
         # Load findings (Full 15+ Features across 4 domains)
@@ -1302,7 +1743,7 @@ class LinguaLensGUIApp:
         if not findings.get("has_data") or not metrics:
             self.tree_metrics.insert("", tk.END, values=("Info", "Status", "No Data", "เซสชันนี้ยังไม่มีข้อมูลการประเมิน — กรุณา Ingest ใน Tab 2"))
             self._draw_spider_diagram({})
-            return
+            return True
 
         # Domain 1: Lexical & Syntactic Development
         self.tree_metrics.insert("", tk.END, values=("1. Lexical & Syntactic", "MLU-words (MLU-w)", str(metrics.get("mlu_words", "-")), "ความยาวประโยคเฉลี่ย (คำต่อประโยค)"))
@@ -1371,6 +1812,7 @@ class LinguaLensGUIApp:
         self._playhead_time_sec = 0.0
         self._current_playback_offset_sec = 0.0
         self._draw_playhead(0.0)
+        return True
 
     # --- Actions ---
     @staticmethod
@@ -1529,6 +1971,8 @@ class LinguaLensGUIApp:
         word_text: str = "",
     ) -> None:
         """Unified playback engine supporting Snippet, Continuous, Word, and Scrubber Seeking."""
+        if self._guard_v2_mode("Audio playback"):
+            return
         if not self.active_audio_path or not os.path.exists(self.active_audio_path):
             messagebox.showinfo(
                 "Audio Playback",
@@ -1624,6 +2068,8 @@ class LinguaLensGUIApp:
 
     def _play_selected_utterance(self) -> None:
         """Play audio snippet for the selected utterance with synchronized word highlights."""
+        if self._guard_v2_mode("Audio playback"):
+            return None
         sel = self.tree_utterances.selection()
         if not sel or not self.active_transcript:
             messagebox.showinfo("Playback", "Please select an utterance from the table first.")
@@ -1658,10 +2104,14 @@ class LinguaLensGUIApp:
         btn_widget: ttk.Button | None = None,
     ) -> None:
         """Play a precise word audio segment with word button highlighting."""
+        if self._guard_v2_mode("Audio playback"):
+            return None
         self._play_audio_range(start_sec=start_sec, end_sec=end_sec, word_btn=btn_widget, word_text=word_text)
 
     def _toggle_continuous_playback(self) -> None:
         """Toggle continuous session playback with real-time sentence tracking and highlighting."""
+        if self._guard_v2_mode("Continuous playback"):
+            return None
         if self._is_continuous_playing:
             self._stop_playback()
             return
@@ -1749,6 +2199,8 @@ class LinguaLensGUIApp:
         self.root.after(33, self._poll_continuous_playback_progress)
 
     def _browse_audio_file(self) -> None:
+        if self._guard_v2_mode("Audio file selection"):
+            return
         f_path = filedialog.askopenfilename(
             title="Select Audio or Video File",
             filetypes=[("Media Files", "*.wav *.mp3 *.m4a *.mp4 *.flac *.ogg"), ("All Files", "*.*")],
@@ -1756,6 +2208,7 @@ class LinguaLensGUIApp:
         if f_path:
             self.entry_audio_path.delete(0, tk.END)
             self.entry_audio_path.insert(0, f_path)
+
 
     def _build_ingest_progress_dialog(self, audio_filename: str) -> tk.Toplevel:
         """Construct a real-time progress dialog with smooth progress bar and stage feedback."""
@@ -1887,6 +2340,8 @@ class LinguaLensGUIApp:
                 pass
 
     def _process_audio_file(self) -> threading.Thread | None:
+        if self._guard_v2_mode("Audio processing"):
+            return None
         if not self.active_case_id:
             from datetime import date
             new_c = self.client.create_case(f"C-{len(self.client.list_cases()) + 1:03d}", "2021-05", "th", "Audio ingestion case")
@@ -1942,7 +2397,10 @@ class LinguaLensGUIApp:
 
     def _batch_ingest_audio_files(self) -> None:
         """Batch ingest a queue of multiple audio files into separate sessions."""
+        if self._guard_v2_mode("Batch audio ingestion"):
+            return
         if not self.active_case_id:
+
             new_c = self.client.create_case(f"C-{len(self.client.list_cases()) + 1:03d}", "2021-05", "th", "Batch case")
             self.active_case_id = new_c["case_id"]
             self._refresh_cases()
@@ -1984,9 +2442,10 @@ class LinguaLensGUIApp:
             tree_queue.insert("", tk.END, iid=str(idx), values=(Path(p).name, "Pending ⏳"))
 
         def _do_batch_worker():
+            fail_count = 0
             for idx, p_str in enumerate(f_paths):
                 f_name = Path(p_str).name
-                self.root.after(0, lambda i=idx, n=f_name: (
+                self.root.after_idle(lambda i=idx, n=f_name: (
                     tree_queue.item(str(i), values=(n, "Processing 🚀")),
                     lbl_batch_status.config(text=f"Processing {i+1}/{len(f_paths)}: {n}..."),
                     bar_batch.config(value=i)
@@ -2005,19 +2464,32 @@ class LinguaLensGUIApp:
                         model_size="small",
                         strategy="auto",
                     )
-                    self.root.after(0, lambda i=idx, n=f_name: tree_queue.item(str(i), values=(n, "Completed ✅")))
+                    self.root.after_idle(lambda i=idx, n=f_name: tree_queue.item(str(i), values=(n, "Completed ✅")))
                 except Exception as exc:
-                    self.root.after(0, lambda i=idx, n=f_name, e=exc: tree_queue.item(str(i), values=(n, f"Error: {e} ❌")))
+                    fail_count += 1
+                    self.root.after_idle(lambda i=idx, n=f_name, e=exc: tree_queue.item(str(i), values=(n, f"Error: {e} ❌")))
 
-            self.root.after(0, lambda: (
-                bar_batch.config(value=len(f_paths)),
-                lbl_batch_status.config(text=f"🎉 All {len(f_paths)} audio files processed successfully!"),
-                self._refresh_sessions_for_active_case(),
-                self._refresh_longitudinal_view(),
-                messagebox.showinfo("Batch Complete", f"Batch ingestion complete for {len(f_paths)} sessions!\nCheck Tab 4 for Longitudinal Trajectory.")
-            ))
+            def _on_batch_finished(fc=fail_count):
+                bar_batch.config(value=len(f_paths))
+                self._refresh_sessions_for_active_case()
+                self._refresh_longitudinal_view()
+                if fc > 0:
+                    lbl_batch_status.config(text=f"⚠️ Batch finished with {fc} error(s) out of {len(f_paths)} files.")
+                    messagebox.showwarning(
+                        "Batch Completed with Errors",
+                        f"Batch ingestion finished with {fc} failure(s) out of {len(f_paths)} files.\nCheck queue table for details.",
+                    )
+                else:
+                    lbl_batch_status.config(text=f"🎉 All {len(f_paths)} audio files processed successfully!")
+                    messagebox.showinfo(
+                        "Batch Complete",
+                        f"Batch ingestion complete for {len(f_paths)} sessions!\nCheck Tab 4 for Longitudinal Trajectory.",
+                    )
+
+            self.root.after_idle(_on_batch_finished)
 
         threading.Thread(target=_do_batch_worker, daemon=True).start()
+
 
     def _refresh_longitudinal_view(self) -> None:
         """Populate the Longitudinal Trajectory tab with metrics across all sessions for active case."""
@@ -2088,6 +2560,8 @@ class LinguaLensGUIApp:
             self._on_session_selected(None)
 
     def _load_demo_dialogue(self) -> threading.Thread | None:
+        if self._guard_v2_mode("Ingesting demo dialogue"):
+            return None
         if not self.active_case_id:
             new_c = self.client.create_case(f"C-{len(self.client.list_cases()) + 1:03d}", "2021-05", "th", "Sample case for dialogue demo")
             self.active_case_id = new_c["case_id"]
@@ -2126,6 +2600,8 @@ class LinguaLensGUIApp:
         )
 
     def _browse_text_file(self) -> threading.Thread | None:
+        if self._guard_v2_mode("Text file ingestion"):
+            return None
         if not self.active_case_id:
             new_c = self.client.create_case(f"C-{len(self.client.list_cases()) + 1:03d}", "2021-05", "th", "File ingestion case")
             self.active_case_id = new_c["case_id"]
@@ -2163,6 +2639,8 @@ class LinguaLensGUIApp:
         return None
 
     def _ingest_typed_text(self) -> threading.Thread | None:
+        if self._guard_v2_mode("Manual text ingestion"):
+            return None
         if not self.active_case_id:
             new_c = self.client.create_case(f"C-{len(self.client.list_cases()) + 1:03d}", "2021-05", "th", "Manual text case")
             self.active_case_id = new_c["case_id"]
@@ -2251,6 +2729,8 @@ class LinguaLensGUIApp:
             ).pack(side=tk.LEFT)
 
     def _save_utterance_edit(self) -> None:
+        if self._guard_v2_mode("Editing utterance"):
+            return
         sel = self.tree_utterances.selection()
         if not sel or not self.active_transcript:
             return
@@ -2325,11 +2805,13 @@ class LinguaLensGUIApp:
 
     def _auto_refine_speakers(self) -> None:
         """Run clinical dialogue flow and turn-taking refiner on the current transcript."""
-        if not self.active_transcript or not self.active_transcript.get("transcript_id"):
+        if self._guard_v2_mode("Auto-refining speakers"):
+            return
+        tr_id = self.active_transcript.get("transcript_id") or self.active_transcript.get("id") if self.active_transcript else None
+        if not self.active_transcript or not tr_id:
             messagebox.showinfo("Auto-Refine", "No transcript loaded to refine.")
             return
 
-        tr_id = self.active_transcript["transcript_id"]
         updated = self.client.auto_refine_speakers(tr_id)
         if updated:
             self.active_transcript = updated
@@ -2345,11 +2827,13 @@ class LinguaLensGUIApp:
 
     def _swap_speakers(self) -> None:
         """Swap CHI and Adult (INV/MOT) roles across all utterances."""
-        if not self.active_transcript or not self.active_transcript.get("transcript_id"):
+        if self._guard_v2_mode("Swapping speakers"):
+            return
+        tr_id = self.active_transcript.get("transcript_id") or self.active_transcript.get("id") if self.active_transcript else None
+        if not self.active_transcript or not tr_id:
             messagebox.showinfo("Swap Speakers", "No transcript loaded to swap.")
             return
 
-        tr_id = self.active_transcript["transcript_id"]
         updated = self.client.swap_speakers(tr_id, spk1="CHI", spk2="INV")
         if updated:
             self.active_transcript = updated
@@ -2370,6 +2854,8 @@ class LinguaLensGUIApp:
         messagebox.showinfo("Findings Updated", "Findings and metrics recalculated successfully from latest transcript.")
 
     def _attest_transcript(self) -> None:
+        if self._guard_v2_mode("Attesting transcript"):
+            return
         if not self.active_transcript:
             return
         self.active_transcript = self.client.attest_transcript(
@@ -2380,6 +2866,8 @@ class LinguaLensGUIApp:
         self.notebook.select(3)  # Jump to Findings tab
 
     def _generate_report_draft(self) -> None:
+        if self._guard_v2_mode("Generating report"):
+            return
         if not self.active_session_id:
             messagebox.showwarning("Warning", "Please select a Session first.")
             return
@@ -2399,6 +2887,8 @@ class LinguaLensGUIApp:
         self.lbl_report_status.config(text=f"Report Status: {rep.get('status')}", foreground="#0284c7")
 
     def _sign_off_report(self) -> None:
+        if self._guard_v2_mode("Signing off report"):
+            return
         if not self.active_report:
             self._generate_report_draft()
         if not self.active_report:
@@ -2421,6 +2911,8 @@ class LinguaLensGUIApp:
         messagebox.showinfo("Signed Off", f"Report signed off and locked!\nSHA-256: {rep.get('sha256_hash')}")
 
     def _export_report(self) -> None:
+        if self._guard_v2_mode("Exporting report"):
+            return
         if not self.active_session_id:
             messagebox.showwarning("Warning", "Please select a Session first.")
             return
@@ -2682,8 +3174,16 @@ class LinguaLensGUIApp:
         # Needle head handle
         self.canvas_waveform.create_oval(px - 4, 1, px + 4, 9, fill="#38bdf8", outline="#ffffff", width=1, tags="playhead")
 
+    def _seek_to_position(self, target_sec: float) -> None:
+        """Seek playhead position safely guarded by V2 mode."""
+        if self._guard_v2_mode("Audio seek"):
+            return None
+        self._seek_and_play(target_sec, auto_play=False)
+
     def _seek_and_play(self, target_sec: float, auto_play: bool = True) -> None:
         """Seek to a specific timestamp, update playhead needle, highlight matching sentence, and play."""
+        if self._guard_v2_mode("Audio seek"):
+            return None
         if not self.active_audio_path or not os.path.exists(self.active_audio_path):
             return
 
@@ -2765,6 +3265,8 @@ class LinguaLensGUIApp:
 
     def _export_cha_file(self) -> None:
         """Export authentic TalkBank CHAT (.cha) transcript with %mor: tiers."""
+        if self._guard_v2_mode("Export TalkBank CHAT"):
+            return
         if not self.active_transcript:
             messagebox.showwarning("No Data", "No transcript available to export.")
             return
@@ -2785,6 +3287,8 @@ class LinguaLensGUIApp:
 
     def _export_csv_biomarkers(self) -> None:
         """Export tabular speech, language, and acoustic biomarker parameters to CSV."""
+        if self._guard_v2_mode("Export Biomarkers CSV"):
+            return
         if not self.active_session_id:
             messagebox.showwarning("Warning", "Please select a Session first.")
             return
@@ -2807,6 +3311,8 @@ class LinguaLensGUIApp:
 
     def _export_html_report(self) -> None:
         """Export a comprehensive, beautifully styled bilingual clinical HTML report ready for printing/PDF."""
+        if self._guard_v2_mode("Export HTML Report"):
+            return
         if not self.active_session_id:
             messagebox.showwarning("Warning", "Please select a Session first.")
             return
@@ -2880,7 +3386,7 @@ class LinguaLensGUIApp:
 
         ttk.Label(frame, text="Child Identifier:").grid(row=0, column=0, sticky=tk.W, pady=6)
         e_cid = ttk.Entry(frame)
-        cases_count = len(self.client._mock_data.get("cases", [])) if hasattr(self.client, "_mock_data") and isinstance(self.client._mock_data, dict) else 1
+        cases_count = len(self.tree_cases.get_children()) if hasattr(self, "tree_cases") else 1
         e_cid.insert(0, f"C-{cases_count + 1:03d}")
         e_cid.grid(row=0, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
 
@@ -2900,15 +3406,18 @@ class LinguaLensGUIApp:
         e_notes.grid(row=3, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
 
         def _do_create():
-            new_c = self.client.create_case(e_cid.get().strip(), e_dob.get().strip(), e_lang.get().strip(), e_notes.get().strip())
-            self._refresh_cases()
-            for idx, val in enumerate(self.combo_global_case["values"]):
-                if val.startswith(new_c["case_id"]):
-                    self.combo_global_case.current(idx)
-                    self.active_case_id = new_c["case_id"]
-                    break
-            self._refresh_sessions_for_active_case()
-            win.destroy()
+            try:
+                new_c = self.client.create_case(e_cid.get().strip(), e_dob.get().strip(), e_lang.get().strip(), e_notes.get().strip())
+                self._refresh_cases()
+                for idx, val in enumerate(self.combo_global_case["values"]):
+                    if val.startswith(new_c["case_id"]):
+                        self.combo_global_case.current(idx)
+                        self.active_case_id = new_c["case_id"]
+                        break
+                self._refresh_sessions_for_active_case()
+                win.destroy()
+            except Exception as exc:
+                messagebox.showerror("Case Creation Failed", str(exc))
 
         btn_row = ttk.Frame(frame)
         btn_row.grid(row=4, column=0, columnspan=2, pady=(16, 0), sticky=tk.E)
@@ -2948,11 +3457,15 @@ class LinguaLensGUIApp:
         def _do_create():
             if not self.active_case_id:
                 return
-            new_s = self.client.create_session(self.active_case_id, e_date.get().strip(), e_notes.get().strip())
-            self._refresh_sessions_for_active_case()
-            win.destroy()
+            try:
+                new_s = self.client.create_session(self.active_case_id, e_date.get().strip(), e_notes.get().strip())
+                self._refresh_sessions_for_active_case()
+                win.destroy()
+            except Exception as exc:
+                messagebox.showerror("Session Creation Failed", str(exc))
 
         btn_row = ttk.Frame(frame)
+
         btn_row.grid(row=2, column=0, columnspan=2, pady=(16, 0), sticky=tk.E)
         ttk.Button(btn_row, text="Cancel", command=win.destroy).pack(side=tk.RIGHT, padx=(6, 0))
         ttk.Button(btn_row, text="Start Session", style="Primary.TButton", command=_do_create).pack(side=tk.RIGHT)
@@ -2960,9 +3473,2262 @@ class LinguaLensGUIApp:
         return win
 
     def _show_create_session_dialog(self) -> tk.Toplevel | None:
+        if self._guard_v2_mode("Create session"):
+            return None
         if not self.active_case_id:
             messagebox.showwarning("Warning", "Please select a Case first.")
             return None
         win = self._build_create_session_window()
         win.grab_set()
         return win
+
+    # -------------------------------------------------------------------------
+    # Assessment V2 — Stage 1: Child Management & Context
+    # -------------------------------------------------------------------------
+
+    def _validate_child_intake(self, display_code: str, birth_year: int, birth_month: int) -> str | None:
+        """Validate child intake inputs client-side before network dispatch."""
+        if not isinstance(display_code, str):
+            return "Child Identifier / Display Code is required."
+        trimmed = display_code.strip()
+        if not trimmed:
+            return "Child Identifier / Display Code is required."
+        if len(trimmed) > 64:
+            return "Child Identifier / Display Code must be between 1 and 64 characters."
+
+        if isinstance(birth_year, bool):
+            return "Invalid birth year format."
+        try:
+            by = int(birth_year) if not isinstance(birth_year, float) else None
+            if by is None or not (1900 <= by <= 2100):
+                return "Birth year must be between 1900 and 2100."
+        except (ValueError, TypeError):
+            return "Invalid birth year format."
+
+        if isinstance(birth_month, bool):
+            return "Invalid birth month format."
+        try:
+            bm = int(birth_month) if not isinstance(birth_month, float) else None
+            if bm is None or not (1 <= bm <= 12):
+                return "Birth month must be between 1 and 12."
+        except (ValueError, TypeError):
+            return "Invalid birth month format."
+
+        from packages.tui.validation import validate_child_input, LinguaLensValidationError
+        try:
+            validate_child_input(trimmed, by, bm)
+            return None
+        except (LinguaLensValidationError, ValueError) as err:
+            return str(err)
+
+
+    def _get_current_session_generation(self) -> int:
+        if hasattr(self.client, "get_session"):
+            try:
+                sess = self.client.get_session()
+                if sess and hasattr(sess, "generation") and isinstance(sess.generation, int):
+                    app_gen = getattr(self, "_current_session_generation", 1)
+                    return max(sess.generation, app_gen)
+            except Exception:
+                pass
+        return getattr(self, "_current_session_generation", 1)
+
+    def _handle_auth_error(self, error: Exception, session_generation: int | None = None) -> None:
+        """Handle HTTP 401 / auth invalidation: wipe clinical context and clear session."""
+        current_gen = self._get_current_session_generation()
+        if session_generation is not None and session_generation != current_gen:
+            return  # Discard stale 401 from an earlier session generation
+
+        if hasattr(self.client, "clear_session"):
+            self.client.clear_session()
+        self._current_session_generation = current_gen + 1
+
+        # Stop audio playback and reset audio path
+        self._stop_playback()
+        self.active_audio_path = None
+
+        # Reset legacy clinical state
+        self.active_case_id = None
+        self.active_session_id = None
+        self.active_transcript = None
+        self.active_report = None
+        self._legacy_context_generation = getattr(self, "_legacy_context_generation", 0) + 1
+
+        # Reset V2 clinical state
+        self.active_child_id = None
+        self.active_child = None
+        self.active_consent = None
+        self._current_consent_status = "not-loaded"
+        self._consent_loaded_at = None
+        self.active_assessment_id = None
+        self.active_assessment = None
+        self._cached_assessments = []
+        self._presentation_row_iids = set()
+        self._assessment_list_error = None
+        self._current_child_request_id = None
+        self._consent_request_id = None
+        self._current_assessment_selection_req_id = None
+        self._current_refresh_request_id = None
+        self._child_selection_generation = getattr(self, "_child_selection_generation", 0) + 1
+        self._assessment_selection_generation = getattr(self, "_assessment_selection_generation", 0) + 1
+
+        # Cancel any active assessment dialog / operation
+        if getattr(self, "_current_asmt_cancel_event", None):
+            try:
+                self._current_asmt_cancel_event.set()
+            except Exception:
+                pass
+        self._current_asmt_cancel_event = None
+        self._current_asmt_dialog_token = None
+
+        # Unconditionally clear busy state
+        self._set_busy_state(False, "Ready")
+
+        # Clear UI trees and selectors
+        for tree_name in (
+            "tree_cases",
+            "tree_sessions",
+            "tree_children",
+            "tree_assessments",
+            "tree_utterances",
+            "tree_metrics",
+            "tree_guidelines",
+            "tree_longitudinal",
+        ):
+            tree = getattr(self, tree_name, None)
+            if tree is not None and tree.winfo_exists():
+                for it in tree.get_children():
+                    tree.delete(it)
+
+        # Clear clinical text widgets (preserving disabled state where set)
+        for txt_name in (
+            "txt_chat_view",
+            "txt_narrative",
+            "txt_recommendations",
+            "txt_manual",
+            "txt_radar_summary",
+        ):
+            w = getattr(self, txt_name, None)
+            if w is not None and w.winfo_exists():
+                st = w.cget("state")
+                w.config(state=tk.NORMAL)
+                w.delete("1.0", tk.END)
+                w.config(state=st)
+
+        # Clear clinical canvases/plots
+        for canvas_name in ("canvas_waveform", "canvas_radar"):
+            c = getattr(self, canvas_name, None)
+            if c is not None and c.winfo_exists():
+                c.delete("all")
+
+        # Clear combobox values and selections (prevent re-selection of old clinical records)
+        for combo_name in ("combo_global_case", "combo_global_session", "combo_global_child"):
+            combo = getattr(self, combo_name, None)
+            if combo is not None and combo.winfo_exists():
+                combo["values"] = []
+                combo.set("")
+
+        # Clear clinical entry fields
+        for entry_name in ("entry_audio_path", "entry_u_text", "entry_case_search"):
+            e = getattr(self, entry_name, None)
+            if e is not None and e.winfo_exists():
+                e.delete(0, tk.END)
+
+        # Reset context labels
+        if hasattr(self, "lbl_ingest_ctx") and self.lbl_ingest_ctx.winfo_exists():
+            self.lbl_ingest_ctx.config(text="Active Context: Please sign in to begin")
+        if hasattr(self, "lbl_longitudinal_summary") and self.lbl_longitudinal_summary.winfo_exists():
+            self.lbl_longitudinal_summary.config(text="")
+        if hasattr(self, "lbl_review_status") and self.lbl_review_status.winfo_exists():
+            self.lbl_review_status.config(text="Transcript Status: Not loaded")
+        if hasattr(self, "lbl_report_status") and self.lbl_report_status.winfo_exists():
+            self.lbl_report_status.config(text="Report Status: None")
+        if hasattr(self, "lbl_playback_status") and self.lbl_playback_status.winfo_exists():
+            self.lbl_playback_status.config(text="⏹ Stopped")
+        if hasattr(self, "lbl_time_current") and self.lbl_time_current.winfo_exists():
+            self.lbl_time_current.config(text="00:00")
+        if hasattr(self, "lbl_time_total") and self.lbl_time_total.winfo_exists():
+            self.lbl_time_total.config(text="00:00")
+
+        # Close any open child dialogs containing clinical data
+        if hasattr(self, "root") and self.root.winfo_exists():
+            for child in list(self.root.winfo_children()):
+                if isinstance(child, tk.Toplevel):
+                    try:
+                        child.destroy()
+                    except Exception:
+                        pass
+
+        self._update_consent_badge("not-loaded", None)
+        self._update_downstream_tabs_mode()
+
+        if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+            self.lbl_status.config(text="⚠️ Authentication Required: Session expired. Please sign in.")
+
+        # Idempotent dialog storm prevention
+        if not getattr(self, "_auth_dialog_active", False):
+            self._auth_dialog_active = True
+            try:
+                messagebox.showerror("Sign-in Required", f"Session expired or authentication required:\n{error}")
+            finally:
+                self._auth_dialog_active = False
+
+    def _handle_permission_error(
+        self,
+        error: Exception,
+        request_id: str | None = None,
+        session_generation: int | None = None,
+    ) -> None:
+        """Handle HTTP 403 / permission denial: show dialog without clearing session credentials."""
+        if session_generation is not None and session_generation != self._get_current_session_generation():
+            return
+        if request_id is not None and hasattr(self, "_current_child_request_id") and request_id != self._current_child_request_id:
+            return  # Discard stale 403 from an older request
+
+        # Only clear active child if the error is for the current request
+        if request_id is not None and getattr(self, "_current_child_request_id", None) == request_id:
+            self.active_child_id = None
+            self.active_child = None
+
+        if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+            self.lbl_status.config(text=f"⛔ Permission Denied: {error}")
+        messagebox.showerror("Permission Denied", f"Access Denied: You do not have permission for this resource.\n{error}")
+
+    def _on_async_child_selected(
+        self,
+        request_id: str,
+        child_data: dict[str, Any],
+        session_generation: int | None = None,
+    ) -> None:
+        """Process loaded child data, discarding if request_id or session_generation is stale."""
+        if session_generation is not None and session_generation != self._get_current_session_generation():
+            return
+        if hasattr(self, "_current_child_request_id") and request_id != self._current_child_request_id:
+            return  # Discard stale late response
+        if not child_data or not isinstance(child_data, dict):
+            return
+
+        # Transition mode to V2 and clear legacy context
+        self.current_mode = "v2"
+        self._legacy_context_generation = getattr(self, "_legacy_context_generation", 0) + 1
+        self._stop_playback()
+
+        self.active_case_id = None
+        self.active_session_id = None
+        self.active_transcript = None
+        self.active_report = None
+        self.active_audio_path = None
+
+        if hasattr(self, "tree_cases") and self.tree_cases.winfo_exists():
+            sel_cases = self.tree_cases.selection()
+            if sel_cases:
+                self.tree_cases.selection_remove(*sel_cases)
+        if hasattr(self, "tree_sessions") and self.tree_sessions.winfo_exists():
+            sel_sess = self.tree_sessions.selection()
+            if sel_sess:
+                self.tree_sessions.selection_remove(*sel_sess)
+        if hasattr(self, "combo_global_case") and self.combo_global_case.winfo_exists():
+            self.combo_global_case.set("")
+        if hasattr(self, "combo_global_session") and self.combo_global_session.winfo_exists():
+            self.combo_global_session.set("")
+
+        self.active_child_id = child_data.get("id")
+        self.active_child = child_data
+        self._cached_assessments = []
+        self.active_assessment_id = None
+        self.active_assessment = None
+        self._update_downstream_tabs_mode()
+        self._current_consent_thread = self._refresh_consent()
+        self._current_assessment_thread = self._refresh_assessments()
+
+    def _on_child_load_error(self, request_id: str, error: Exception) -> None:
+        if hasattr(self, "_current_child_request_id") and request_id != self._current_child_request_id:
+            return
+        if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+            self.lbl_status.config(text=f"⚠️ Failed to load child: {error}")
+        messagebox.showerror("Child Load Failed", str(error))
+
+    def _resolve_consent_state(
+        self,
+        consents: list[dict[str, Any]],
+        purpose: str = "clinical_assessment",
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Resolve authoritative consent status from history using latest-version-per-purpose semantics."""
+        matching = [c for c in consents if c.get("purpose") == purpose]
+        if not matching:
+            return "no-record", None
+        latest = max(matching, key=lambda c: c.get("version", 0))
+        st = latest.get("status")
+        if st == "active":
+            return "active", latest
+        elif st == "withdrawn":
+            return "withdrawn", latest
+        return st or "unknown", latest
+
+    def _update_consent_badge(
+        self,
+        status: str,
+        consent_rec: dict[str, Any] | None,
+        loaded_at: str | None = None,
+        error_msg: str | None = None,
+    ) -> None:
+        """Update consent status badge and loaded timestamp in context bar."""
+        self._current_consent_status = status
+        if not hasattr(self, "lbl_consent_status") or not self.lbl_consent_status.winfo_exists():
+            return
+
+        if status == "not-loaded":
+            self.lbl_consent_status.config(text="[Consent Not Loaded]", bg="#f1f5f9", fg="#64748b")
+        elif status == "loading":
+            self.lbl_consent_status.config(text="⏳ Loading consent...", bg="#fef3c7", fg="#b45309")
+        elif status == "active":
+            v = consent_rec.get("version", 1) if consent_rec else 1
+            self.lbl_consent_status.config(text=f"✓ Active Consent (v{v})", bg="#dcfce7", fg="#15803d")
+        elif status == "withdrawn":
+            v = consent_rec.get("version", "") if consent_rec else ""
+            v_txt = f" (v{v})" if v else ""
+            self.lbl_consent_status.config(text=f"⛔ Consent Withdrawn{v_txt}", bg="#fee2e2", fg="#b91c1c")
+        elif status == "no-record":
+            self.lbl_consent_status.config(text="⚪ No Record", bg="#f1f5f9", fg="#475569")
+        elif status == "error":
+            msg = error_msg or "Error loading consent"
+            self.lbl_consent_status.config(text=f"⚠️ {msg}", bg="#fee2e2", fg="#dc2626")
+
+        if hasattr(self, "lbl_consent_loaded_at") and self.lbl_consent_loaded_at.winfo_exists():
+            if loaded_at:
+                self.lbl_consent_loaded_at.config(text=f"(Loaded at {loaded_at})")
+            elif status == "not-loaded":
+                self.lbl_consent_loaded_at.config(text="")
+
+    def _refresh_consent(self) -> threading.Thread | None:
+        """Fetch authoritative consent history for the active child asynchronously."""
+        if not self.active_child_id:
+            self._update_consent_badge("not-loaded", None)
+            return None
+
+        child_id = self.active_child_id
+        session_gen = self._get_current_session_generation()
+        child_sel_gen = self._child_selection_generation
+        request_id = f"consent-{child_id}-{uuid.uuid4().hex[:8]}"
+        self._consent_request_id = request_id
+
+        self._update_consent_badge("loading", None)
+
+        def worker() -> None:
+            try:
+                consents = self.client.list_consents(child_id)
+                self._async_queue.put((
+                    lambda: self._on_consent_refreshed(
+                        child_id=child_id,
+                        consents=consents,
+                        request_id=request_id,
+                        session_gen=session_gen,
+                        child_sel_gen=child_sel_gen,
+                    ),
+                    None,
+                ))
+            except Exception as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._on_consent_refresh_error(
+                        child_id=child_id,
+                        error=e,
+                        request_id=request_id,
+                        session_gen=session_gen,
+                        child_sel_gen=child_sel_gen,
+                    ),
+                    exc,
+                ))
+
+        t = threading.Thread(target=worker, daemon=True)
+        self._current_consent_thread = t
+        t.start()
+        return t
+
+    def _on_consent_refreshed(
+        self,
+        child_id: str,
+        consents: list[dict[str, Any]],
+        request_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+    ) -> None:
+        if session_gen != self._get_current_session_generation():
+            return
+        if child_sel_gen != self._child_selection_generation or child_id != self.active_child_id:
+            return
+        if request_id != self._consent_request_id:
+            return
+
+        status, latest_rec = self._resolve_consent_state(consents, purpose="clinical_assessment")
+        self.active_consent = latest_rec if status == "active" else None
+        now_str = datetime.now().strftime("%H:%M:%S")
+        self._consent_loaded_at = now_str
+        self._update_consent_badge(status, latest_rec, loaded_at=now_str)
+
+    def _on_consent_refresh_error(
+        self,
+        child_id: str,
+        error: Exception,
+        request_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+    ) -> None:
+        from packages.tui.client import LinguaLensAuthError, LinguaLensPermissionError
+        if isinstance(error, LinguaLensAuthError) or (
+            hasattr(error, "status_code") and getattr(error, "status_code", None) == 401
+        ):
+            if session_gen == self._get_current_session_generation():
+                self._handle_auth_error(error, session_generation=session_gen)
+            return
+
+        if session_gen != self._get_current_session_generation():
+            return
+        if child_sel_gen != self._child_selection_generation or child_id != self.active_child_id:
+            return
+        if request_id != self._consent_request_id:
+            return
+
+        if isinstance(error, LinguaLensPermissionError):
+            self._update_consent_badge("error", None, error_msg="Permission Denied")
+            return
+        else:
+            self._update_consent_badge("error", None, error_msg="Error loading consent")
+
+    def _show_record_consent_dialog(self) -> tk.Toplevel | None:
+        """Display explicit consent recording modal for the active child."""
+        if not self.active_child_id:
+            messagebox.showwarning("No Child Selected", "Please select a child profile first.")
+            return None
+
+        child_id = self.active_child_id
+        child_code = self.active_child.get("display_code", child_id) if self.active_child else child_id
+        session_gen = self._get_current_session_generation()
+        child_sel_gen = self._child_selection_generation
+
+        win = tk.Toplevel(self.root)
+        win.title("Record Authorized Consent")
+        win.geometry("500x420")
+        win.transient(self.root)
+        try:
+            win.grab_set()
+        except Exception:
+            pass
+
+        win._dlg_token = f"rec-consent-{child_id}-{uuid.uuid4().hex[:8]}"
+        win._target_child_id = child_id
+        win._target_child_code = child_code
+        win._session_generation = session_gen
+        win._child_selection_generation = child_sel_gen
+        win._is_submitting = False
+
+        frame = ttk.Frame(win, padding=16)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frame, text="📋 Record Parental / Guardian Consent", font=("Helvetica", 12, "bold")).pack(anchor=tk.W, pady=(0, 6))
+
+        notice_lbl = ttk.Label(
+            frame,
+            text="Notice: This action records official consent received from or withdrawn by\n"
+                 "the child's parent/guardian. Clicking confirm documents authorized status\n"
+                 "and does not constitute direct parental consent.",
+            font=("Helvetica", 9),
+            foreground="#475569",
+        )
+        notice_lbl.pack(anchor=tk.W, pady=(0, 10))
+
+        # Child display (bound at dialog opening)
+        row1 = ttk.Frame(frame)
+        row1.pack(fill=tk.X, pady=4)
+        ttk.Label(row1, text="Child:", width=14, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT)
+        ttk.Label(row1, text=f"{child_code} ({child_id})", font=("Helvetica", 9)).pack(side=tk.LEFT)
+
+        # Purpose (strictly fixed to clinical_assessment for Subtask B)
+        row2 = ttk.Frame(frame)
+        row2.pack(fill=tk.X, pady=4)
+        ttk.Label(row2, text="Purpose:", width=14, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT)
+        ttk.Label(row2, text="clinical_assessment", font=("Helvetica", 9, "bold")).pack(side=tk.LEFT)
+
+        # Scope Version (explicit input, validated against schema 1-64 chars)
+        row3 = ttk.Frame(frame)
+        row3.pack(fill=tk.X, pady=4)
+        ttk.Label(row3, text="Scope Version:", width=14, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT)
+        entry_scope = ttk.Entry(row3, width=28)
+        entry_scope.insert(0, "2026.1")
+        entry_scope.pack(side=tk.LEFT)
+
+        # Action / Status
+        row4 = ttk.Frame(frame)
+        row4.pack(fill=tk.X, pady=6)
+        ttk.Label(row4, text="Consent Action:", width=14, font=("Helvetica", 9, "bold")).pack(side=tk.LEFT)
+        status_var = tk.StringVar(value="active")
+        r_active = ttk.Radiobutton(row4, text="Grant Active Consent", variable=status_var, value="active")
+        r_active.pack(side=tk.LEFT, padx=(0, 8))
+        r_withdrawn = ttk.Radiobutton(row4, text="Withdraw Consent", variable=status_var, value="withdrawn")
+        r_withdrawn.pack(side=tk.LEFT)
+
+        # Button Bar
+        btn_bar = ttk.Frame(frame)
+        btn_bar.pack(fill=tk.X, pady=(16, 0))
+
+        def on_confirm():
+            if (
+                win._target_child_id != self.active_child_id
+                or win._session_generation != self._get_current_session_generation()
+                or win._child_selection_generation != self._child_selection_generation
+            ):
+                messagebox.showerror(
+                    "Context Changed",
+                    "Clinical context changed since this dialog was opened. Consent recording aborted.",
+                    parent=win if win.winfo_exists() else self.root,
+                )
+                if win.winfo_exists():
+                    win.destroy()
+                return
+
+            scope = entry_scope.get().strip()
+            if not scope:
+                messagebox.showerror(
+                    "Validation Error",
+                    "Scope Version is required and cannot be empty.",
+                    parent=win if win.winfo_exists() else self.root,
+                )
+                return
+            if len(scope) > 64:
+                messagebox.showerror(
+                    "Validation Error",
+                    "Scope Version must not exceed 64 characters.",
+                    parent=win if win.winfo_exists() else self.root,
+                )
+                return
+
+            st = status_var.get()
+            self._submit_record_consent(win, purpose="clinical_assessment", scope_version=scope, status=st)
+
+        win.btn_confirm = ttk.Button(btn_bar, text="✓ Confirm Recording", command=on_confirm)
+        win.btn_confirm.pack(side=tk.RIGHT, padx=(6, 0))
+
+        win.btn_cancel = ttk.Button(btn_bar, text="Cancel", command=win.destroy)
+        win.btn_cancel.pack(side=tk.RIGHT)
+
+        return win
+
+    def _submit_record_consent(
+        self,
+        win: tk.Toplevel,
+        purpose: str,
+        scope_version: str,
+        status: str,
+    ) -> threading.Thread | None:
+        """Submit record consent mutation with explicit confirmation, debouncing, and target verification."""
+        if getattr(win, "_is_submitting", False):
+            return None
+
+        target_child_id = getattr(win, "_target_child_id", self.active_child_id)
+        target_child_code = getattr(win, "_target_child_code", None) or (
+            self.active_child.get("display_code", target_child_id) if self.active_child else target_child_id
+        )
+        target_session_gen = getattr(win, "_session_generation", self._get_current_session_generation())
+        target_child_sel_gen = getattr(win, "_child_selection_generation", self._child_selection_generation)
+
+        # Context drift check before confirmation
+        if (
+            not target_child_id
+            or target_child_id != self.active_child_id
+            or target_session_gen != self._get_current_session_generation()
+            or target_child_sel_gen != self._child_selection_generation
+        ):
+            messagebox.showerror(
+                "Context Changed",
+                "Clinical context changed or child is not active. Consent recording aborted.",
+                parent=win if win.winfo_exists() else self.root,
+            )
+            if win.winfo_exists():
+                win.destroy()
+            return None
+
+        # Validation on scope_version
+        scope_clean = (scope_version or "").strip()
+        if not scope_clean:
+            messagebox.showerror(
+                "Validation Error",
+                "Scope Version is required and cannot be empty.",
+                parent=win if win.winfo_exists() else self.root,
+            )
+            return None
+        if len(scope_clean) > 64:
+            messagebox.showerror(
+                "Validation Error",
+                "Scope Version must not exceed 64 characters.",
+                parent=win if win.winfo_exists() else self.root,
+            )
+            return None
+
+        # Explicit confirmation
+        action_desc = "Grant Active Consent" if status == "active" else "Withdraw Consent"
+        confirm_msg = (
+            f"Please confirm recording the following consent status:\n\n"
+            f"• Child: {target_child_code} ({target_child_id})\n"
+            f"• Purpose: {purpose}\n"
+            f"• Scope Version: {scope_clean}\n"
+            f"• Action: {action_desc}\n\n"
+            f"Are you sure you wish to record this consent status?"
+        )
+        parent_win = win if win.winfo_exists() else self.root
+        try:
+            confirmed = messagebox.askyesno("Confirm Consent Recording", confirm_msg, parent=parent_win)
+        except TypeError:
+            confirmed = messagebox.askyesno("Confirm Consent Recording", confirm_msg)
+        if not confirmed:
+            return None
+
+        # Re-verify context drift after confirmation modal returns
+        if (
+            target_child_id != self.active_child_id
+            or target_session_gen != self._get_current_session_generation()
+            or target_child_sel_gen != self._child_selection_generation
+        ):
+            messagebox.showerror(
+                "Context Changed",
+                "Clinical context changed during confirmation. Consent recording aborted.",
+                parent=win if win.winfo_exists() else self.root,
+            )
+            if win.winfo_exists():
+                win.destroy()
+            return None
+
+        win._is_submitting = True
+        if hasattr(win, "btn_confirm") and win.btn_confirm.winfo_exists():
+            win.btn_confirm.config(state="disabled")
+
+        dlg_token = getattr(win, "_dlg_token", "")
+        req_id = f"rec-req-{uuid.uuid4().hex[:8]}"
+        self._set_busy_state(True, "Recording consent...", request_id=req_id)
+
+        def worker() -> None:
+            try:
+                new_consent = self.client.record_consent(target_child_id, purpose, scope_clean, status)
+                self._async_queue.put((
+                    lambda: self._on_record_consent_success(
+                        win=win,
+                        dlg_token=dlg_token,
+                        request_id=req_id,
+                        child_id=target_child_id,
+                        new_consent=new_consent,
+                        session_gen=target_session_gen,
+                        child_sel_gen=target_child_sel_gen,
+                    ),
+                    None,
+                ))
+            except Exception as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._on_record_consent_error(
+                        win=win,
+                        dlg_token=dlg_token,
+                        request_id=req_id,
+                        child_id=target_child_id,
+                        error=e,
+                        session_gen=target_session_gen,
+                        child_sel_gen=target_child_sel_gen,
+                    ),
+                    exc,
+                ))
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        return t
+
+    def _on_record_consent_success(
+        self,
+        win: tk.Toplevel,
+        dlg_token: str,
+        request_id: str,
+        child_id: str,
+        new_consent: dict[str, Any],
+        session_gen: int,
+        child_sel_gen: int,
+    ) -> None:
+        self._set_busy_state(False, "Ready", request_id=request_id)
+
+        # Session generation check
+        if session_gen != self._get_current_session_generation():
+            if win.winfo_exists():
+                win.destroy()
+            return
+
+        # Child selection generation check
+        if child_sel_gen != self._child_selection_generation or child_id != self.active_child_id:
+            if win.winfo_exists():
+                win.destroy()
+            return
+
+        # Close dialog if matching token
+        dialog_was_active = win.winfo_exists() and getattr(win, "_dlg_token", None) == dlg_token
+        if dialog_was_active:
+            win.destroy()
+
+        if not dialog_was_active:
+            # Dialog closed or cancelled before response arrived; discard presentation
+            return
+
+        # Transition badge immediately to pending refresh state
+        self._update_consent_badge("loading", None, loaded_at=None)
+
+        # Asynchronously fetch authoritative history without blocking UI thread
+        self._current_consent_thread = self._refresh_consent_after_mutation(
+            child_id=child_id,
+            session_gen=session_gen,
+            child_sel_gen=child_sel_gen,
+            new_consent=new_consent,
+        )
+
+    def _refresh_consent_after_mutation(
+        self,
+        child_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+        new_consent: dict[str, Any],
+    ) -> threading.Thread | None:
+        """Asynchronously refresh authoritative consent status after successful mutation."""
+        refresh_req_id = f"consent-ref-{child_id}-{uuid.uuid4().hex[:8]}"
+        self._consent_request_id = refresh_req_id
+
+        def worker() -> None:
+            try:
+                consents = self.client.list_consents(child_id)
+                self._async_queue.put((
+                    lambda: self._on_post_mutation_refresh_success(
+                        child_id=child_id,
+                        consents=consents,
+                        request_id=refresh_req_id,
+                        session_gen=session_gen,
+                        child_sel_gen=child_sel_gen,
+                    ),
+                    None,
+                ))
+            except Exception as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._on_post_mutation_refresh_error(
+                        child_id=child_id,
+                        error=e,
+                        request_id=refresh_req_id,
+                        session_gen=session_gen,
+                        child_sel_gen=child_sel_gen,
+                        new_consent=new_consent,
+                    ),
+                    exc,
+                ))
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        return t
+
+    def _on_post_mutation_refresh_success(
+        self,
+        child_id: str,
+        consents: list[dict[str, Any]],
+        request_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+    ) -> None:
+        if session_gen != self._get_current_session_generation():
+            return
+        if child_sel_gen != self._child_selection_generation or child_id != self.active_child_id:
+            return
+        if request_id != self._consent_request_id:
+            return
+
+        status, latest_rec = self._resolve_consent_state(consents, purpose="clinical_assessment")
+        self.active_consent = latest_rec if status == "active" else None
+        now_str = datetime.now().strftime("%H:%M:%S")
+        self._consent_loaded_at = now_str
+        self._update_consent_badge(status, latest_rec, loaded_at=now_str)
+        messagebox.showinfo("Success", f"Consent recorded successfully for child {child_id}.")
+
+    def _on_post_mutation_refresh_error(
+        self,
+        child_id: str,
+        error: Exception,
+        request_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+        new_consent: dict[str, Any],
+    ) -> None:
+        from packages.tui.client import LinguaLensAuthError, LinguaLensPermissionError
+
+        # Invalidate auth is a session-level concern
+        if isinstance(error, LinguaLensAuthError):
+            if session_gen == self._get_current_session_generation():
+                self._handle_auth_error(error, session_generation=session_gen)
+            return
+
+        if session_gen != self._get_current_session_generation():
+            return
+        if child_sel_gen != self._child_selection_generation or child_id != self.active_child_id:
+            return
+        if request_id != self._consent_request_id:
+            return
+
+        if isinstance(error, LinguaLensPermissionError):
+            self._update_consent_badge("error", None, error_msg="Permission Denied on Refresh")
+            messagebox.showwarning(
+                "Consent Recorded (Refresh Denied)",
+                f"Consent was recorded successfully, but permission was denied to refresh history: {error}. Session preserved.",
+            )
+            return
+
+        # General error on refresh
+        self._update_consent_badge("error", None, error_msg="Recorded (Refresh Failed)")
+        messagebox.showwarning(
+            "Consent Recorded (Refresh Failed)",
+            f"Consent was recorded successfully, but failed to refresh status: {error}. Please refresh manually.",
+        )
+
+    def _on_record_consent_error(
+        self,
+        win: tk.Toplevel,
+        dlg_token: str,
+        request_id: str,
+        child_id: str,
+        error: Exception,
+        session_gen: int,
+        child_sel_gen: int,
+    ) -> None:
+        self._set_busy_state(False, "Ready", request_id=request_id)
+
+        from packages.tui.client import LinguaLensAuthError, LinguaLensPermissionError, LinguaLensConflictError
+
+        # Invalidate auth is a session-level concern: handle current-session 401 even if dialog is closed
+        if isinstance(error, LinguaLensAuthError):
+            if session_gen == self._get_current_session_generation():
+                if win.winfo_exists():
+                    win.destroy()
+                self._handle_auth_error(error, session_generation=session_gen)
+            return
+
+        if session_gen != self._get_current_session_generation():
+            if win.winfo_exists():
+                win.destroy()
+            return
+
+        if child_sel_gen != self._child_selection_generation or child_id != self.active_child_id:
+            if win.winfo_exists():
+                win.destroy()
+            return
+
+        dialog_is_valid = win.winfo_exists() and getattr(win, "_dlg_token", None) == dlg_token
+
+        if isinstance(error, LinguaLensPermissionError):
+            if dialog_is_valid:
+                win._is_submitting = False
+                if hasattr(win, "btn_confirm") and win.btn_confirm.winfo_exists():
+                    win.btn_confirm.config(state="normal")
+                messagebox.showerror("Permission Denied", f"You do not have permission to record consent: {error}")
+            return
+
+        if isinstance(error, LinguaLensConflictError):
+            if dialog_is_valid:
+                win._is_submitting = False
+                if hasattr(win, "btn_confirm") and win.btn_confirm.winfo_exists():
+                    win.btn_confirm.config(state="normal")
+                messagebox.showerror("Consent Conflict (409)", f"Consent Conflict: {error}")
+            # Refresh authoritative state on 409 asynchronously without auto-retry POST
+            self._current_consent_thread = self._refresh_consent()
+            return
+
+        # General error
+        if dialog_is_valid:
+            win._is_submitting = False
+            if hasattr(win, "btn_confirm") and win.btn_confirm.winfo_exists():
+                win.btn_confirm.config(state="normal")
+            messagebox.showerror("Consent Recording Failed", f"Failed to record consent: {error}")
+
+    def _set_active_child(self, child_id: str | None) -> threading.Thread | None:
+        """Switch active child asynchronously, flushing previous clinical context immediately."""
+        # Always flush previous clinical context immediately on UI thread
+        if child_id:
+            self.current_mode = "v2"
+            self._legacy_context_generation = getattr(self, "_legacy_context_generation", 0) + 1
+            self._stop_playback()
+            self.active_case_id = None
+            self.active_session_id = None
+            self.active_transcript = None
+            self.active_report = None
+            self.active_audio_path = None
+            if hasattr(self, "tree_cases") and self.tree_cases.winfo_exists():
+                sel_cases = self.tree_cases.selection()
+                if sel_cases:
+                    self.tree_cases.selection_remove(*sel_cases)
+            if hasattr(self, "tree_sessions") and self.tree_sessions.winfo_exists():
+                sel_sess = self.tree_sessions.selection()
+                if sel_sess:
+                    self.tree_sessions.selection_remove(*sel_sess)
+            if hasattr(self, "combo_global_case") and self.combo_global_case.winfo_exists():
+                self.combo_global_case.set("")
+            if hasattr(self, "combo_global_session") and self.combo_global_session.winfo_exists():
+                self.combo_global_session.set("")
+
+        self.active_child_id = None
+        self.active_child = None
+        self.active_consent = None
+        self.active_assessment_id = None
+        self.active_assessment = None
+        self._cached_assessments = []
+        self._presentation_row_iids = set()
+        self._assessment_list_error = None
+        self._assessment_selection_generation = getattr(self, "_assessment_selection_generation", 0) + 1
+        self._current_assessment_selection_req_id = None
+        if getattr(self, "_current_asmt_cancel_event", None):
+            try:
+                self._current_asmt_cancel_event.set()
+            except Exception:
+                pass
+        self._current_asmt_cancel_event = None
+        self._current_asmt_dialog_token = None
+        self._update_downstream_tabs_mode()
+        self._update_consent_badge("not-loaded" if not child_id else "loading", None)
+
+        self._child_selection_generation = getattr(self, "_child_selection_generation", 0) + 1
+        req_id = f"child-req-{uuid.uuid4().hex[:8]}"
+        self._current_child_request_id = req_id
+        session_gen = self._get_current_session_generation()
+
+        if hasattr(self, "tree_assessments") and self.tree_assessments.winfo_exists():
+            for item in self.tree_assessments.get_children():
+                self.tree_assessments.delete(item)
+
+        if not child_id:
+            return None
+
+        from packages.tui.client import LinguaLensAuthError, LinguaLensPermissionError
+
+        def worker() -> None:
+            try:
+                child_data = self.client.get_child(child_id)
+                self._async_queue.put((
+                    lambda: self._on_async_child_selected(req_id, child_data, session_gen),
+                    None,
+                ))
+            except LinguaLensAuthError as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._handle_auth_error(e, session_generation=session_gen),
+                    exc,
+                ))
+            except LinguaLensPermissionError as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._handle_permission_error(e, request_id=req_id, session_generation=session_gen),
+                    exc,
+                ))
+            except Exception as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._on_child_load_error(req_id, e),
+                    exc,
+                ))
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        return t
+
+    def _refresh_children(
+        self,
+        on_success: Callable[[], None] | None = None,
+        on_error: Callable[[Exception], None] | None = None,
+    ) -> threading.Thread | None:
+        """Refresh children directory list and global selector from API/client asynchronously."""
+        refresh_id = f"refresh-{uuid.uuid4().hex[:8]}"
+        self._current_refresh_request_id = refresh_id
+        session_gen = self._get_current_session_generation()
+        from packages.tui.client import LinguaLensAuthError, LinguaLensPermissionError
+
+        def worker() -> None:
+            try:
+                children = self.client.list_children()
+                self._async_queue.put((
+                    lambda: self._on_children_refreshed(refresh_id, children, session_gen, on_success),
+                    None,
+                ))
+            except LinguaLensAuthError as exc:
+                def _auth_cb(e=exc):
+                    self._handle_auth_error(e, session_generation=session_gen)
+                    if on_error:
+                        on_error(e)
+                self._async_queue.put((_auth_cb, exc))
+            except LinguaLensPermissionError as exc:
+                def _perm_cb(e=exc):
+                    self._handle_permission_error(e, session_generation=session_gen)
+                    if on_error:
+                        on_error(e)
+                self._async_queue.put((_perm_cb, exc))
+            except Exception as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._on_children_refresh_error(refresh_id, e, session_gen, on_error),
+                    exc,
+                ))
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        return t
+
+    def _on_children_refreshed(
+        self,
+        refresh_id: str,
+        children: list[dict[str, Any]],
+        session_generation: int,
+        on_success: Callable[[], None] | None = None,
+    ) -> None:
+        if session_generation != self._get_current_session_generation():
+            return
+        if hasattr(self, "_current_refresh_request_id") and refresh_id != self._current_refresh_request_id:
+            return  # Discard stale out-of-order refresh
+
+        # Reconcile tree_children: clear previous rows first so no duplicate iid occurs
+        if hasattr(self, "tree_children") and self.tree_children.winfo_exists():
+            for it in self.tree_children.get_children():
+                self.tree_children.delete(it)
+
+        child_options = []
+        for ch in children:
+            ch_id = ch.get("id")
+            display_code = ch.get("display_code", ch_id)
+            birth_ym = f"{ch.get('birth_year', '-')}-{ch.get('birth_month', 1):02d}" if ch.get("birth_year") else "-"
+            lang_ctx = ch.get("language_context", {})
+            primary_lang = lang_ctx.get("primary", "th") if isinstance(lang_ctx, dict) else "th"
+            if hasattr(self, "tree_children") and self.tree_children.winfo_exists():
+                self.tree_children.insert(
+                    "",
+                    tk.END,
+                    iid=ch_id,
+                    values=(
+                        ch_id,
+                        display_code,
+                        birth_ym,
+                        primary_lang.upper(),
+                    ),
+                )
+            child_options.append(f"{ch_id} | {display_code} ({birth_ym}, {primary_lang.upper()})")
+
+        if hasattr(self, "combo_global_child") and self.combo_global_child.winfo_exists():
+            if child_options:
+                self.combo_global_child["values"] = child_options
+                if self.active_child_id:
+                    for idx, opt in enumerate(child_options):
+                        if opt.startswith(self.active_child_id):
+                            self.combo_global_child.current(idx)
+                            break
+            else:
+                self.combo_global_child["values"] = ["(No Children — Click ➕ New Child)"]
+                self.combo_global_child.current(0)
+
+        if on_success:
+            on_success()
+
+    def _on_children_refresh_error(
+        self,
+        refresh_id: str,
+        error: Exception,
+        session_generation: int,
+        on_error: Callable[[Exception], None] | None = None,
+    ) -> None:
+        if session_generation != self._get_current_session_generation():
+            return
+        if hasattr(self, "_current_refresh_request_id") and refresh_id != self._current_refresh_request_id:
+            return
+        if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+            self.lbl_status.config(text=f"⚠️ Failed to list children: {error}")
+        if on_error:
+            on_error(error)
+
+    def _on_child_selected(self, event: Any = None) -> None:
+        """Handle child row selection in Tab 1 tree_children."""
+        if not hasattr(self, "tree_children") or not self.tree_children.winfo_exists():
+            return
+        selected = self.tree_children.selection()
+        if not selected:
+            return
+        child_id = selected[0]
+        self._set_active_child(child_id)
+
+        if hasattr(self, "combo_global_child") and self.combo_global_child.winfo_exists():
+            for idx, val in enumerate(self.combo_global_child["values"]):
+                if val.startswith(child_id):
+                    self.combo_global_child.current(idx)
+                    break
+
+    def _on_global_child_changed(self, event: Any = None) -> None:
+        """Handle selection change in top context bar combo_global_child."""
+        if not hasattr(self, "combo_global_child") or not self.combo_global_child.winfo_exists():
+            return
+        sel_text = self.combo_global_child.get()
+        if not sel_text or sel_text.startswith("("):
+            return
+        child_id = sel_text.split(" | ")[0].strip()
+        self._set_active_child(child_id)
+
+        if hasattr(self, "tree_children") and self.tree_children.winfo_exists():
+            if child_id in self.tree_children.get_children():
+                self.tree_children.selection_set(child_id)
+                self.tree_children.see(child_id)
+
+    def _build_create_child_window(self) -> tk.Toplevel:
+        """Construct the create child intake dialog window."""
+        from datetime import date
+        current_year = date.today().year
+
+        win = tk.Toplevel(self.root)
+        win._dlg_token = str(uuid.uuid4())
+        win.title("➕ Create Child Profile (Assessment V2) — LinguaLens")
+        win.geometry("450x280")
+        win.minsize(400, 240)
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        frame = ttk.Frame(win, padding=16)
+        frame.pack(fill=tk.BOTH, expand=True)
+        frame.columnconfigure(1, weight=1)
+
+        ttk.Label(frame, text="Display Code / Identifier:").grid(row=0, column=0, sticky=tk.W, pady=6)
+        e_code = ttk.Entry(frame)
+        e_code.grid(row=0, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
+
+        ttk.Label(frame, text="Birth Year (YYYY):").grid(row=1, column=0, sticky=tk.W, pady=6)
+        e_year = ttk.Entry(frame)
+        e_year.insert(0, str(current_year - 3))
+        e_year.grid(row=1, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
+
+        ttk.Label(frame, text="Birth Month (1-12):").grid(row=2, column=0, sticky=tk.W, pady=6)
+        e_month = ttk.Entry(frame)
+        e_month.insert(0, "1")
+        e_month.grid(row=2, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
+
+        ttk.Label(frame, text="Primary Language:").grid(row=3, column=0, sticky=tk.W, pady=6)
+        c_lang = ttk.Combobox(frame, values=["th", "en"], state="readonly")
+        c_lang.set("th")
+        c_lang.grid(row=3, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
+
+        def _do_submit() -> None:
+            self._submit_create_child(
+                win=win,
+                display_code=e_code.get().strip(),
+                birth_year=e_year.get().strip(),
+                birth_month=e_month.get().strip(),
+                language=c_lang.get().strip(),
+            )
+
+        btn_row = ttk.Frame(frame)
+        btn_row.grid(row=4, column=0, columnspan=2, pady=(16, 0), sticky=tk.E)
+        ttk.Button(btn_row, text="Cancel", command=win.destroy).pack(side=tk.RIGHT, padx=(6, 0))
+        ttk.Button(btn_row, text="Create Child Profile", style="Primary.TButton", command=_do_submit).pack(side=tk.RIGHT)
+        e_code.focus_set()
+        return win
+
+    def _show_create_child_dialog(self) -> tk.Toplevel:
+        win = self._build_create_child_window()
+        try:
+            win.grab_set()
+        except tk.TclError:
+            pass
+        return win
+
+    def _submit_create_child(
+        self,
+        win: tk.Toplevel,
+        display_code: str,
+        birth_year: Any,
+        birth_month: Any,
+        language: str = "th",
+    ) -> threading.Thread | None:
+        """Validate child intake inputs, call client.create_child asynchronously, and update active context."""
+        val_err = self._validate_child_intake(display_code, birth_year, birth_month)
+        if val_err:
+            messagebox.showwarning("Validation Error", val_err)
+            return None
+
+        if win is not None and getattr(win, "_is_submitting", False):
+            return None  # Prevent duplicate POST while request is in flight!
+        if win is not None:
+            win._is_submitting = True
+
+        by = int(birth_year)
+        bm = int(birth_month)
+        lang_ctx = {"primary": (language or "th").strip(), "additional": []}
+        session_gen = self._get_current_session_generation()
+        child_sel_gen = getattr(self, "_child_selection_generation", 0)
+        dlg_token = getattr(win, "_dlg_token", None) if win else None
+
+        from packages.tui.client import LinguaLensAuthError, LinguaLensPermissionError
+
+        def worker() -> None:
+            try:
+                new_child = self.client.create_child(display_code.strip(), by, bm, lang_ctx)
+                self._async_queue.put((
+                    lambda: self._on_create_child_success(win, dlg_token, new_child, session_gen, child_sel_gen),
+                    None,
+                ))
+            except LinguaLensAuthError as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._handle_auth_error(e, session_generation=session_gen),
+                    exc,
+                ))
+            except LinguaLensPermissionError as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._handle_create_child_permission_error(win, dlg_token, e, session_gen),
+                    exc,
+                ))
+            except Exception as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._on_create_child_error(win, dlg_token, e, session_gen),
+                    exc,
+                ))
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        return t
+
+    def _on_create_child_success(
+        self,
+        win: tk.Toplevel | None,
+        dlg_token: str | None,
+        new_child: dict[str, Any],
+        session_generation: int,
+        child_selection_generation: int | None = None,
+    ) -> None:
+        if session_generation != self._get_current_session_generation():
+            return
+        if win is not None:
+            try:
+                if not win.winfo_exists():
+                    return  # Dialog closed/cancelled, discard completion
+                if dlg_token is not None and getattr(win, "_dlg_token", None) != dlg_token:
+                    return  # Mismatched token, discard completion
+            except Exception:
+                return
+
+        self._refresh_children()
+
+        # Only auto-activate if user hasn't made another selection in the interim!
+        if (
+            child_selection_generation is not None
+            and child_selection_generation == getattr(self, "_child_selection_generation", 0)
+        ):
+            if new_child and "id" in new_child:
+                self._set_active_child(new_child["id"])
+
+        if win is not None:
+            try:
+                if win.winfo_exists():
+                    win._is_submitting = False
+                    win.destroy()
+            except Exception:
+                pass
+
+    def _on_create_child_error(
+        self,
+        win: tk.Toplevel | None,
+        dlg_token: str | None,
+        error: Exception,
+        session_generation: int,
+    ) -> None:
+        if session_generation != self._get_current_session_generation():
+            return
+        if win is not None:
+            try:
+                if not win.winfo_exists():
+                    return
+                if dlg_token is not None and getattr(win, "_dlg_token", None) != dlg_token:
+                    return
+                win._is_submitting = False
+            except Exception:
+                return
+        messagebox.showerror("Child Creation Failed", str(error))
+
+    def _handle_create_child_permission_error(
+        self,
+        win: tk.Toplevel | None,
+        dlg_token: str | None,
+        error: Exception,
+        session_generation: int,
+    ) -> None:
+        if session_generation != self._get_current_session_generation():
+            return
+        if win is not None:
+            try:
+                if not win.winfo_exists():
+                    return
+                if dlg_token is not None and getattr(win, "_dlg_token", None) != dlg_token:
+                    return
+                win._is_submitting = False
+            except Exception:
+                return
+        self._handle_permission_error(error, session_generation=session_generation)
+
+    # ============================================================================
+    # Subtask C: Assessment Creation & Safe Desktop Context Transition (GUI)
+    # ============================================================================
+
+    def _update_downstream_tabs_mode(self) -> None:
+        """Update downstream ingestion and review tabs when switching between legacy and V2 modes."""
+        is_v2 = self._is_v2_mode()
+
+        # Context bar assessment indicator
+        if hasattr(self, "lbl_assessment_ctx") and self.lbl_assessment_ctx.winfo_exists():
+            if self.active_assessment_id:
+                self.lbl_assessment_ctx.config(
+                    text=f"🔬 V2 Assessment: {self.active_assessment_id}",
+                    bg="#f3e8ff",
+                    fg="#6b21a8",
+                )
+            elif is_v2 and getattr(self, "active_child_id", None):
+                self.lbl_assessment_ctx.config(
+                    text=f"🔬 V2 Child: {self.active_child_id}",
+                    bg="#f3e8ff",
+                    fg="#6b21a8",
+                )
+            else:
+                self.lbl_assessment_ctx.config(text="", bg="#f1f5f9", fg="#7e22ce")
+
+        # Tab 2 Ingestion buttons
+        v2_btn_state = "disabled" if is_v2 else "normal"
+        for btn_name in (
+            "btn_select_audio",
+            "btn_process_audio",
+            "btn_batch_ingest",
+            "btn_ingest_demo",
+            "btn_browse_text",
+            "btn_ingest_text",
+        ):
+            if hasattr(self, btn_name):
+                w = getattr(self, btn_name)
+                if w and w.winfo_exists():
+                    w.config(state=v2_btn_state)
+
+        # Tab 2 Ingest Context Label
+        if hasattr(self, "lbl_ingest_ctx") and self.lbl_ingest_ctx.winfo_exists():
+            if is_v2:
+                asmt_txt = f" [{self.active_assessment_id}]" if self.active_assessment_id else f" [Child: {self.active_child_id or '-'}]"
+                self.lbl_ingest_ctx.config(
+                    text=f"Active Context: Assessment V2{asmt_txt} (Legacy audio/text ingestion disabled in V2 mode)",
+                    foreground="#6b21a8",
+                )
+            elif getattr(self, "active_case_id", None) and getattr(self, "active_session_id", None):
+                self.lbl_ingest_ctx.config(
+                    text=f"Active Context: Case {self.active_case_id} > Session {self.active_session_id}",
+                    foreground="#0369a1",
+                )
+            else:
+                self.lbl_ingest_ctx.config(
+                    text="Please select a Session from Tab 1 to begin ingestion.",
+                    foreground="#0369a1",
+                )
+
+        # Tab 3 Review Attest Button & Label
+        if hasattr(self, "btn_attest") and self.btn_attest.winfo_exists():
+            self.btn_attest.config(state=v2_btn_state)
+        if hasattr(self, "lbl_review_status") and self.lbl_review_status.winfo_exists() and is_v2:
+            self.lbl_review_status.config(
+                text=f"Assessment V2 Context Active ({self.active_assessment_id or self.active_child_id or 'V2'}) - Review actions reserved for Stage 2",
+                foreground="#6b21a8",
+            )
+
+    def _on_assessment_selected(self, event: Any = None) -> None:
+        """Handle selection in Tab 1 Assessments directory treeview."""
+        if not hasattr(self, "tree_assessments") or not self.tree_assessments.winfo_exists():
+            return
+        sel = self.tree_assessments.selection()
+        if not sel:
+            return
+        asmt_id = sel[0]
+        if (
+            asmt_id in getattr(self, "_presentation_row_iids", set())
+            or "presentation_error" in self.tree_assessments.item(asmt_id, "tags")
+        ):
+            # Presentation-only rows (e.g. error placeholders) are non-domain and cannot be selected
+            self.tree_assessments.selection_remove(asmt_id)
+            return
+
+        # Increment monotonic assessment-selection generation
+        self._assessment_selection_generation = getattr(self, "_assessment_selection_generation", 0) + 1
+        asmt_sel_gen = self._assessment_selection_generation
+        req_id = f"sel-asmt-{asmt_id}-{asmt_sel_gen}-{uuid.uuid4().hex[:8]}"
+        self._current_assessment_selection_req_id = req_id
+
+        # Check if complete record is already cached for active child
+        cached_match = None
+        for a in getattr(self, "_cached_assessments", []):
+            if a.get("id") == asmt_id and a.get("child_id") == self.active_child_id:
+                # Canonical contract requires non-empty id, child_id, purpose, and state
+                if all(a.get(k) for k in ("id", "child_id", "purpose", "state")):
+                    cached_match = a
+                    break
+
+        if cached_match:
+            self.active_assessment_id = asmt_id
+            self.active_assessment = cached_match
+            self._update_downstream_tabs_mode()
+            return
+
+        # Cache miss or incomplete record: fetch canonical get_assessment asynchronously
+        # Clear active assessment while loading new selection so failure doesn't show old assessment
+        self.active_assessment_id = None
+        self.active_assessment = None
+        self._update_downstream_tabs_mode()
+        self._current_assessment_detail_thread = self._fetch_assessment_detail(
+            asmt_id=asmt_id,
+            asmt_sel_gen=asmt_sel_gen,
+            req_id=req_id,
+        )
+
+    def _fetch_assessment_detail(
+        self,
+        asmt_id: str,
+        asmt_sel_gen: int | None = None,
+        req_id: str | None = None,
+    ) -> threading.Thread | None:
+        if not self.active_child_id:
+            return None
+
+        child_id = self.active_child_id
+        session_gen = self._get_current_session_generation()
+        child_sel_gen = getattr(self, "_child_selection_generation", 0)
+        if asmt_sel_gen is None:
+            self._assessment_selection_generation = getattr(self, "_assessment_selection_generation", 0) + 1
+            asmt_sel_gen = self._assessment_selection_generation
+        if req_id is None:
+            req_id = f"get-asmt-{asmt_id}-{asmt_sel_gen}-{uuid.uuid4().hex[:8]}"
+            self._current_assessment_selection_req_id = req_id
+
+        def worker() -> None:
+            try:
+                detail = self.client.get_assessment(asmt_id)
+                self._async_queue.put((
+                    lambda: self._on_assessment_detail_loaded(
+                        asmt_id=asmt_id,
+                        detail=detail,
+                        child_id=child_id,
+                        session_gen=session_gen,
+                        child_sel_gen=child_sel_gen,
+                        asmt_sel_gen=asmt_sel_gen,
+                        request_id=req_id,
+                    ),
+                    None,
+                ))
+            except Exception as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._on_assessment_detail_error(
+                        asmt_id=asmt_id,
+                        error=e,
+                        child_id=child_id,
+                        session_gen=session_gen,
+                        child_sel_gen=child_sel_gen,
+                        asmt_sel_gen=asmt_sel_gen,
+                        request_id=req_id,
+                    ),
+                    exc,
+                ))
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        return t
+
+    def _on_assessment_detail_loaded(
+        self,
+        asmt_id: str,
+        detail: dict[str, Any],
+        child_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+        asmt_sel_gen: int,
+        request_id: str,
+    ) -> None:
+        if session_gen != self._get_current_session_generation():
+            return
+        if child_sel_gen != getattr(self, "_child_selection_generation", 0) or child_id != self.active_child_id:
+            return
+        if asmt_sel_gen != getattr(self, "_assessment_selection_generation", 0):
+            return  # Superseded by newer selection
+        if request_id != getattr(self, "_current_assessment_selection_req_id", None):
+            return
+
+        # Check detail.id matches requested assessment_id
+        if not isinstance(detail, dict) or detail.get("id") != asmt_id:
+            self.active_assessment_id = None
+            self.active_assessment = None
+            self._update_downstream_tabs_mode()
+            messagebox.showerror(
+                "Assessment ID Mismatch",
+                f"Expected assessment ID '{asmt_id}', but received '{detail.get('id') if isinstance(detail, dict) else None}'.",
+            )
+            return
+
+        # Verify assessment child_id matches currently active child
+        if detail.get("child_id") != self.active_child_id:
+            self.active_assessment_id = None
+            self.active_assessment = None
+            self._update_downstream_tabs_mode()
+            messagebox.showerror(
+                "Assessment Context Mismatch",
+                f"Assessment '{asmt_id}' belongs to child '{detail.get('child_id')}', but current active child is '{self.active_child_id}'.",
+            )
+            return
+
+        self.active_assessment_id = asmt_id
+        self.active_assessment = detail
+        # Update in _cached_assessments
+        updated_cached = False
+        for idx, a in enumerate(getattr(self, "_cached_assessments", [])):
+            if a.get("id") == asmt_id:
+                self._cached_assessments[idx] = detail
+                updated_cached = True
+                break
+        if not updated_cached:
+            if not hasattr(self, "_cached_assessments") or self._cached_assessments is None:
+                self._cached_assessments = []
+            self._cached_assessments.append(detail)
+
+        self._update_downstream_tabs_mode()
+
+    def _on_assessment_detail_error(
+        self,
+        asmt_id: str,
+        error: Exception,
+        child_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+        asmt_sel_gen: int,
+        request_id: str,
+    ) -> None:
+        from packages.tui.client import LinguaLensAuthError
+        if isinstance(error, LinguaLensAuthError) or (
+            hasattr(error, "status_code") and getattr(error, "status_code", None) == 401
+        ):
+            if session_gen == self._get_current_session_generation():
+                self._handle_auth_error(error, session_generation=session_gen)
+            return
+
+        if session_gen != self._get_current_session_generation():
+            return
+        if child_sel_gen != getattr(self, "_child_selection_generation", 0) or child_id != self.active_child_id:
+            return
+        if asmt_sel_gen != getattr(self, "_assessment_selection_generation", 0):
+            return  # Superseded by newer selection
+        if request_id != getattr(self, "_current_assessment_selection_req_id", None):
+            return
+
+        self.active_assessment_id = None
+        self.active_assessment = None
+        self._update_downstream_tabs_mode()
+
+        messagebox.showerror(
+            "Assessment Load Failed",
+            f"Failed to load details for assessment '{asmt_id}':\n{error}",
+        )
+
+    def _is_consent_active(self) -> bool:
+        """Authoritative typed precheck of consent status before dispatching assessment creation."""
+        status = getattr(self, "_current_consent_status", None)
+        if status != "active":
+            return False
+        if not isinstance(getattr(self, "active_consent", None), dict):
+            return False
+        if self.active_consent.get("status") != "active":
+            return False
+        return True
+
+    def _show_create_assessment_dialog(self) -> tk.Toplevel | None:
+        """Show dialog to create a new clinical assessment context for the active child."""
+        if not getattr(self, "active_child_id", None):
+            messagebox.showwarning("No Child Selected", "Please select a child before creating an assessment.")
+            return None
+
+        if not self._is_consent_active():
+            current_st = getattr(self, "_current_consent_status", "not-loaded")
+            messagebox.showerror(
+                "Active Consent Required",
+                f"Cannot create assessment: Active clinical-assessment consent is required.\n"
+                f"Current consent status: {current_st}\n\n"
+                f"Please record active consent for this child first.",
+            )
+            return None
+
+        win = tk.Toplevel(self.root)
+        win.title("Create Clinical Assessment (V2)")
+        win.geometry("520x360")
+        win.transient(self.root)
+
+        # Invalidate any prior assessment dialog
+        if getattr(self, "_current_asmt_cancel_event", None):
+            try:
+                self._current_asmt_cancel_event.set()
+            except Exception:
+                pass
+
+        dlg_token = f"dlg-asmt-{uuid.uuid4().hex[:8]}"
+        cancel_event = threading.Event()
+        win._dlg_token = dlg_token
+        win._cancel_event = cancel_event
+        self._current_asmt_dialog_token = dlg_token
+        self._current_asmt_cancel_event = cancel_event
+        win._bound_child_id = self.active_child_id
+        child_code = self.active_child.get("display_code", self.active_child_id) if self.active_child else self.active_child_id
+        win._bound_child_code = child_code
+        win._bound_session_gen = self._get_current_session_generation()
+        win._bound_child_sel_gen = getattr(self, "_child_selection_generation", 0)
+        win._is_submitting = False
+
+        frm = ttk.Frame(win, padding=16)
+        frm.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(
+            frm,
+            text=f"Create Assessment: {child_code}",
+            font=("Helvetica", 11, "bold"),
+            foreground="#1e293b",
+        ).pack(anchor=tk.W, pady=(0, 10))
+
+        # Purpose Selection (Canonical: initial, developmental_follow_up, post_intervention_follow_up, additional_evidence)
+        ttk.Label(frm, text="Purpose:", font=("Helvetica", 9, "bold")).pack(anchor=tk.W, pady=(4, 2))
+        combo_purpose = ttk.Combobox(
+            frm,
+            values=[
+                "initial",
+                "developmental_follow_up",
+                "post_intervention_follow_up",
+                "additional_evidence",
+            ],
+            state="readonly",
+            font=("Helvetica", 10),
+        )
+        combo_purpose.set("initial")
+        combo_purpose.pack(fill=tk.X, pady=(0, 10))
+
+        # Optional Assigned Clinician ID
+        ttk.Label(frm, text="Assigned Clinician ID (Optional):", font=("Helvetica", 9, "bold")).pack(anchor=tk.W, pady=(4, 2))
+        entry_clinician = ttk.Entry(frm, font=("Helvetica", 10))
+        entry_clinician.pack(fill=tk.X, pady=(0, 16))
+
+        # Buttons
+        btn_box = ttk.Frame(frm)
+        btn_box.pack(fill=tk.X, pady=(10, 0))
+
+        def on_close():
+            win._cancel_event.set()
+            in_flight_req = getattr(win, "_in_flight_req_id", None)
+            if in_flight_req:
+                self._set_busy_state(False, "Ready", request_id=in_flight_req)
+            if win.winfo_exists():
+                win.destroy()
+
+        def on_destroy(event=None):
+            if event is None or event.widget == win:
+                win._cancel_event.set()
+                in_flight_req = getattr(win, "_in_flight_req_id", None)
+                if in_flight_req:
+                    self._set_busy_state(False, "Ready", request_id=in_flight_req)
+
+        win.protocol("WM_DELETE_WINDOW", on_close)
+        win.bind("<Destroy>", on_destroy)
+        ttk.Button(btn_box, text="Cancel", command=on_close).pack(side=tk.RIGHT, padx=(6, 0))
+
+        def on_confirm_click():
+            p = combo_purpose.get().strip() or "initial"
+            c = entry_clinician.get().strip() or None
+            self._submit_create_assessment(win, purpose=p, clinician_id=c)
+
+        btn_confirm = ttk.Button(btn_box, text="Create Assessment", command=on_confirm_click)
+        btn_confirm.pack(side=tk.RIGHT)
+        win.btn_confirm = btn_confirm
+
+        return win
+
+    def _submit_create_assessment(
+        self,
+        win: tk.Toplevel,
+        purpose: str,
+        clinician_id: str | None = None,
+    ) -> threading.Thread | None:
+        """Submit assessment creation with context-drift verification and background dispatch."""
+        if getattr(win, "_is_submitting", False):
+            return None
+
+        target_child_id = getattr(win, "_bound_child_id", None)
+        target_child_code = getattr(win, "_bound_child_code", target_child_id)
+        target_session_gen = getattr(win, "_bound_session_gen", -1)
+        target_child_sel_gen = getattr(win, "_bound_child_sel_gen", -1)
+
+        # Context drift check before confirmation modal
+        if (
+            not target_child_id
+            or target_child_id != self.active_child_id
+            or target_session_gen != self._get_current_session_generation()
+            or target_child_sel_gen != getattr(self, "_child_selection_generation", 0)
+        ):
+            messagebox.showerror(
+                "Context Changed",
+                "Clinical context changed or child is not active. Assessment creation aborted.",
+                parent=win if win.winfo_exists() else self.root,
+            )
+            if win.winfo_exists():
+                win.destroy()
+            return None
+
+        # Re-verify consent before dispatch
+        if not self._is_consent_active():
+            messagebox.showerror(
+                "Active Consent Required",
+                "Active clinical-assessment consent is required before dispatching assessment creation.",
+                parent=win if win.winfo_exists() else self.root,
+            )
+            if win.winfo_exists():
+                win.destroy()
+            return None
+
+        # Canonical purpose check - reject unsupported values without fallback
+        canonical_purposes = (
+            "initial",
+            "developmental_follow_up",
+            "post_intervention_follow_up",
+            "additional_evidence",
+        )
+        clean_purpose = purpose.strip() if purpose else ""
+        if clean_purpose not in canonical_purposes:
+            messagebox.showerror(
+                "Invalid Assessment Purpose",
+                f"Assessment purpose '{clean_purpose}' is not supported.\nMust be one of: {', '.join(canonical_purposes)}.",
+                parent=win if win.winfo_exists() else self.root,
+            )
+            return None
+
+        clean_clinician = clinician_id.strip() if clinician_id else None
+        if clean_clinician and len(clean_clinician) > 128:
+            messagebox.showerror(
+                "Invalid Clinician ID",
+                "Assigned Clinician ID must not exceed 128 characters.",
+                parent=win if win.winfo_exists() else self.root,
+            )
+            return None
+
+        # Explicit confirmation
+        confirm_msg = (
+            f"Please confirm creating a new clinical assessment context:\n\n"
+            f"• Child: {target_child_code} ({target_child_id})\n"
+            f"• Purpose: {clean_purpose}\n"
+            f"• Assigned Clinician: {clean_clinician or '(Default)'}\n\n"
+            f"Are you sure you wish to proceed?"
+        )
+        parent_win = win if win.winfo_exists() else self.root
+        try:
+            confirmed = messagebox.askyesno("Confirm Assessment Creation", confirm_msg, parent=parent_win)
+        except TypeError:
+            confirmed = messagebox.askyesno("Confirm Assessment Creation", confirm_msg)
+        if not confirmed:
+            return None
+
+        # Re-verify context drift after confirmation modal returns
+        if (
+            target_child_id != self.active_child_id
+            or target_session_gen != self._get_current_session_generation()
+            or target_child_sel_gen != getattr(self, "_child_selection_generation", 0)
+        ):
+            messagebox.showerror(
+                "Context Changed",
+                "Clinical context changed during confirmation. Assessment creation aborted.",
+                parent=win if win.winfo_exists() else self.root,
+            )
+            if win.winfo_exists():
+                win.destroy()
+            return None
+
+        win._is_submitting = True
+        if hasattr(win, "btn_confirm") and win.btn_confirm.winfo_exists():
+            win.btn_confirm.config(state="disabled")
+
+        dlg_token = getattr(win, "_dlg_token", "")
+        self._current_asmt_dialog_token = dlg_token
+        req_id = f"asmt-req-{uuid.uuid4().hex[:8]}"
+        win._in_flight_req_id = req_id
+        cancel_event = getattr(win, "_cancel_event", None)
+        if cancel_event is None:
+            cancel_event = threading.Event()
+            win._cancel_event = cancel_event
+        self._current_asmt_cancel_event = cancel_event
+
+        self._set_busy_state(True, "Creating assessment...", request_id=req_id)
+
+        def worker() -> None:
+            try:
+                # Preflight: Fresh asynchronous read of consent history before POST
+                consents = self.client.list_consents(target_child_id)
+
+                # Check cancellation immediately after preflight read
+                if (
+                    cancel_event.is_set()
+                    or getattr(self, "_current_asmt_dialog_token", None) != dlg_token
+                ):
+                    # Cancelled before mutation dispatch: ZERO POST
+                    self._async_queue.put((
+                        lambda r=req_id: self._set_busy_state(False, "Ready", request_id=r),
+                        None,
+                    ))
+                    return
+
+                fresh_status, latest_rec = self._resolve_consent_state(consents, purpose="clinical_assessment")
+                if fresh_status != "active" or not latest_rec or latest_rec.get("status") != "active":
+                    self._async_queue.put((
+                        lambda st=fresh_status, rec=latest_rec: self._on_create_assessment_preflight_failed(
+                            win=win,
+                            dlg_token=dlg_token,
+                            request_id=req_id,
+                            child_id=target_child_id,
+                            fresh_status=st,
+                            latest_rec=rec,
+                            session_gen=target_session_gen,
+                            child_sel_gen=target_child_sel_gen,
+                        ),
+                        None,
+                    ))
+                    return
+
+                # Re-verify context drift and dialog lifetime/token after preflight before POST
+                current_gen = self._get_current_session_generation()
+                current_sel_gen = getattr(self, "_child_selection_generation", 0)
+                current_dialog_token = getattr(self, "_current_asmt_dialog_token", None)
+                if (
+                    target_session_gen != current_gen
+                    or target_child_sel_gen != current_sel_gen
+                    or target_child_id != self.active_child_id
+                    or current_dialog_token != dlg_token
+                    or cancel_event.is_set()
+                ):
+                    # Context changed or cancelled: ZERO POST
+                    self._async_queue.put((
+                        lambda r=req_id: self._set_busy_state(False, "Ready", request_id=r),
+                        None,
+                    ))
+                    return
+
+                # Canonical contract: POST /api/v2/children/{child_id}/assessments
+                # Body: purpose, optional assigned_clinician_id
+                new_asmt = self.client.create_assessment(
+                    target_child_id,
+                    purpose=clean_purpose,
+                    assigned_clinician_id=clean_clinician,
+                )
+                self._async_queue.put((
+                    lambda: self._on_create_assessment_success(
+                        win=win,
+                        dlg_token=dlg_token,
+                        request_id=req_id,
+                        child_id=target_child_id,
+                        new_asmt=new_asmt,
+                        session_gen=target_session_gen,
+                        child_sel_gen=target_child_sel_gen,
+                        cancel_event=cancel_event,
+                    ),
+                    None,
+                ))
+            except Exception as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._on_create_assessment_error(
+                        win=win,
+                        dlg_token=dlg_token,
+                        request_id=req_id,
+                        child_id=target_child_id,
+                        error=e,
+                        session_gen=target_session_gen,
+                        child_sel_gen=target_child_sel_gen,
+                        cancel_event=cancel_event,
+                    ),
+                    exc,
+                ))
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        return t
+
+    def _on_create_assessment_preflight_failed(
+        self,
+        win: tk.Toplevel,
+        dlg_token: str,
+        request_id: str,
+        child_id: str,
+        fresh_status: str,
+        latest_rec: dict[str, Any] | None,
+        session_gen: int,
+        child_sel_gen: int,
+    ) -> None:
+        self._set_busy_state(False, "Ready", request_id=request_id)
+
+        if session_gen != self._get_current_session_generation():
+            if win.winfo_exists():
+                win.destroy()
+            return
+
+        if child_sel_gen != getattr(self, "_child_selection_generation", 0) or child_id != self.active_child_id:
+            if win.winfo_exists():
+                win.destroy()
+            return
+
+        self.active_consent = latest_rec if fresh_status == "active" else None
+        self._current_consent_status = fresh_status
+        now_str = datetime.now().strftime("%H:%M:%S")
+        self._consent_loaded_at = now_str
+        self._update_consent_badge(fresh_status, latest_rec, loaded_at=now_str)
+
+        if win.winfo_exists() and getattr(win, "_dlg_token", None) == dlg_token:
+            win.destroy()
+
+        messagebox.showerror(
+            "Active Consent Required",
+            f"Cannot create assessment: Clinical assessment consent is '{fresh_status}'.\n\n"
+            f"Active consent is required before an assessment can be created. Please record active consent first.",
+        )
+
+    def _on_create_assessment_success(
+        self,
+        win: tk.Toplevel,
+        dlg_token: str,
+        request_id: str,
+        child_id: str,
+        new_asmt: dict[str, Any],
+        session_gen: int,
+        child_sel_gen: int,
+        cancel_event: threading.Event | None = None,
+    ) -> None:
+        self._set_busy_state(False, "Ready", request_id=request_id)
+
+        if cancel_event and cancel_event.is_set():
+            return
+        if getattr(self, "_current_asmt_dialog_token", None) != dlg_token:
+            return
+
+        if session_gen != self._get_current_session_generation():
+            if win.winfo_exists():
+                win.destroy()
+            return
+
+        if child_sel_gen != getattr(self, "_child_selection_generation", 0) or child_id != self.active_child_id:
+            if win.winfo_exists():
+                win.destroy()
+            return
+
+        dialog_was_active = win.winfo_exists() and getattr(win, "_dlg_token", None) == dlg_token
+        if dialog_was_active:
+            win.destroy()
+
+        if not dialog_was_active:
+            # Dialog closed before response arrived; discard presentation
+            return
+
+        # Store created fact and activate assessment context immediately
+        self.active_assessment_id = new_asmt.get("id")
+        self.active_assessment = new_asmt
+        # ISOLATION: active_session_id must NOT be polluted
+        self.active_session_id = None
+        self._update_downstream_tabs_mode()
+
+        messagebox.showinfo("Success", f"Assessment created successfully: {self.active_assessment_id}")
+
+        # Asynchronously refresh assessments list without blocking UI thread
+        self._current_assessment_thread = self._refresh_assessments_after_creation(
+            child_id=child_id,
+            session_gen=session_gen,
+            child_sel_gen=child_sel_gen,
+            created_asmt=new_asmt,
+        )
+
+    def _on_create_assessment_error(
+        self,
+        win: tk.Toplevel,
+        dlg_token: str,
+        request_id: str,
+        child_id: str,
+        error: Exception,
+        session_gen: int,
+        child_sel_gen: int,
+        cancel_event: threading.Event | None = None,
+    ) -> None:
+        from packages.tui.client import LinguaLensAuthError, LinguaLensPermissionError, LinguaLensConflictError
+
+        if isinstance(error, LinguaLensAuthError) or (
+            hasattr(error, "status_code") and getattr(error, "status_code", None) == 401
+        ):
+            if session_gen == self._get_current_session_generation():
+                if win.winfo_exists():
+                    win.destroy()
+                self._handle_auth_error(error, session_generation=session_gen)
+            return
+
+        if cancel_event and cancel_event.is_set():
+            return
+        if getattr(self, "_current_asmt_dialog_token", None) != dlg_token:
+            return
+
+        if session_gen != self._get_current_session_generation():
+            if win.winfo_exists():
+                win.destroy()
+            return
+
+        if child_sel_gen != getattr(self, "_child_selection_generation", 0) or child_id != self.active_child_id:
+            if win.winfo_exists():
+                win.destroy()
+            return
+
+        dialog_is_valid = win.winfo_exists() and getattr(win, "_dlg_token", None) == dlg_token
+
+        if isinstance(error, LinguaLensPermissionError):
+            if dialog_is_valid:
+                win._is_submitting = False
+                if hasattr(win, "btn_confirm") and win.btn_confirm.winfo_exists():
+                    win.btn_confirm.config(state="normal")
+                messagebox.showerror("Permission Denied", f"You do not have permission to create an assessment: {error}")
+            return
+
+        if isinstance(error, LinguaLensConflictError) or "409" in str(error):
+            self.active_assessment_id = None
+            self.active_assessment = None
+            if dialog_is_valid:
+                win._is_submitting = False
+                if hasattr(win, "btn_confirm") and win.btn_confirm.winfo_exists():
+                    win.btn_confirm.config(state="normal")
+                messagebox.showerror("Assessment Conflict (409)", f"Consent Conflict: {error}")
+            # Refresh authoritative consent state on 409 asynchronously without auto-retry POST
+            self._current_consent_thread = self._refresh_consent()
+            return
+
+        if dialog_is_valid:
+            win._is_submitting = False
+            if hasattr(win, "btn_confirm") and win.btn_confirm.winfo_exists():
+                win.btn_confirm.config(state="normal")
+            messagebox.showerror("Assessment Creation Failed", f"Failed to create assessment:\n{error}")
+
+    def _refresh_assessments(self) -> threading.Thread | None:
+        """Asynchronously refresh assessments list for active child."""
+        child_id = getattr(self, "active_child_id", None)
+        if not child_id:
+            if hasattr(self, "tree_assessments") and self.tree_assessments.winfo_exists():
+                for it in self.tree_assessments.get_children():
+                    self.tree_assessments.delete(it)
+            return None
+
+        req_id = f"asmt-list-{child_id}-{uuid.uuid4().hex[:8]}"
+        self._assessment_list_request_id = req_id
+        session_gen = self._get_current_session_generation()
+        child_sel_gen = getattr(self, "_child_selection_generation", 0)
+
+        def worker() -> None:
+            try:
+                asmts = self.client.list_assessments(child_id)
+                self._async_queue.put((
+                    lambda: self._on_assessments_refreshed(
+                        child_id=child_id,
+                        assessments=asmts,
+                        request_id=req_id,
+                        session_gen=session_gen,
+                        child_sel_gen=child_sel_gen,
+                    ),
+                    None,
+                ))
+            except Exception as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._on_assessments_refresh_error(
+                        child_id=child_id,
+                        error=e,
+                        request_id=req_id,
+                        session_gen=session_gen,
+                        child_sel_gen=child_sel_gen,
+                    ),
+                    exc,
+                ))
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        return t
+
+    def _on_assessments_refreshed(
+        self,
+        child_id: str,
+        assessments: list[dict[str, Any]],
+        request_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+    ) -> None:
+        if session_gen != self._get_current_session_generation():
+            return
+        if child_sel_gen != getattr(self, "_child_selection_generation", 0) or child_id != self.active_child_id:
+            return
+        if request_id != getattr(self, "_assessment_list_request_id", None):
+            return
+
+        self._cached_assessments = assessments
+        self._presentation_row_iids = set()
+        self._assessment_list_error = None
+        if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+            curr = self.lbl_status.cget("text")
+            if "Failed to list assessments" in curr:
+                self.lbl_status.config(text="Ready")
+
+        if hasattr(self, "tree_assessments") and self.tree_assessments.winfo_exists():
+            for it in self.tree_assessments.get_children():
+                self.tree_assessments.delete(it)
+            for a in assessments:
+                a_id = a.get("id", "")
+                self.tree_assessments.insert(
+                    "",
+                    tk.END,
+                    iid=a_id,
+                    values=(
+                        a_id,
+                        a.get("child_id", ""),
+                        a.get("purpose", ""),
+                        a.get("state", ""),
+                        a.get("assigned_clinician_id", ""),
+                        a.get("version", 1),
+                    ),
+                )
+            if getattr(self, "active_assessment_id", None) and self.active_assessment_id in self.tree_assessments.get_children():
+                self.tree_assessments.selection_set(self.active_assessment_id)
+                self.tree_assessments.see(self.active_assessment_id)
+
+    def _on_assessments_refresh_error(
+        self,
+        child_id: str,
+        error: Exception,
+        request_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+    ) -> None:
+        from packages.tui.client import LinguaLensAuthError
+        if isinstance(error, LinguaLensAuthError) or (
+            hasattr(error, "status_code") and getattr(error, "status_code", None) == 401
+        ):
+            if session_gen == self._get_current_session_generation():
+                self._handle_auth_error(error, session_generation=session_gen)
+            return
+
+        if session_gen != self._get_current_session_generation():
+            return
+        if child_sel_gen != getattr(self, "_child_selection_generation", 0) or child_id != self.active_child_id:
+            return
+        if request_id != getattr(self, "_assessment_list_request_id", None):
+            return
+
+        self._cached_assessments = []
+        self._presentation_row_iids = {"_error"}
+        self._assessment_list_error = str(error)
+
+        if hasattr(self, "tree_assessments") and self.tree_assessments.winfo_exists():
+            for it in self.tree_assessments.get_children():
+                self.tree_assessments.delete(it)
+            self.tree_assessments.insert(
+                "",
+                tk.END,
+                iid="_error",
+                values=("⚠️ Error", child_id, "Failed to load assessments", str(error), "-", "-"),
+                tags=("presentation_error",),
+            )
+
+        if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+            self.lbl_status.config(text=f"⚠️ Failed to list assessments: {error}")
+
+    def _refresh_assessments_after_creation(
+        self,
+        child_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+        created_asmt: dict[str, Any],
+    ) -> threading.Thread | None:
+        """Refresh assessments list after successful creation, preserving creation fact if refresh fails."""
+        req_id = f"asmt-post-ref-{child_id}-{uuid.uuid4().hex[:8]}"
+        self._assessment_list_request_id = req_id
+
+        def worker() -> None:
+            try:
+                asmts = self.client.list_assessments(child_id)
+                self._async_queue.put((
+                    lambda: self._on_post_creation_refresh_success(
+                        child_id=child_id,
+                        assessments=asmts,
+                        request_id=req_id,
+                        session_gen=session_gen,
+                        child_sel_gen=child_sel_gen,
+                    ),
+                    None,
+                ))
+            except Exception as exc:
+                self._async_queue.put((
+                    lambda e=exc: self._on_post_creation_refresh_error(
+                        child_id=child_id,
+                        error=e,
+                        request_id=req_id,
+                        session_gen=session_gen,
+                        child_sel_gen=child_sel_gen,
+                        created_asmt=created_asmt,
+                    ),
+                    exc,
+                ))
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        return t
+
+    def _on_post_creation_refresh_success(
+        self,
+        child_id: str,
+        assessments: list[dict[str, Any]],
+        request_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+    ) -> None:
+        if session_gen != self._get_current_session_generation():
+            return
+        if child_sel_gen != getattr(self, "_child_selection_generation", 0) or child_id != self.active_child_id:
+            return
+        if request_id != getattr(self, "_assessment_list_request_id", None):
+            return
+
+        self._on_assessments_refreshed(child_id, assessments, request_id, session_gen, child_sel_gen)
+
+    def _on_post_creation_refresh_error(
+        self,
+        child_id: str,
+        error: Exception,
+        request_id: str,
+        session_gen: int,
+        child_sel_gen: int,
+        created_asmt: dict[str, Any],
+    ) -> None:
+        from packages.tui.client import LinguaLensAuthError
+        if isinstance(error, LinguaLensAuthError):
+            if session_gen == self._get_current_session_generation():
+                self._handle_auth_error(error, session_generation=session_gen)
+            return
+
+        if session_gen != self._get_current_session_generation():
+            return
+        if child_sel_gen != getattr(self, "_child_selection_generation", 0) or child_id != self.active_child_id:
+            return
+        if request_id != getattr(self, "_assessment_list_request_id", None):
+            return
+
+        # Creation fact is preserved: active_assessment_id and active_assessment remain intact
+        # Insert the created assessment into treeview manually if not present
+        if hasattr(self, "tree_assessments") and self.tree_assessments.winfo_exists():
+            a_id = created_asmt.get("id", "")
+            if a_id and a_id not in self.tree_assessments.get_children():
+                self.tree_assessments.insert(
+                    "",
+                    tk.END,
+                    iid=a_id,
+                    values=(
+                        a_id,
+                        created_asmt.get("child_id", ""),
+                        created_asmt.get("purpose", ""),
+                        created_asmt.get("state", ""),
+                        created_asmt.get("assigned_clinician_id", ""),
+                        created_asmt.get("version", 1),
+                    ),
+                )
+                self.tree_assessments.selection_set(a_id)
+                self.tree_assessments.see(a_id)
+
+        messagebox.showwarning(
+            "Assessment Created (Refresh Failed)",
+            f"Assessment was created successfully on server ({created_asmt.get('id')}), but failed to refresh assessments list: {error}. Please refresh manually.",
+        )

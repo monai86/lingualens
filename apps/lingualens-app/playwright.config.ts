@@ -37,7 +37,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `PYTHONPATH=. LINGUALENS_REPOSITORY_MODE=memory LINGUALENS_CORS_ALLOWED_ORIGINS=${allowedOrigins} python3 -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort}`,
+      command: `PYTHONPATH=.:../..:../../src LINGUALENS_REPOSITORY_MODE=memory LINGUALENS_CORS_ALLOWED_ORIGINS=${allowedOrigins} python3 -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort}`,
       cwd: "../api",
       url: `http://127.0.0.1:${backendPort}/health`,
       reuseExistingServer: true,
@@ -46,7 +46,7 @@ export default defineConfig({
     {
       command: benchmarkRun
         ? `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${backendPort}/api/v1 npm run build && NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${backendPort}/api/v1 npm run start -- --hostname 127.0.0.1 --port ${frontendPort}`
-        : `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${backendPort}/api/v1 npm run dev -- --hostname 127.0.0.1 --port ${frontendPort}`,
+        : `NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:${backendPort}/api/v1 npm run dev -- --webpack --hostname 127.0.0.1 --port ${frontendPort}`,
       cwd: ".",
       url: `http://127.0.0.1:${frontendPort}`,
       reuseExistingServer: true,

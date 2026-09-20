@@ -32,12 +32,76 @@ pip install -r apps/api/requirements.txt
 ### 3. Run the Active Backend API
 ```bash
 cd apps/api
-PYTHONPATH=. uvicorn app.main:app --reload --port 8000
+PYTHONPATH=.:../..:../../src uvicorn app.main:app --reload --port 8000
 ```
 API Documentation will be available at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 `src/therapist_backend` is a legacy research compatibility API. Do not use it
 as the Therapist App v2 backend or add new product routes there.
+
+### Assessment v2 foundation
+
+The existing therapist product remains on `/api/v1`. The additive `/api/v2`
+foundation uses a fresh database and a separate Alembic history. It starts with
+no imported v1 records and now covers the first Capture V2 workflow slice:
+children, consent records, assessment lifecycle, protocol selection, private
+recording upload intents, durable processing runs, checksum verification,
+reviewed transcript attestation, immutable timestamped segment review with
+uncertainty filtering and bounded replay, asynchronous evidence extraction, and
+non-diagnostic quality states. Capture and evidence jobs share the same native
+tenant-scoped worker and PostgreSQL `processing_runs` queue.
+
+For the primary local verification path, Docker is optional. Install PostgreSQL
+16 with Postgres.app, Homebrew, or the PostgreSQL distribution for your OS,
+then provide an admin connection to the local `postgres` database. The native
+check creates a uniquely named temporary assessment database, starts local
+FastAPI and worker processes, exercises transcript attestation, segment v1 → v2
+revision/attestation, bounded replay, segment-bound evidence provenance, the
+`202` enqueue → poll → evidence-read path, staleness and access denials, runs
+the API/RLS/lease suite, and removes only that temporary database and test role
+when it finishes:
+
+```bash
+export LINGUALENS_NATIVE_ADMIN_DATABASE_URL=postgresql+psycopg://<local-admin>:<password>@127.0.0.1:5432/postgres
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_native.py
+```
+
+The native gate is the primary local acceptance path and does not require
+Docker. It does not require Redis or Celery. For optional Compose verification:
+
+```bash
+docker compose up -d postgres
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_migrations.py
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_postgres.py
+PYTHONPATH=apps/api:src python scripts/check_assessment_v2_compose.py
+```
+
+The optional Compose assessment check owns its temporary `postgres` and `api`
+stack; it starts the API container, waits for `/health`, and removes its
+volumes when the check finishes. It is not required for native development.
+
+The v1 and v2 URLs are separate:
+
+```text
+LINGUALENS_DATABASE_URL=postgresql+psycopg://.../therapist_app_v2
+LINGUALENS_ASSESSMENT_DATABASE_URL=postgresql+psycopg://.../lingualens_assessment_v2
+```
+
+The web app's `/assessments` route uses `/api/v2`; all existing session screens
+continue using `/api/v1`. For local development the v2 base is derived
+automatically, or can be set explicitly:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 \
+NEXT_PUBLIC_ASSESSMENT_API_BASE_URL=http://localhost:8000/api/v2 \
+npm run dev
+```
+
+Supabase Auth supplies the verified identity; FastAPI owns clinical policy and
+PostgreSQL RLS is defense in depth. The v2 slice is research decision support,
+not diagnosis, and does not expose an ASD probability. To roll it back, stop
+mounting `/api/v2` and keep `LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP=false`;
+do not touch the v1 database or migration history.
 
 ### 4. Running Python Unit Tests
 We use **pytest** to validate backend services.

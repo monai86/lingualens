@@ -39,12 +39,13 @@
 | Therapist app test file | `cd apps/lingualens-app && npm test -- src/__tests__/file.test.tsx` |
 
 ## Build And Run
-- Backend API: `cd apps/api && PYTHONPATH=. uvicorn app.main:app --reload --port 8000`.
+- Backend API: `cd apps/api && PYTHONPATH=.:../..:../../src uvicorn app.main:app --reload --port 8000`.
 - Therapist app: `cd apps/lingualens-app && npm run dev`.
 - Focused local verification: `bash scripts/check_project.sh`. It does not run
   dependency audits, the Python version matrix, frontend lint/typecheck, the UI
   audit, full Playwright suites, or the benchmark gate; use complete CI
   candidate gates for release/deployment evidence.
+- Native assessment runtime gate (Docker optional): `PYTHONPATH=apps/api:src python scripts/check_assessment_v2_native.py` with `LINGUALENS_NATIVE_ADMIN_DATABASE_URL` configured.
 
 ## Key Conventions
 - Follow `README.md`, `DEVELOPER_SETUP.md`, `docs/DEVELOPMENT.md`, and `docs/SECURITY.md` for workflow and safety rules.

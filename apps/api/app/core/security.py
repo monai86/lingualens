@@ -187,5 +187,14 @@ class OriginGuardMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         origin = request.headers.get("origin")
         if origin is not None and origin not in self.allowed_origins:
+            if request.url.path.startswith(get_settings().assessment_api_prefix):
+                from app.assessment_v2.errors import assessment_error_response
+
+                return assessment_error_response(
+                    request,
+                    "origin_not_allowed",
+                    status.HTTP_403_FORBIDDEN,
+                    "Origin is not allowed.",
+                )
             return JSONResponse({"detail": "Origin is not allowed."}, status_code=status.HTTP_403_FORBIDDEN)
         return await call_next(request)

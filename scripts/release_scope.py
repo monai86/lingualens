@@ -104,6 +104,10 @@ LOCAL_RUNTIME_DIR_NAMES = {
     "uploads",
 }
 LOCAL_RUNTIME_SUFFIXES = {".pyc", ".pyo", ".tsbuildinfo"}
+CONTROLLED_PLANNING_ROOTS = {
+    "docs/superpowers/plans",
+    "docs/superpowers/specs",
+}
 
 
 def is_local_runtime_path(path: Path) -> bool:
@@ -129,7 +133,12 @@ def relative_files(root: Path) -> set[str]:
 
 def forbidden_reason(relative: str | Path) -> str | None:
     path = Path(relative)
-    if set(path.parts) & FORBIDDEN_DIR_NAMES:
+    path_string = path.as_posix()
+    is_controlled_planning = any(
+        path_string == root or path_string.startswith(root + "/")
+        for root in CONTROLLED_PLANNING_ROOTS
+    )
+    if set(path.parts) & FORBIDDEN_DIR_NAMES and not is_controlled_planning:
         return f"forbidden directory: {path.as_posix()}"
     if path.name == ".DS_Store" or path.name == ".env" or (
         path.name.startswith(".env.") and path.name != ".env.example"
@@ -137,7 +146,9 @@ def forbidden_reason(relative: str | Path) -> str | None:
         return f"forbidden local/secret file: {path.as_posix()}"
     if path.suffix.lower() in FORBIDDEN_SUFFIXES:
         return f"forbidden file type: {path.as_posix()}"
-    if path.as_posix().startswith(("scratch/", "docs/superpowers/")):
+    if path.as_posix().startswith("scratch/"):
+        return f"unclassified planning file: {path.as_posix()}"
+    if path_string.startswith("docs/superpowers/") and not is_controlled_planning:
         return f"unclassified planning file: {path.as_posix()}"
     return None
 

@@ -68,6 +68,8 @@ _memory_queue = MemoryJobQueue()
 
 def get_job_queue():
     settings = get_settings()
+    if not settings.mock_mode and settings.job_queue_mode != "redis":
+        raise RuntimeError("Production job queue mode must use a durable managed queue.")
     if settings.job_queue_mode == "memory":
         return _memory_queue
     if settings.job_queue_mode == "redis":

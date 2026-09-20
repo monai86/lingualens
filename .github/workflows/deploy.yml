@@ -76,6 +76,8 @@ jobs:
         run: |
           PYTHONPATH=apps/api:src python scripts/check_api_migrations.py
 
+
+
   verify-therapist-frontend:
     needs: test-backend
     runs-on: ubuntu-latest

@@ -45,21 +45,21 @@ def render_cases_table(cases: list[dict[str, Any]]) -> None:
     table = Table(title="📋 Case Directory", border_style="cyan", show_lines=True)
     table.add_column("#", justify="right", style="cyan", no_wrap=True)
     table.add_column("Case ID", style="bold white")
-    table.add_column("Child ID", style="green")
+    table.add_column("Child Code", style="green")
     table.add_column("Age (Mo)", justify="center")
-    table.add_column("Lang", justify="center")
+    table.add_column("Language", justify="center")
     table.add_column("Sessions", justify="center")
-    table.add_column("Clinical Notes", style="dim")
+    table.add_column("Notes", style="dim")
 
     for i, c in enumerate(cases, 1):
         table.add_row(
             str(i),
             c.get("case_id", "-"),
-            c.get("child_id", "-"),
+            c.get("child_code", "-"),
             str(c.get("age_months", "-")),
-            c.get("primary_language", "th").upper(),
+            c.get("language", "-").upper(),
             str(c.get("session_count", 0)),
-            c.get("clinical_notes", "")[:40] + ("..." if len(c.get("clinical_notes", "")) > 40 else ""),
+            c.get("notes", "")[:40] + ("..." if len(c.get("notes", "")) > 40 else ""),
         )
     console.print(table)
 
@@ -172,3 +172,28 @@ def render_report_view(report: dict[str, Any]) -> None:
     panel_content.append(f"{report.get('recommendations', '-')}\n", style="white")
 
     console.print(Panel(panel_content, title="📄 Progress Report Summary", border_style="blue", padding=(1, 2)))
+
+
+def render_children_table(children: list[dict[str, Any]]) -> None:
+    """Render children directory table for Assessment V2."""
+    table = Table(title="👶 Children Directory (Assessment V2)", border_style="cyan", show_lines=True)
+    table.add_column("#", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Child ID", style="bold white")
+    table.add_column("Display Code", style="green")
+    table.add_column("Birth (YYYY-MM)", justify="center")
+    table.add_column("Lang", justify="center")
+
+    for i, ch in enumerate(children, 1):
+        by = ch.get("birth_year", "-")
+        bm = ch.get("birth_month")
+        birth_ym = f"{by}-{bm:02d}" if by != "-" and bm is not None else "-"
+        lang_ctx = ch.get("language_context", {})
+        primary_lang = lang_ctx.get("primary", "th") if isinstance(lang_ctx, dict) else "th"
+        table.add_row(
+            str(i),
+            str(ch.get("id", "-")),
+            str(ch.get("display_code", "-")),
+            birth_ym,
+            str(primary_lang).upper(),
+        )
+    console.print(table)

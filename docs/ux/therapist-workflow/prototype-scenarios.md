@@ -1,0 +1,183 @@
+# Prototype Scenarios and Workflow Branches
+
+**Data policy:** all scenarios use synthetic values. The child code `LL-0007`
+is a placeholder only; no name, audio, transcript, or participant data is stored
+in the repository or Figma file.
+
+## Information architecture
+
+The therapist-facing information architecture has four primary destinations:
+
+```text
+Today | Children | Assessments | Reports
+```
+
+`Organization` and `Account` are secondary settings. Processing jobs, provider
+names, feature schema versions, audit records, and research exports are reached
+through contextual detail or authorized settings, not primary therapist
+navigation.
+
+The labels map to the existing canonical web routes without creating a second
+route family:
+
+| IA label | Canonical runtime entry |
+|---|---|
+| Today | `/today` |
+| Children | `/cases` (scoped child/case list) |
+| Assessments | `/cases?intent=start-session`, then `/sessions/{sessionId}?view=...` |
+| Reports | `/reports`, opening the Session Workspace editor |
+| Organization/Account | `/settings` with role-gated sections |
+
+## Main scenario: `P01_Happy_Path_Desktop`
+
+### Goal
+
+Complete a developmental follow-up for synthetic child `LL-0007`, review the
+available evidence, record a clinician-owned next action, and reach a signed
+report without an automated diagnosis or numeric ASD probability.
+
+### Path
+
+```text
+Today
+  -> Select child
+  -> Child workspace
+  -> Start assessment
+  -> Purpose + consent
+  -> Protocol review
+  -> Guided capture
+  -> Quality decision
+  -> Processing status
+  -> Transcript uncertainty review
+  -> Evidence sufficiency
+  -> Developmental profile
+  -> Attention cue review
+  -> Clinical disposition
+  -> Report preparation
+  -> Clinician sign-off
+  -> Finalized assessment
+```
+
+### Walkthrough assertions
+
+1. The selected purpose remains visible after the protocol is reviewed.
+2. A recording is impossible until the consent gate and role boundary pass.
+3. Every result has evidence, limitation, and next-action content.
+4. Feature values, developmental domains, attention cues, trends, and
+   clinician-authored text remain visibly separate.
+5. A disagreement changes the clinician response, not the computed evidence.
+6. Finalization shows an immutable signed snapshot and an amendment path.
+
+## Recovery scenario: `P02_Consent_and_Quality_Recovery_Tablet`
+
+1. Begin with the child workspace and enter `H05 Assessment purpose`.
+2. Select developmental follow-up and open `H06 Consent confirmation`.
+3. Set the synthetic consent state to withdrawn and enter `E03`.
+4. Confirm that recording controls are absent or disabled and that no
+   assessment record is created when the server ID does not exist.
+5. Follow the consent action or return safely to the child workspace.
+6. Restart with valid synthetic consent, enter guided capture, and route an
+   insufficient-child-speech result to `E04`.
+7. Select `บันทึกตัวอย่างเพิ่มเติม`, return to capture, and continue to
+   processing only after a usable sample is available.
+
+## Evidence scenario: `P03_Profile_and_Trend_Review_Desktop`
+
+1. Open a completed synthetic assessment at the developmental profile.
+2. Open a domain detail and inspect measured features, observations, conflicts,
+   provenance, and limitations.
+3. Return to the profile without losing the prior scroll position.
+4. Open longitudinal comparison. Show dated compatible values and a table.
+5. Introduce a mismatched protocol and route to `E08`.
+6. Record `ขอข้อมูลที่เปรียบเทียบได้เพิ่มเติม`; do not draw a forced trend.
+7. Disagree with one attention cue, record a rationale, and verify that the
+   original computed cue remains available for audit.
+
+## Durable processing scenario: `P04_Evidence_Queue_Recovery_Desktop`
+
+Use synthetic child code `LL-0007`, synthetic transcript content, and the
+backend-owned processing state only.
+
+1. Complete transcript review and attestation, then select evidence extraction.
+2. Confirm the POST returns `202` with a queued run; do not show a completed
+   profile before the worker writes one.
+3. Reload while queued/running and confirm the current-run endpoint returns the
+   same opaque run ID; the browser does not create a local evidence object.
+4. Cancel a running job and confirm the transcript remains available. If the
+   returned `can_retry` is true because the therapist cancelled it, restart the
+   same run explicitly; do not infer this action from the state in the browser.
+5. Force a safe retryable failure, confirm the successful/partial evidence is
+   preserved, then retry only after the backend exposes `can_retry=true`.
+6. Create a new transcript revision or change the analysis contract and confirm
+   the old run reaches system-cancelled/stale handling; enqueue the current
+   revision as a new identity.
+
+### P04 assertions
+
+- `queued`, `running`, `failed`, `cancelled`, and `succeeded` are operational
+  states only; no state implies ASD, developmental delay, or a diagnosis.
+- A partial or insufficient result remains explicitly limited and is never
+  converted into zero, negative, or normal output.
+- All recovery actions use `expected_version` and a server response; reload and
+  API outage cannot fabricate evidence or completion.
+
+## Segment review scenario: `P05_Segment_Uncertainty_Review_Desktop`
+
+Use synthetic segment content only. The segment set is already tied by FastAPI
+to the current attested transcript revision; the browser does not invent
+timestamps or audio.
+
+1. Open the current transcript review and confirm the revision, version, and
+   number of segments are visible before editing.
+2. Toggle `แสดงเฉพาะช่วงที่ไม่แน่ใจ` and verify that a segment marked
+   `speaker_uncertain`, `low_asr_confidence`, `unintelligible_audio`, or
+   `timestamp_uncertain` remains visible with a textual reason.
+3. Focus one segment, edit its text or speaker role, and confirm the primary
+   action changes to `บันทึก revision ใหม่` while attestation is disabled.
+4. Save the revision and verify that the server response supplies the new
+   immutable revision/version. The old set is not edited in place.
+5. Request replay. If the signed grant is available, play only the bounded
+   interval. If it is unavailable, verify that text review and save remain
+   usable and that no storage key or permanent URL is shown.
+6. Check the attestation box only after saving, attest the current segment set,
+   and confirm that evidence processing is offered only after the server
+   returns `review_state=attested`.
+7. Reproduce a `409 stale_segment_set_version`, confirm the UI states that a
+   newer revision exists, and use `โหลด revision ล่าสุด`. The unsaved local
+   text is not silently merged into the newer server revision.
+
+### P05 assertions
+
+- Segment uncertainty is an explicit review queue, not a diagnostic label.
+- Speaker role, timing, confidence, and uncertainty reason remain separate
+  fields so downstream developmental features can report their provenance.
+- Replay availability is non-fatal; missing audio never becomes a fabricated
+  quality result.
+- Save and attest are separate actions with separate server version checks.
+
+## Safety and recovery branches
+
+| branch_id | trigger | visible state | required recovery or safe exit | rejoins |
+|---|---|---|---|---|
+| `E01` | API unreachable | Generic offline/error banner with no clinical payload. | Retry; if no server identifier exists, leave without creating a local clinical record. | Prior screen or `H03` |
+| `E02` | Permission denied | Role/care-team restriction with generic explanation. | Return to scoped child list; do not reveal the restricted record. | `H03` |
+| `E03` | Consent absent or withdrawn | Blocking consent state; recording unavailable. | Review consent action or return; no capture and no assessment transition. | `H04` or `H06` |
+| `E04` | Insufficient audio | Quality issue explains child speech/volume/noise problem. | Record an additional sample or stop with limitation. | `H08` or `H10` |
+| `E05` | Reference unavailable | Descriptive evidence only; no reference-band status. | Continue with within-child evidence or request compatible reference. | `H12-H16` |
+| `E06` | Conflicting evidence | Indeterminate cue with supporting and conflicting evidence. | Request targeted evidence or clinician review. | `H16-H17` |
+| `E07` | Dependent result stale | Stale result excluded from current report. | Reprocess changed input or review the current dependency. | `H10-H12` |
+| `E08` | Prior assessment incompatible | Not-comparable message with mismatch reason. | Record request for compatible evidence; do not show a trend. | `H15-H17` |
+| `E09` | Partial processing failure | Successful channels preserved; failed channel labeled unavailable. | Retry failed channel or continue with limitation. | `H10-H12` |
+| `E10` | Session timeout or unsaved note | Visible draft status; submit/sign-off blocked. | Reauthenticate and confirm the preserved draft before submit. | Current screen |
+
+## Validation checklist
+
+- Walk `P01` from Today to finalized assessment with mouse and keyboard.
+- Walk `P02` through withdrawn consent and insufficient audio.
+- Walk `P03` through conflicting evidence, disagreement, and incompatible
+  longitudinal data.
+- Walk `P04` through queue/reload, user cancellation/restart, retry, and stale
+  revision handling.
+- Confirm every branch states what was preserved, what is blocked, and what to
+  do next.
+- Search all frame copy for prohibited diagnosis/probability wording.

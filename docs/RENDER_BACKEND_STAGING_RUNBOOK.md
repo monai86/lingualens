@@ -14,7 +14,9 @@ Canonical deployment references:
 ## Before You Start
 
 - The backend service in this repository is `apps/api/`.
-- Render should use `apps/api` as the root directory for this service.
+- Render should use the repository root (`.`) as the root directory for this
+  service so the canonical API and the maintained analysis-contract package
+  are available in one deployment boundary.
 - The backend should run in production-like staging mode:
   - `THERAPIST_APP_V2_MOCK_MODE=false`
   - `THERAPIST_APP_V2_AUTH_MODE=supabase`
@@ -93,9 +95,9 @@ In Render Dashboard:
 ```text
 Name: lingualens-api-staging
 Language: Python 3
-Root Directory: apps/api
-Build Command: pip install -r requirements.txt
-Start Command: PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port $PORT
+Root Directory: .
+Build Command: pip install -r requirements.txt -r apps/api/requirements.txt
+Start Command: PYTHONPATH=apps/api:.:src uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
 Recommended:

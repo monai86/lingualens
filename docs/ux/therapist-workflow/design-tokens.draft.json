@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "name": "LinguaLens Clinical Workflow Light",
+    "status": "draft",
+    "purpose": "Thai-first therapist decision-support prototype",
+    "diagnosticOutput": false,
+    "numericASDProbability": false
+  },
+  "color": {
+    "primary": "#0E7490",
+    "onPrimary": "#FFFFFF",
+    "accent": "#047857",
+    "onAccent": "#FFFFFF",
+    "background": "#F8FAFC",
+    "surface": "#FFFFFF",
+    "foreground": "#164E63",
+    "mutedSurface": "#E8F1F6",
+    "mutedForeground": "#475569",
+    "border": "#64748B",
+    "attention": "#B45309",
+    "destructive": "#DC2626",
+    "focus": "#0369A1"
+  },
+  "font": {
+    "family": "Noto Sans Thai",
+    "sizes": [12, 14, 16, 18, 24, 32],
+    "lineHeightBody": 1.6,
+    "styles": [
+      "Display/32",
+      "Heading/24",
+      "Title/18",
+      "Body/16",
+      "BodyStrong/16",
+      "Label/14",
+      "Caption/12"
+    ]
+  },
+  "space": [4, 8, 12, 16, 24, 32, 48],
+  "radius": [4, 8, 12],
+  "touchTargetMinimum": 44,
+  "focusRing": {
+    "width": 3,
+    "color": "#0369A1",
+    "offset": 2
+  },
+  "contrast": {
+    "normalTextMinimum": 4.5,
+    "largeTextMinimum": 3,
+    "nonTextMinimum": 3,
+    "notes": "Darker primary/accent values are intentional so white text reaches AA contrast."
+  },
+  "resultSemantics": {
+    "measuredFeature": "neutral value row with unit, quality, and source",
+    "developmentalDomain": "evidence summary card with descriptive status",
+    "attentionCue": "action-oriented review card without score or probability",
+    "trend": "dated compatible measurements with line chart only when four or more points exist",
+    "diagnosis": "clinician-authored text block with author and timestamp"
+  }
+}
