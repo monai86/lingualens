@@ -2905,6 +2905,7 @@ class LinguaLensGUIApp:
                 f"Audio processed successfully for Session: {self.active_session_id}!\nAcoustic features & transcript extracted.",
             )
             self._refresh_transcript_and_findings()
+            self._update_stepper_state()
             self.notebook.select(2)  # Jump to Review tab
 
         def _on_audio_error(exc: Exception) -> None:

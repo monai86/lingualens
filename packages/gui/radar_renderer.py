@@ -170,3 +170,95 @@ class RadarChartRenderer:
                     "Please ingest session audio or dialogue transcript in Tab 2 (Ingest Material) to compute LSA metrics and acoustic prosody profile.",
                 )
                 self.summary_widget.config(state=tk.DISABLED)
+
+    @staticmethod
+    def render_svg(metrics: dict[str, Any], width: int = 400, height: int = 340) -> str:
+        """Generate a standalone SVG string of the radar spider chart for printable HTML reports."""
+        cx, cy = width / 2, height / 2 - 12
+        radius = max(60, min(cx, cy) - 45)
+
+        has_child_data = bool(
+            metrics
+            and (metrics.get("mlu_words") is not None or metrics.get("total_child_utterances", 0) > 0)
+            and metrics.get("total_child_utterances", 0) > 0
+        )
+
+        f0_val = metrics.get("f0_iqr_hz") if has_child_data else None
+        f0_float = float(f0_val) if f0_val is not None and f0_val != "N/A" else None
+        sp_val = metrics.get("speech_rate_wpm") if has_child_data else None
+        sp_float = float(sp_val) if sp_val is not None and sp_val != "N/A" else None
+
+        mlu_val = float(metrics["mlu_words"]) if has_child_data and metrics.get("mlu_words") is not None else None
+        ttr_val = float(metrics["ttr"]) if has_child_data and metrics.get("ttr") is not None else None
+        tt_val = float(metrics["turn_taking_ratio"]) if has_child_data and metrics.get("turn_taking_ratio") is not None else None
+        intel_val = float(metrics["intelligibility_rate"]) if has_child_data and metrics.get("intelligibility_rate") is not None else None
+
+        axes = [
+            {"label": "MLU-w", "val": mlu_val, "td": 3.5, "unit": "words"},
+            {"label": "TTR", "val": ttr_val, "td": 0.75, "unit": ""},
+            {"label": "Turn-Taking", "val": tt_val, "td": 0.90, "unit": ""},
+            {"label": "Intelligibility", "val": intel_val, "td": 0.95, "unit": ""},
+            {"label": "Speech Rate", "val": sp_float, "td": 90.0, "unit": "wpm"},
+            {"label": "Prosody IQR", "val": f0_float, "td": 35.0, "unit": "Hz"},
+        ]
+        n = len(axes)
+        svg_parts = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" style="font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; display: inline-block;">',
+            f'<rect width="{width}" height="{height}" fill="#ffffff" rx="8" />',
+        ]
+
+        # Background grid rings
+        for r_ratio in [0.25, 0.5, 0.75, 1.0, 1.2]:
+            r = radius * (r_ratio / 1.2)
+            is_td = (r_ratio == 1.0)
+            stroke_color = "#10b981" if is_td else "#e2e8f0"
+            stroke_width = 2 if is_td else 1
+            dash_attr = 'stroke-dasharray="4,4"' if is_td else ''
+            pts = []
+            for i in range(n):
+                angle = -math.pi / 2 + (2 * math.pi * i / n)
+                pts.append(f"{cx + r * math.cos(angle):.1f},{cy + r * math.sin(angle):.1f}")
+            svg_parts.append(f'<polygon points="{" ".join(pts)}" fill="none" stroke="{stroke_color}" stroke-width="{stroke_width}" {dash_attr} />')
+
+        # Axis rays & labels
+        for i, ax in enumerate(axes):
+            angle = -math.pi / 2 + (2 * math.pi * i / n)
+            x_end = cx + radius * math.cos(angle)
+            y_end = cy + radius * math.sin(angle)
+            svg_parts.append(f'<line x1="{cx:.1f}" y1="{cy:.1f}" x2="{x_end:.1f}" y2="{y_end:.1f}" stroke="#cbd5e1" stroke-width="1" />')
+
+            lbl_r = radius + 22
+            lx = cx + lbl_r * math.cos(angle)
+            ly = cy + lbl_r * math.sin(angle)
+            anchor = "middle" if abs(math.cos(angle)) < 0.2 else ("start" if math.cos(angle) > 0 else "end")
+            val_str = f" ({ax['val']:.1f})" if ax["val"] is not None else ""
+            svg_parts.append(f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="{anchor}" font-size="11" font-weight="600" fill="#475569">{ax["label"]}{val_str}</text>')
+
+        # Child polygon
+        if has_child_data:
+            child_pts = []
+            for i, ax in enumerate(axes):
+                angle = -math.pi / 2 + (2 * math.pi * i / n)
+                val = ax["val"]
+                ratio = min(max(val / ax["td"], 0.0), 1.2) if val is not None and ax["td"] else 0.0
+                r = radius * (ratio / 1.2)
+                px = cx + r * math.cos(angle)
+                py = cy + r * math.sin(angle)
+                child_pts.append((px, py))
+            pts_str = " ".join(f"{x:.1f},{y:.1f}" for x, y in child_pts)
+            svg_parts.append(f'<polygon points="{pts_str}" fill="rgba(3, 105, 161, 0.25)" stroke="#0284c7" stroke-width="2.5" />')
+            for px, py in child_pts:
+                svg_parts.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="4" fill="#0369a1" stroke="#ffffff" stroke-width="1.5" />')
+        else:
+            svg_parts.append(f'<text x="{cx:.1f}" y="{cy:.1f}" text-anchor="middle" font-size="12" fill="#94a3b8">No session evaluation data</text>')
+
+        # Legend
+        svg_parts.append(f'<g transform="translate({cx - 140}, {height - 18})">')
+        svg_parts.append('<line x1="0" y1="6" x2="22" y2="6" stroke="#10b981" stroke-width="2" stroke-dasharray="4,3" />')
+        svg_parts.append('<text x="26" y="10" font-size="10" fill="#047857">TD Benchmark Norm (100%)</text>')
+        svg_parts.append('<rect x="160" y="2" width="16" height="8" fill="rgba(3, 105, 161, 0.4)" stroke="#0284c7" stroke-width="1.5" />')
+        svg_parts.append('<text x="182" y="10" font-size="10" fill="#0369a1">Child Session Evaluation</text>')
+        svg_parts.append('</g>')
+
+        svg_parts.append('</svg>')
+        return "\n".join(svg_parts)

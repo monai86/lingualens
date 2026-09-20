@@ -562,32 +562,43 @@ class InMemoryClinicalAdapter:
         pause_r = acoustic_metrics.get("pause_ratio")
         dur_sec = acoustic_metrics.get("duration_sec", 10.0)
 
+        try:
+            from src.clinical_speech.thai_lsa import ThaiClinicalLSA
+            lsa_res = ThaiClinicalLSA.analyze_utterances(utterances)
+        except Exception:
+            lsa_res = None
+
+        child_lsa_words = lsa_res.total_child_words if lsa_res else 4
         feat_data = {
             "feature_set_id": f"feat-audio-{session_id[-4:]}",
             "session_id": session_id,
             "has_data": True,
             "metrics": {
-                "mlu_words": 4.0 if utterances else 0.0,
-                "mlu_morphemes": 4.7 if utterances else 0.0,
-                "ttr": 1.0 if utterances else 0.0,
-                "total_child_words": 4,
-                "unique_words_count": 4,
-                "total_child_utterances": 1,
+                "mlu_words": lsa_res.mlu_words if lsa_res else (4.0 if utterances else 0.0),
+                "mlu_morphemes": round((lsa_res.mlu_words if lsa_res else 4.0) * 1.18, 2) if utterances else 0.0,
+                "ttr": lsa_res.ttr if lsa_res else (1.0 if utterances else 0.0),
+                "total_child_words": child_lsa_words,
+                "unique_words_count": lsa_res.unique_words_count if lsa_res else 4,
+                "total_child_utterances": lsa_res.total_child_utterances if lsa_res else 1,
                 "multi_word_ratio_pct": 100.0,
                 "intelligibility_rate": 0.96,
                 "turn_taking_ratio": 1.0,
-                "turn_taking_count": 1,
-                "question_ratio": 0.0,
-                "adult_utterance_count": 1,
-                "echolalia_count": 0,
-                "echolalia_ratio": 0.0,
+                "turn_taking_count": lsa_res.turn_taking_count if lsa_res else 1,
+                "question_ratio": round((lsa_res.question_count if lsa_res else 0) / max(lsa_res.total_child_utterances if lsa_res else 1, 1), 2),
+                "question_count": lsa_res.question_count if lsa_res else 0,
+                "negation_count": lsa_res.negation_count if lsa_res else 0,
+                "pronoun_count": lsa_res.pronoun_count if lsa_res else 0,
+                "polite_particle_count": lsa_res.polite_particle_count if lsa_res else 0,
+                "adult_utterance_count": sum(1 for u in utterances if u.get("speaker") != "CHI"),
+                "echolalia_count": lsa_res.echolalia_count if lsa_res else 0,
+                "echolalia_ratio": round((lsa_res.echolalia_count if lsa_res else 0) / max(lsa_res.total_child_utterances if lsa_res else 1, 1), 2),
                 "pronoun_reversal_count": 0,
                 "unintelligible_ratio": 0.04,
                 "f0_median_hz": f0_val if f0_val != "N/A" else None,
                 "f0_iqr_hz": f0_iqr if f0_iqr != "N/A" else None,
                 "voiced_ratio_pct": voiced_r,
                 "pause_ratio_pct": pause_r,
-                "speech_rate_wpm": round((4 / max(dur_sec, 1.0)) * 60, 1),
+                "speech_rate_wpm": round((child_lsa_words / max(dur_sec, 1.0)) * 60, 1),
                 "audio_duration_sec": dur_sec,
             },
             "guideline_links": [
@@ -595,7 +606,12 @@ class InMemoryClinicalAdapter:
                     "construct": "5. Acoustic Prosody & Pitch (ระดับเสียงและน้ำเสียง)",
                     "status": "Analyzed (จากไฟล์เสียงจริง)",
                     "description": f"Pitch กลาง {f0_val} Hz, ความกว้างระดับเสียง IQR {f0_iqr} Hz, จังหวะหยุดพัก {pause_r}%",
-                }
+                },
+                {
+                    "construct": "6. Thai Clinical Language Structure (โครงสร้างภาษาไทยคลินิก LSA)",
+                    "status": "Analyzed",
+                    "description": f"คำถาม {lsa_res.question_count if lsa_res else 0} ครั้ง, ปฏิเสธ {lsa_res.negation_count if lsa_res else 0} ครั้ง, คำสุภาพ {lsa_res.polite_particle_count if lsa_res else 0} ครั้ง",
+                },
             ],
         }
         self._mock_data["features"][session_id] = feat_data
@@ -687,10 +703,6 @@ class InMemoryClinicalAdapter:
 
         child_utts = [u["text"] for u in tr["utterances"] if u.get("speaker") == "CHI"]
         adult_utts = [u["text"] for u in tr["utterances"] if u.get("speaker") != "CHI"]
-
-        all_child_words = [w for t in child_utts for w in t.split() if w.strip()]
-        total_child_words = len(all_child_words)
-        unique_words = len(set(all_child_words))
         n_child = len(child_utts)
 
         if n_child == 0:
@@ -730,10 +742,34 @@ class InMemoryClinicalAdapter:
                 ],
             }
 
-        mlu_w = round(total_child_words / n_child, 2)
+        try:
+            from src.clinical_speech.thai_lsa import ThaiClinicalLSA
+            lsa = ThaiClinicalLSA.analyze_utterances(tr["utterances"])
+            total_child_words = lsa.total_child_words
+            unique_words = lsa.unique_words_count
+            mlu_w = lsa.mlu_words
+            ttr = lsa.ttr
+            q_count = lsa.question_count
+            neg_count = lsa.negation_count
+            pronoun_count = lsa.pronoun_count
+            particle_count = lsa.polite_particle_count
+            echolalia_cnt = lsa.echolalia_count
+            turn_taking = lsa.turn_taking_count
+        except Exception:
+            all_child_words = [w for t in child_utts for w in t.split() if w.strip()]
+            total_child_words = len(all_child_words)
+            unique_words = len(set(all_child_words))
+            mlu_w = round(total_child_words / n_child, 2)
+            ttr = round(unique_words / max(total_child_words, 1), 2)
+            q_count = sum(1 for t in child_utts if "?" in t or any(qw in t for qw in ["อะไร", "ไหน", "ทำไม", "ใคร"]))
+            neg_count = sum(1 for t in child_utts if any(nw in t for nw in ["ไม่", "ไม่อยาก", "ไม่ใช่"]))
+            pronoun_count = sum(1 for t in child_utts if any(p in t for p in ["ผม", "หนู", "เธอ", "เขา"]))
+            particle_count = sum(1 for t in child_utts if any(p in t for p in ["ครับ", "ค่ะ", "ฮะ"]))
+            echolalia_cnt = sum(1 for i in range(1, len(tr["utterances"])) if tr and tr["utterances"][i]["speaker"] == "CHI" and any(w in tr["utterances"][i-1]["text"] for w in tr["utterances"][i]["text"].split())) if tr else 0
+            turn_taking = min(len(adult_utts), len(child_utts))
+
         mlu_m = round(mlu_w * 1.18, 2)
-        ttr = round(unique_words / max(total_child_words, 1), 2)
-        multi_word = sum(1 for t in child_utts if len(t.split()) >= 2)
+        multi_word = sum(1 for t in child_utts if len(t.split()) >= 2 or len(t) >= 6)
         multi_word_pct = round((multi_word / n_child) * 100, 1)
 
         existing_metrics = self._mock_data.get("features", {}).get(session_id, {}).get("metrics", {})
@@ -761,9 +797,7 @@ class InMemoryClinicalAdapter:
             acoustic_status = "N/A (Text-only - No Audio)"
             acoustic_desc = "การวัดระดับเสียง F0 และ Prosody จำเป็นต้องมีไฟล์บันทึกเสียง (.wav / .mp3 / .m4a)"
 
-        q_count = sum(1 for t in child_utts if "?" in t or any(qw in t for qw in ["อะไร", "ไหน", "ทำไม", "ใคร"]))
         q_ratio = round(q_count / n_child, 2)
-        turn_taking = min(len(adult_utts), len(child_utts))
         turn_taking_ratio = round(turn_taking / max(len(adult_utts), 1), 2)
 
         latencies = []
@@ -777,7 +811,6 @@ class InMemoryClinicalAdapter:
                         latencies.append(c_start - p_end)
         turn_latency = round(sum(latencies) / len(latencies), 2) if latencies else None
 
-        echolalia_cnt = sum(1 for i in range(1, len(tr["utterances"])) if tr and tr["utterances"][i]["speaker"] == "CHI" and any(w in tr["utterances"][i-1]["text"] for w in tr["utterances"][i]["text"].split())) if tr else 0
         pronoun_rev = sum(1 for t in child_utts if any(p in t for p in ["หนูอยาก", "เธออยาก", "คุณไป"]))
 
         metrics_full = {
@@ -793,6 +826,10 @@ class InMemoryClinicalAdapter:
             "turn_taking_count": turn_taking,
             "turn_taking_latency_sec": turn_latency,
             "question_ratio": q_ratio,
+            "question_count": q_count,
+            "negation_count": neg_count,
+            "pronoun_count": pronoun_count,
+            "polite_particle_count": particle_count,
             "adult_utterance_count": len(adult_utts),
             "echolalia_count": echolalia_cnt,
             "echolalia_ratio": round(echolalia_cnt / n_child, 2),
@@ -812,6 +849,11 @@ class InMemoryClinicalAdapter:
             {"construct": "3. Pragmatic Turn-Taking (การผลัดกันพูดในบทสนทนา)", "status": "Responsive (ตอบสนองดี)" if turn_taking_ratio >= 0.7 else "Developing", "description": f"Turn-taking ratio {turn_taking_ratio} มีการโต้ตอบคู่สนทนา {turn_taking} ครั้ง"},
             {"construct": "4. Echolalia & Repetition (การพูดตาม/พูดซ้ำ)", "status": "Low / Monitored" if echolalia_cnt == 0 else "Observed", "description": f"พบ Echolalia {echolalia_cnt} ครั้ง, สลับสรรพนาม {pronoun_rev} ครั้ง"},
             {"construct": "5. Acoustic Prosody & Pitch (ระดับเสียงและน้ำเสียง)", "status": acoustic_status, "description": acoustic_desc},
+            {
+                "construct": "6. Thai Clinical Language Structure (โครงสร้างภาษาไทยคลินิก LSA)",
+                "status": "Analyzed",
+                "description": f"คำถาม {q_count} ครั้ง, ปฏิเสธ {neg_count} ครั้ง, คำลงท้ายสุภาพ {particle_count} ครั้ง, สรรพนาม {pronoun_count} ครั้ง",
+            },
         ]
 
         self._mock_data["features"][session_id] = {

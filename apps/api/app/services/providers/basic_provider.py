@@ -539,6 +539,17 @@ _STOPWORDS = {"xxx", "yyy", "www"}
 
 def _tokens(text: str) -> list[str]:
     """Tokenise utterance text, excluding unintelligibility placeholders."""
+    if re.search(r"[\u0e00-\u0e7f]", text):
+        try:
+            from src.clinical_speech.thai_lsa import tokenize_thai_words
+            return [
+                t.lower()
+                for t in tokenize_thai_words(text)
+                if t.lower() not in _STOPWORDS and t.strip()
+            ]
+        except Exception:
+            pass
+
     return [
         tok.lower()
         for tok in re.findall(r"[\w']+", text)

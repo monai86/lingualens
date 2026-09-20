@@ -50,6 +50,56 @@ def generate_bilingual_clinical_html(
         status_badge = f"<span class='badge'> {s} </span>"
         guidelines_rows += f"<tr><td><strong>{c}</strong></td><td>{status_badge}</td><td style='color: #475569;'>{e}</td></tr>\n"
 
+    # Thai Clinical LSA Domain Grid Card
+    thai_lsa_html = ""
+    if any(k in metrics for k in ["mlu_words", "question_count", "negation_count", "polite_particle_count"]):
+        mlu_w_val = metrics.get("mlu_words", "-")
+        ttr_val = f"{(float(metrics['ttr']) * 100):.1f}%" if metrics.get("ttr") is not None and metrics.get("ttr") != "-" else "-"
+        q_val = metrics.get("question_count", metrics.get("question_ratio", "-"))
+        neg_val = metrics.get("negation_count", "-")
+        pronoun_val = metrics.get("pronoun_count", "-")
+        polite_val = metrics.get("polite_particle_count", "-")
+        echo_val = metrics.get("echolalia_count", "-")
+        tt_val = metrics.get("turn_taking_count", metrics.get("turn_taking_ratio", "-"))
+
+        thai_lsa_html = f"""
+        <div class="section-title">🇹🇭 2. Thai Clinical Language Structure / โครงสร้างภาษาไทยคลินิก (LSA)</div>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
+          <div style="background: #f0fdfa; border: 1px solid #ccfbf1; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #0f766e; font-weight: 600;">MLU-w (ความยาวประโยค)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{mlu_w_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">คำ/ประโยค</span></div>
+          </div>
+          <div style="background: #f0fdfa; border: 1px solid #ccfbf1; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #0f766e; font-weight: 600;">TTR (ความหลากหลายคำ)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{ttr_val}</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #475569; font-weight: 600;">คำถาม (Questions)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{q_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง</span></div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #475569; font-weight: 600;">คำปฏิเสธ (Negations)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{neg_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง</span></div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #475569; font-weight: 600;">คำสรรพนาม (Pronouns)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{pronoun_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง</span></div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #475569; font-weight: 600;">คำลงท้ายสุภาพ (Polite)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{polite_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง</span></div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #475569; font-weight: 600;">Echolalia (พูดตามซ้ำ)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{echo_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง</span></div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #475569; font-weight: 600;">Turn-Taking (ผลัดกันพูด)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{tt_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">รอบ</span></div>
+          </div>
+        </div>
+        """
+
     # Longitudinal Comparison Table (if multiple sessions exist)
     longitudinal_html = ""
     if longitudinal_sessions and len(longitudinal_sessions) > 1:
@@ -65,7 +115,7 @@ def generate_bilingual_clinical_html(
             rows += f"<tr><td>{s_dt}</td><td><code>{s_id}</code></td><td>{s_utts}</td><td>{s_chi}</td><td>{s_mlu}</td><td>{s_ttr}</td><td>{s_f0}</td></tr>\n"
 
         longitudinal_html = f"""
-        <div class="section-title">📈 4. Longitudinal Assessment Trajectory / ติดตามพัฒนาการรายครั้ง</div>
+        <div class="section-title">📈 5. Longitudinal Assessment Trajectory / ติดตามพัฒนาการรายครั้ง</div>
         <table>
           <thead>
             <tr><th>Date / วันที่</th><th>Session ID</th><th>Total Utts</th><th>Child Turns</th><th>MLU-w</th><th>TTR (Vocab)</th><th>F0 Pitch (Hz)</th></tr>
@@ -238,11 +288,29 @@ def generate_bilingual_clinical_html(
     color: #94a3b8;
     text-align: center;
   }}
+  .btn-print {{
+    background: #0f766e;
+    color: #ffffff;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    margin-bottom: 8px;
+    display: block;
+    margin-left: auto;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }}
+  .btn-print:hover {{
+    background: #115e59;
+  }}
   @media print {{
     body {{ background: #fff; padding: 0; }}
     .report-container {{ box-shadow: none; border: none; padding: 0; max-width: 100%; }}
     .safety-box {{ break-inside: avoid; }}
     .attestation-box {{ break-inside: avoid; }}
+    .btn-print {{ display: none !important; }}
   }}
 </style>
 </head>
@@ -255,6 +323,7 @@ def generate_bilingual_clinical_html(
       <div class="sub">Language Sample Analysis & Speech-Language Biomarkers Decision Support</div>
     </div>
     <div style="text-align: right;">
+      <button onclick="window.print()" class="btn-print">🖨️ พิมพ์รายงาน / Save as PDF</button>
       <span class="badge">Clinical Research Prototype</span>
     </div>
   </div>
@@ -282,7 +351,9 @@ def generate_bilingual_clinical_html(
     </tbody>
   </table>
 
-  <div class="section-title">📑 2. Clinical Guideline & Developmental Constructs / การประเมินตามมิติคลินิก</div>
+  {thai_lsa_html}
+
+  <div class="section-title">📑 3. Clinical Guideline & Developmental Constructs / การประเมินตามมิติคลินิก</div>
   <table>
     <thead>
       <tr><th>Construct Domain</th><th>Observation Status</th><th>Clinical Description</th></tr>
@@ -292,7 +363,7 @@ def generate_bilingual_clinical_html(
     </tbody>
   </table>
 
-  <div class="section-title">📝 3. Narrative Observations & Recommendations / สรุปความเห็นและข้อเสนอแนะ</div>
+  <div class="section-title">📝 4. Narrative Observations & Recommendations / สรุปความเห็นและข้อเสนอแนะ</div>
   <div class="notes-box">
 <strong>Clinical Observations:</strong>
 {html.escape(narrative or 'No narrative notes entered.')}

@@ -41,6 +41,18 @@ export interface ClinicalReportData {
     speechRateWpm?: number;
   };
 
+  /* Longitudinal Trajectory */
+  longitudinalSessions?: Array<{
+    sessionId: string;
+    date: string;
+    mluWords?: number;
+    ttr?: number;
+    turnTakingCount?: number;
+    echolaliaCount?: number;
+    politeParticleCount?: number;
+    f0MedianHz?: number;
+  }>;
+
   /* Recommendations */
   recommendations?: string[];
 
@@ -256,6 +268,46 @@ export function ClinicalPdfReport({ data }: { data: ClinicalReportData }) {
                 </div>
               )}
             </section>
+
+            {/* ── Longitudinal Trajectory ── */}
+            {data.longitudinalSessions && data.longitudinalSessions.length > 1 && (
+              <section className="print:break-inside-avoid space-y-2">
+                <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400 border-b border-slate-200 pb-1 flex items-center justify-between">
+                  <span>ติดตามพัฒนาการข้ามเซสชัน (Longitudinal Assessment Trajectory)</span>
+                  <span className="text-[10px] font-normal text-slate-500 normal-case">{data.longitudinalSessions.length} เซสชัน</span>
+                </h3>
+                <div className="overflow-x-auto rounded border border-slate-200">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold">
+                        <th className="py-2 px-2.5">วันที่</th>
+                        <th className="py-2 px-2.5">Session</th>
+                        <th className="py-2 px-2.5 text-right">MLU-w (คำ)</th>
+                        <th className="py-2 px-2.5 text-right">TTR</th>
+                        <th className="py-2 px-2.5 text-right">Turn-Taking</th>
+                        <th className="py-2 px-2.5 text-right">คำสุภาพ</th>
+                        <th className="py-2 px-2.5 text-right">Echolalia</th>
+                        <th className="py-2 px-2.5 text-right">Pitch F0 (Hz)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {data.longitudinalSessions.map((s, idx) => (
+                        <tr key={s.sessionId} className={idx === (data.longitudinalSessions?.length ?? 0) - 1 ? "bg-teal-50/30 font-semibold" : ""}>
+                          <td className="py-1.5 px-2.5 whitespace-nowrap">{s.date}</td>
+                          <td className="py-1.5 px-2.5 font-mono text-[11px] text-slate-600">{s.sessionId}</td>
+                          <td className="py-1.5 px-2.5 text-right font-mono">{s.mluWords != null ? s.mluWords.toFixed(2) : "-"}</td>
+                          <td className="py-1.5 px-2.5 text-right font-mono">{s.ttr != null ? `${(s.ttr * 100).toFixed(0)}%` : "-"}</td>
+                          <td className="py-1.5 px-2.5 text-right font-mono">{s.turnTakingCount != null ? s.turnTakingCount : "-"}</td>
+                          <td className="py-1.5 px-2.5 text-right font-mono">{s.politeParticleCount != null ? s.politeParticleCount : "-"}</td>
+                          <td className="py-1.5 px-2.5 text-right font-mono">{s.echolaliaCount != null ? s.echolaliaCount : "-"}</td>
+                          <td className="py-1.5 px-2.5 text-right font-mono">{s.f0MedianHz != null ? s.f0MedianHz : "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            )}
 
             {/* ── Recommendations ── */}
             {data.recommendations && data.recommendations.length > 0 && (

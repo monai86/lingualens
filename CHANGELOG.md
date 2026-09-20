@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Added
+- Integrated Thai Clinical LSA Engine into Desktop Memory Adapter & API Feature Provider (`packages/tui/adapters/memory_adapter.py`, `apps/api/app/services/providers/basic_provider.py`):
+  calculates authentic Thai word segmentation (`tokenize_thai_words`), MLU-w, TTR, and linguistic markers for child language sample analysis, eliminating whitespace-splitting artifacts on Thai script.
+- Built Reusable Longitudinal Trend Trajectory Card (`apps/lingualens-app/src/features/reports/components/longitudinal-trend-card.tsx`):
+  provides multi-session trajectory analysis tracking changes in MLU-w, TTR, conversational turn-taking, and echolalia across consecutive sessions with directional indicator badges and clinical caution disclaimers.
+- Enhanced Clinical PDF & Bilingual HTML Export Engine (`packages/gui/export_engine.py`, `packages/reports/clinical_report_template.py`):
+  standalone pure vector SVG 5-Domain Spider Diagram (`RadarChartRenderer.render_svg`), quantitative Thai LSA grid card, multi-session longitudinal trajectory table, and 1-click "Print to PDF" with `@media print` layout formatting.
+- Created Comprehensive Thai Advisor & Academic Summary (`docs/PROJECT_SUMMARY_TH.md`):
+  detailing the 5-Domain clinical framework, Thai LSA engine architecture, live microphone recording pipeline, and non-diagnostic clinical safety boundaries.
 - Implemented Therapist Simple 5-Step Guided Workflow UI in Desktop GUI (`packages/gui/app.py`):
   interactive 5-step stepper bar with progress badges (`Open Case` -> `Add Session` -> `Ingest Material` -> `Review Transcript` -> `Progress Report`), dynamic contextual Next Action Ribbon providing single-click workflow guidance, and collapsible disclosures (`View Details` / `Advanced`) for technical acoustic and model parameters.
 - Added Live Microphone Recording in Desktop GUI (`packages/gui/audio_controller.py`, `packages/gui/app.py`):

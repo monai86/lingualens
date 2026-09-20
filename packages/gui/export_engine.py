@@ -121,6 +121,9 @@ class ClinicalExportEngine:
                         "f0_median": m.get("f0_median_hz", "-"),
                     })
 
+        from packages.gui.radar_renderer import RadarChartRenderer
+        radar_svg = RadarChartRenderer.render_svg(findings.get("metrics", {}))
+
         from packages.reports.clinical_report_template import generate_bilingual_clinical_html
         attested_by = (
             active_transcript.get("attested_by", "Kru Aum (Certified SLP)")
@@ -136,6 +139,7 @@ class ClinicalExportEngine:
             recommendations=recommendations,
             attested_by=attested_by,
             longitudinal_sessions=longitudinal_sessions,
+            radar_svg=radar_svg,
         )
 
         with open(out_file, "w", encoding="utf-8") as f:

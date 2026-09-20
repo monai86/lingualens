@@ -16,6 +16,56 @@ const DEMO_REPORT: ClinicalReportData = {
   receptiveScore: 0.78,
   expressiveScore: 0.71,
 
+  thaiLsaMetrics: {
+    mluWords: 3.42,
+    mluMorphemes: 4.05,
+    ttr: 0.68,
+    totalWords: 48,
+    uniqueWords: 33,
+    questionCount: 4,
+    questionRatio: 0.29,
+    negationCount: 2,
+    negationRatio: 0.14,
+    pronounCount: 6,
+    politeParticleCount: 5,
+    echolaliaCount: 1,
+    turnTakingCount: 12,
+    speechRateWpm: 88.5,
+  },
+
+  longitudinalSessions: [
+    {
+      sessionId: "SESS-001",
+      date: "01/08/2026",
+      mluWords: 2.10,
+      ttr: 0.52,
+      turnTakingCount: 5,
+      politeParticleCount: 1,
+      echolaliaCount: 4,
+      f0MedianHz: 320.5,
+    },
+    {
+      sessionId: "SESS-002",
+      date: "15/08/2026",
+      mluWords: 2.85,
+      ttr: 0.61,
+      turnTakingCount: 8,
+      politeParticleCount: 3,
+      echolaliaCount: 2,
+      f0MedianHz: 312.0,
+    },
+    {
+      sessionId: "SESS-003",
+      date: "20/09/2026",
+      mluWords: 3.42,
+      ttr: 0.68,
+      turnTakingCount: 12,
+      politeParticleCount: 5,
+      echolaliaCount: 1,
+      f0MedianHz: 308.2,
+    },
+  ],
+
   receptiveSummary:
     "เด็กสามารถเข้าใจคำสั่งง่ายๆ 2 ขั้นตอนได้ดี เช่น \"หยิบตุ๊กตาแล้วเอามาให้ครู\" " +
     "ชี้รูปภาพตามคำบอกได้ถูกต้องประมาณ 80% ของชุดทดสอบ " +
