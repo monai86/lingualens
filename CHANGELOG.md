@@ -1,8 +1,18 @@
 # Changelog
 
-## Unreleased
+## [v1.6.3] - 2026-09-21
 
 ### Added
+- **Thai Clinical Pragmatics & Syntax Engine Expansion** (`src/clinical_speech/thai_lsa.py`, `packages/reports/clinical_report_template.py`, `packages/gui/app.py`):
+  Differentiates immediate verbatim repetition (≥80% overlap) from mitigated echolalia (40–79% overlap), filters valid communicative affirmative responses (`ใช่`, `ไม่เอา`, `ชอบ`), and detects Thai pronoun reversal (`เธอ`/`คุณ` self-referencing with desire/state predicates). Surfaced in GUI metrics tree and clinical PDF/HTML report alerts.
+- **Clinician Assistant Live API Bridge & Push to Draft** (`apps/lingualens-app/src/app/assistant/page.tsx`):
+  Connected web clinician assistant directly to `listBackendCases()` with de-identified child code labels, dynamic clinical prompt templates, and 1-click "คัดลอกลง Report Draft" mutation storing into session draft storage.
+- **Age-Cohort Normative Benchmarks & Typical Development Growth Corridor** (`packages/gui/radar_renderer.py`, `packages/gui/app.py`):
+  Introduced 3 age-stratified developmental cohorts (24–35m, 36–47m, 48–60m) for 5-domain radar charts and rendered a shaded Typical Development (TD) milestone growth corridor (`#eef2ff`, dashed `#c7d2fe`) in the multi-session longitudinal trajectory chart.
+- **24-Segment Discrete LED Level Meter & Voice Activity Detection (VAD)** (`packages/gui/audio_controller.py`, `packages/gui/app.py`):
+  Integrated studio-grade 24-segment discrete LED VU meter (green/amber/red) with energy-based real-time `● VOICE ACTIVE` badge and headroom clipping alerts (`⚠️ CLIPPING DETECTED`) during live speech capture.
+- **Turnkey Pilot Deployment Orchestration** (`scripts/launch_pilot.sh`, `docs/PILOT_DEPLOYMENT.md`):
+  Provided one-command automated startup with environment preflight validation (Python 3.11+, Node.js 20+, port availability), dual FastAPI + Next.js service management, health probing, and graceful shutdown handling.
 - Integrated Thai Clinical LSA Engine into Desktop Memory Adapter & API Feature Provider (`packages/tui/adapters/memory_adapter.py`, `apps/api/app/services/providers/basic_provider.py`):
   calculates authentic Thai word segmentation (`tokenize_thai_words`), MLU-w, TTR, and linguistic markers for child language sample analysis, eliminating whitespace-splitting artifacts on Thai script.
 - Built Reusable Longitudinal Trend Trajectory Card (`apps/lingualens-app/src/features/reports/components/longitudinal-trend-card.tsx`):

@@ -59,12 +59,28 @@ def generate_bilingual_clinical_html(
         neg_val = metrics.get("negation_count", "-")
         pronoun_val = metrics.get("pronoun_count", "-")
         polite_val = metrics.get("polite_particle_count", "-")
+        mood_val = metrics.get("mood_particle_count", "-")
+        conj_val = metrics.get("conjunction_count", "-")
+        filler_val = metrics.get("filler_word_count", "-")
         echo_val = metrics.get("echolalia_count", "-")
+        echo_verb = metrics.get("echolalia_verbatim_count", 0)
+        echo_miti = metrics.get("echolalia_mitigated_count", 0)
+        pronoun_rev = metrics.get("pronoun_reversal_count", 0)
         tt_val = metrics.get("turn_taking_count", metrics.get("turn_taking_ratio", "-"))
+
+        pragmatics_note = ""
+        if (isinstance(echo_val, (int, float)) and echo_val > 0) or (isinstance(pronoun_rev, (int, float)) and pronoun_rev > 0):
+            pragmatics_note = f"""
+            <div style="margin-top: 10px; background: #fff7ed; border: 1px solid #ffedd5; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #9a3412;">
+              <strong>🔍 Pragmatic Clinical Alert:</strong>
+              Echolalia repetition observed: {echo_val} instance(s) (Verbatim: {echo_verb}, Mitigated: {echo_miti}) •
+              Pronoun Reversal observed: {pronoun_rev} instance(s). <em>Requires clinician conversational context verification.</em>
+            </div>
+            """
 
         thai_lsa_html = f"""
         <div class="section-title">🇹🇭 2. Thai Clinical Language Structure / โครงสร้างภาษาไทยคลินิก (LSA)</div>
-        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px;">
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 8px;">
           <div style="background: #f0fdfa; border: 1px solid #ccfbf1; border-radius: 8px; padding: 10px;">
             <div style="font-size: 11px; color: #0f766e; font-weight: 600;">MLU-w (ความยาวประโยค)</div>
             <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{mlu_w_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">คำ/ประโยค</span></div>
@@ -90,14 +106,31 @@ def generate_bilingual_clinical_html(
             <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{polite_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง</span></div>
           </div>
           <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #475569; font-weight: 600;">คำแสดงอารมณ์ (Mood)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{mood_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง</span></div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #475569; font-weight: 600;">คำเชื่อมประโยค (Conjunctions)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{conj_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง</span></div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #475569; font-weight: 600;">คำเสริม/ลังเล (Fillers)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{filler_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง</span></div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
             <div style="font-size: 11px; color: #475569; font-weight: 600;">Echolalia (พูดตามซ้ำ)</div>
-            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{echo_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง</span></div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{echo_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง (ตรง:{echo_verb})</span></div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 11px; color: #475569; font-weight: 600;">สลับสรรพนาม (Pronoun Rev)</div>
+            <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{pronoun_rev} <span style="font-size: 11px; font-weight: normal; color: #64748b;">ครั้ง</span></div>
           </div>
           <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
             <div style="font-size: 11px; color: #475569; font-weight: 600;">Turn-Taking (ผลัดกันพูด)</div>
             <div style="font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px;">{tt_val} <span style="font-size: 11px; font-weight: normal; color: #64748b;">รอบ</span></div>
           </div>
         </div>
+        {pragmatics_note}
         """
 
     # Longitudinal Comparison Table (if multiple sessions exist)

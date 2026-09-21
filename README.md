@@ -220,6 +220,13 @@ npm ci
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1 npm run dev
 ```
 
+Or run the turnkey pilot launcher (starts both backend and web app with health checks):
+
+```bash
+bash scripts/launch_pilot.sh
+# See docs/PILOT_DEPLOYMENT.md for details
+```
+
 Cloudflare Workers staging frontend:
 
 ```text

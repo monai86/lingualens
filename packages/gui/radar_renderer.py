@@ -7,6 +7,50 @@ from typing import Any
 import tkinter as tk
 
 
+def get_normative_benchmarks(age_months: int | None = None) -> dict[str, Any]:
+    """Retrieve developmental normative benchmarks tailored to child age bracket (24-60m)."""
+    if not age_months or age_months < 24:
+        return {
+            "label": "Standard TD Norm (36m)",
+            "mlu_td": 3.0,
+            "ttr_td": 0.65,
+            "tt_td": 0.80,
+            "intel_td": 0.85,
+            "sp_td": 70.0,
+            "f0_td": 35.0,
+        }
+    elif age_months < 36:  # 24-35m
+        return {
+            "label": "24–35m Cohort Norm",
+            "mlu_td": 2.2,
+            "ttr_td": 0.52,
+            "tt_td": 0.65,
+            "intel_td": 0.75,
+            "sp_td": 55.0,
+            "f0_td": 40.0,
+        }
+    elif age_months < 48:  # 36-47m
+        return {
+            "label": "36–47m Cohort Norm",
+            "mlu_td": 3.2,
+            "ttr_td": 0.62,
+            "tt_td": 0.80,
+            "intel_td": 0.88,
+            "sp_td": 75.0,
+            "f0_td": 35.0,
+        }
+    else:  # 48-60+ m
+        return {
+            "label": "48–60m Cohort Norm",
+            "mlu_td": 4.2,
+            "ttr_td": 0.70,
+            "tt_td": 0.90,
+            "intel_td": 0.95,
+            "sp_td": 95.0,
+            "f0_td": 32.0,
+        }
+
+
 class RadarChartRenderer:
     """Renders native radar chart comparing Child values vs Typical Development (TD) Norms."""
 
@@ -20,7 +64,7 @@ class RadarChartRenderer:
         self.summary_widget = summary_widget
         self.font_family = font_family
 
-    def draw(self, metrics: dict[str, Any]) -> None:
+    def draw(self, metrics: dict[str, Any], age_months: int | None = None) -> None:
         """Render radar chart comparing Child session metrics to TD norm baselines."""
         self.canvas.delete("all")
         self.canvas.update_idletasks()
@@ -45,13 +89,20 @@ class RadarChartRenderer:
         tt_val = float(metrics["turn_taking_ratio"]) if has_child_data and metrics.get("turn_taking_ratio") is not None else None
         intel_val = float(metrics["intelligibility_rate"]) if has_child_data and metrics.get("intelligibility_rate") is not None else None
 
+        if age_months is None:
+            try:
+                age_months = int(metrics.get("age_months") or 0) or None
+            except Exception:
+                age_months = None
+        norm = get_normative_benchmarks(age_months)
+
         axes = [
-            {"label": "MLU-w\n(Sentence)", "val": mlu_val, "td": 3.5, "unit": "words"},
-            {"label": "TTR\n(Vocab)", "val": ttr_val, "td": 0.75, "unit": ""},
-            {"label": "Turn-Taking\n(Reciprocity)", "val": tt_val, "td": 0.90, "unit": ""},
-            {"label": "Intelligibility\n(Clarity)", "val": intel_val, "td": 0.95, "unit": ""},
-            {"label": "Speech Rate\n(WPM)", "val": sp_float, "td": 90.0, "unit": "wpm"},
-            {"label": "Prosody IQR\n(F0 Range)", "val": f0_float, "td": 35.0, "unit": "Hz"},
+            {"label": "MLU-w\n(Sentence)", "val": mlu_val, "td": norm["mlu_td"], "unit": "words"},
+            {"label": "TTR\n(Vocab)", "val": ttr_val, "td": norm["ttr_td"], "unit": ""},
+            {"label": "Turn-Taking\n(Reciprocity)", "val": tt_val, "td": norm["tt_td"], "unit": ""},
+            {"label": "Intelligibility\n(Clarity)", "val": intel_val, "td": norm["intel_td"], "unit": ""},
+            {"label": "Speech Rate\n(WPM)", "val": sp_float, "td": norm["sp_td"], "unit": "wpm"},
+            {"label": "Prosody IQR\n(F0 Range)", "val": f0_float, "td": norm["f0_td"], "unit": "Hz"},
         ]
         n = len(axes)
 
@@ -172,7 +223,7 @@ class RadarChartRenderer:
                 self.summary_widget.config(state=tk.DISABLED)
 
     @staticmethod
-    def render_svg(metrics: dict[str, Any], width: int = 400, height: int = 340) -> str:
+    def render_svg(metrics: dict[str, Any], width: int = 400, height: int = 340, age_months: int | None = None) -> str:
         """Generate a standalone SVG string of the radar spider chart for printable HTML reports."""
         cx, cy = width / 2, height / 2 - 12
         radius = max(60, min(cx, cy) - 45)
@@ -193,13 +244,20 @@ class RadarChartRenderer:
         tt_val = float(metrics["turn_taking_ratio"]) if has_child_data and metrics.get("turn_taking_ratio") is not None else None
         intel_val = float(metrics["intelligibility_rate"]) if has_child_data and metrics.get("intelligibility_rate") is not None else None
 
+        if age_months is None:
+            try:
+                age_months = int(metrics.get("age_months") or 0) or None
+            except Exception:
+                age_months = None
+        norm = get_normative_benchmarks(age_months)
+
         axes = [
-            {"label": "MLU-w", "val": mlu_val, "td": 3.5, "unit": "words"},
-            {"label": "TTR", "val": ttr_val, "td": 0.75, "unit": ""},
-            {"label": "Turn-Taking", "val": tt_val, "td": 0.90, "unit": ""},
-            {"label": "Intelligibility", "val": intel_val, "td": 0.95, "unit": ""},
-            {"label": "Speech Rate", "val": sp_float, "td": 90.0, "unit": "wpm"},
-            {"label": "Prosody IQR", "val": f0_float, "td": 35.0, "unit": "Hz"},
+            {"label": "MLU-w", "val": mlu_val, "td": norm["mlu_td"], "unit": "words"},
+            {"label": "TTR", "val": ttr_val, "td": norm["ttr_td"], "unit": ""},
+            {"label": "Turn-Taking", "val": tt_val, "td": norm["tt_td"], "unit": ""},
+            {"label": "Intelligibility", "val": intel_val, "td": norm["intel_td"], "unit": ""},
+            {"label": "Speech Rate", "val": sp_float, "td": norm["sp_td"], "unit": "wpm"},
+            {"label": "Prosody IQR", "val": f0_float, "td": norm["f0_td"], "unit": "Hz"},
         ]
         n = len(axes)
         svg_parts = [

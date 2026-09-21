@@ -89,6 +89,10 @@ class LinguaLensGUIApp:
         self._current_refresh_request_id: str | None = None
         self._consent_request_id: str | None = None
         self._consent_loaded_at: str | None = None
+        self._selected_time_range: tuple[float, float] | None = None
+        self._drag_start_x: float | None = None
+        self._is_waveform_dragging: bool = False
+        self._cached_session_metrics: list[dict[str, Any]] = []
 
         # Deep domain controllers
         self.audio_controller = AudioPlaybackController()
@@ -130,7 +134,9 @@ class LinguaLensGUIApp:
         except Exception:
             avail_families = set()
 
-        if "Helvetica Neue" in avail_families:
+        if "Poppins" in avail_families:
+            sys_font = "Poppins"
+        elif "Helvetica Neue" in avail_families:
             sys_font = "Helvetica Neue"
         elif "Helvetica" in avail_families:
             sys_font = "Helvetica"
@@ -159,20 +165,24 @@ class LinguaLensGUIApp:
         self.font_caption_bold = (sys_font, 9, "bold")
         self.font_badge = (sys_font, 8, "bold")
 
-        # Clinical Teal System Design Tokens (from PRODUCT.md & tokens.css)
-        self.bg_color = "#f8fafc"         # Slate 50 (Calm app canvas)
-        self.surface_color = "#ffffff"    # Pure crisp white for panels/cards
-        self.surface_alt = "#f1f5f9"      # Slate 100 for toolbars & headers
-        self.primary_color = "#0f766e"    # Clinical Teal 700 (Trustworthy brand anchor)
-        self.primary_strong = "#115e59"   # Clinical Teal 800 (Hover/Active)
-        self.primary_light = "#14b8a6"    # Clinical Teal 500 (Waveform & accents)
-        self.accent_soft = "#f0fdfa"      # Teal 50 (Selected background tint)
-        self.accent_cyan = "#0284c7"      # Sky 600 (Informational actions)
-        self.border_color = "#cbd5e1"     # Slate 300 (Subtle structural borders)
-        self.border_light = "#e2e8f0"     # Slate 200 (Clean divider lines)
-        self.text_color = "#0f172a"       # Slate 900 (High contrast readable ink)
-        self.text_secondary = "#334155"  # Slate 700
-        self.text_muted = "#64748b"       # Slate 500
+        # Modern Flat Design System Tokens (from flat-design-ui-ux-landing-page reference)
+        self.bg_color = "#f8faff"         # Soft Periwinkle White canvas
+        self.surface_color = "#ffffff"    # Pure crisp white for cards/panels
+        self.surface_alt = "#f1f4fd"      # Soft lilac-gray for toolbars & headers
+        self.brand_indigo = "#1e1e62"     # Deep Indigo for bold headings & readable ink
+        self.primary_color = "#4f46e5"    # Vibrant Royal Iris / Indigo
+        self.primary_strong = "#4338ca"   # Indigo hover
+        self.primary_light = "#818cf8"    # Soft Iris
+        self.accent_coral = "#e8607e"     # Vibrant Rose/Coral CTA (from reference REGISTER button & logo squircle)
+        self.accent_coral_hover = "#d9486c"
+        self.accent_soft = "#eef2ff"      # Soft Lavender tint for active states
+        self.accent_cyan = "#0284c7"      # Sky blue for acoustic/audio indicators
+        self.border_color = "#cbd5e1"     # Slate 300
+        self.border_light = "#e2e8f0"     # Slate 200
+        self.border_soft = "#e0e7ff"      # Soft Lavender border matching illustration card frames
+        self.text_color = "#1e1e62"       # Deep Indigo readable ink
+        self.text_secondary = "#475569"   # Muted Slate
+        self.text_muted = "#64748b"       # Soft Slate
         self.success_color = "#059669"    # Emerald 600
         self.warning_color = "#d97706"    # Amber 600
         self.error_color = "#dc2626"      # Red 600
@@ -210,13 +220,28 @@ class LinguaLensGUIApp:
             "Treeview.Heading",
             font=(sys_font, 9, "bold"),
             background="#f1f5f9",
-            foreground=self.text_secondary,
+            foreground=self.brand_indigo,
             relief="flat",
             padding=[6, 4],
         )
         style.map(
             "Treeview.Heading",
-            background=[("active", "#e2e8f0")],
+            background=[("active", "#e0e7ff")],
+            foreground=[("active", self.primary_color)],
+        )
+
+        style.configure(
+            "Coral.TButton",
+            font=(sys_font, 10, "bold"),
+            padding=[14, 7],
+            background=self.accent_coral,
+            foreground="#ffffff",
+            borderwidth=0,
+        )
+        style.map(
+            "Coral.TButton",
+            background=[("active", self.accent_coral_hover), ("disabled", "#fca5a5")],
+            foreground=[("active", "#ffffff"), ("disabled", "#ffffff")],
         )
 
         style.configure(
@@ -263,14 +288,14 @@ class LinguaLensGUIApp:
         style.configure(
             "TLabelframe",
             background="#ffffff",
-            bordercolor=self.border_light,
-            lightcolor=self.border_light,
-            darkcolor=self.border_light,
+            bordercolor=self.border_soft,
+            lightcolor=self.border_soft,
+            darkcolor=self.border_soft,
         )
         style.configure(
             "TLabelframe.Label",
             font=(sys_font, 10, "bold"),
-            foreground=self.primary_color,
+            foreground=self.brand_indigo,
             background="#ffffff",
         )
         style.configure(
@@ -293,18 +318,31 @@ class LinguaLensGUIApp:
     # --- UI Layout Builders ---
     def _build_header(self) -> None:
         # App Shell Navigation Bar
-        header_frame = tk.Frame(self.root, bg="#ffffff", padx=16, pady=8, highlightthickness=1, highlightbackground=self.border_light)
+        header_frame = tk.Frame(self.root, bg="#ffffff", padx=16, pady=8, highlightthickness=1, highlightbackground=self.border_soft)
         header_frame.pack(fill=tk.X)
 
         title_frame = tk.Frame(header_frame, bg="#ffffff")
         title_frame.pack(side=tk.LEFT)
+
+        # Brand Logo Squircle (Coral accent from flat design reference)
+        logo_icon = tk.Label(
+            title_frame,
+            text="✦",
+            font=(self.font_sys, 11, "bold"),
+            fg="#ffffff",
+            bg=self.accent_coral,
+            padx=6,
+            pady=1,
+            relief=tk.FLAT,
+        )
+        logo_icon.pack(side=tk.LEFT, padx=(0, 8))
 
         # Brand Mark & Version Badge
         tk.Label(
             title_frame,
             text="LinguaLens",
             font=(self.font_sys, 13, "bold"),
-            fg=self.primary_color,
+            fg=self.brand_indigo,
             bg="#ffffff",
         ).pack(side=tk.LEFT)
 
@@ -312,9 +350,9 @@ class LinguaLensGUIApp:
             title_frame,
             text="v1.6.3",
             font=(self.font_sys, 8, "bold"),
-            fg="#475569",
-            bg="#f1f5f9",
-            padx=5,
+            fg=self.primary_color,
+            bg="#ede9fe",
+            padx=6,
             pady=1,
             relief=tk.FLAT,
         ).pack(side=tk.LEFT, padx=(6, 8))
@@ -346,16 +384,17 @@ class LinguaLensGUIApp:
         status_lbl.pack(side=tk.RIGHT)
 
         # Mode indicator badge (MOCK vs LIVE)
-        mode_text = "[LOCAL RESEARCH MOCK]" if self.client.mock_mode else "[CLINICAL LIVE - FASTAPI]"
+        mode_text = "[RESEARCH MOCK]" if self.client.mock_mode else "[CLINICAL LIVE - FASTAPI]"
+        mode_bg = "#eef2ff" if self.client.mock_mode else "#e0f2fe"
         mode_fg = self.primary_color if self.client.mock_mode else self.accent_cyan
         self.lbl_mode = tk.Label(
             header_frame,
             text=mode_text,
             font=(self.font_sys, 8, "bold"),
             fg=mode_fg,
-            bg="#f8fafc",
-            padx=6,
-            pady=2,
+            bg=mode_bg,
+            padx=7,
+            pady=3,
             relief=tk.FLAT,
         )
         self.lbl_mode.pack(side=tk.RIGHT, padx=(0, 8))
@@ -373,7 +412,7 @@ class LinguaLensGUIApp:
         safety_lbl.pack(anchor=tk.W)
 
         # Persistent Global Context Bar (2-Tier Responsive Layout)
-        ctx_bar = tk.Frame(self.root, bg="#ffffff", padx=14, pady=8, highlightthickness=1, highlightbackground=self.border_light)
+        ctx_bar = tk.Frame(self.root, bg="#ffffff", padx=14, pady=8, highlightthickness=1, highlightbackground=self.border_soft)
         ctx_bar.pack(fill=tk.X, padx=12, pady=(4, 2))
 
         # --- Tier 1: Patient, Session & Clinical Identity Context ---
@@ -383,17 +422,17 @@ class LinguaLensGUIApp:
         r1_left = tk.Frame(row1, bg="#ffffff")
         r1_left.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        tk.Label(r1_left, text="Case:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Label(r1_left, text="Case:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.brand_indigo).pack(side=tk.LEFT, padx=(0, 4))
         self.combo_global_case = ttk.Combobox(r1_left, state="readonly", width=22, font=(self.font_sys, 9))
         self.combo_global_case.pack(side=tk.LEFT, padx=(0, 10))
         self.combo_global_case.bind("<<ComboboxSelected>>", self._on_global_case_changed)
 
-        tk.Label(r1_left, text="Session:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Label(r1_left, text="Session:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.brand_indigo).pack(side=tk.LEFT, padx=(0, 4))
         self.combo_global_session = ttk.Combobox(r1_left, state="readonly", width=18, font=(self.font_sys, 9))
         self.combo_global_session.pack(side=tk.LEFT, padx=(0, 10))
         self.combo_global_session.bind("<<ComboboxSelected>>", self._on_global_session_changed)
 
-        tk.Label(r1_left, text="Child (V2):", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Label(r1_left, text="Child (V2):", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.brand_indigo).pack(side=tk.LEFT, padx=(0, 4))
         self.combo_global_child = ttk.Combobox(r1_left, state="readonly", width=18, font=(self.font_sys, 9))
         self.combo_global_child.pack(side=tk.LEFT, padx=(0, 10))
         self.combo_global_child.bind("<<ComboboxSelected>>", self._on_global_child_changed)
@@ -486,7 +525,7 @@ class LinguaLensGUIApp:
             padx=12,
             pady=6,
             highlightthickness=1,
-            highlightbackground=self.border_light,
+            highlightbackground=self.border_soft,
         )
         self.frame_stepper.pack(fill=tk.X, padx=12, pady=(4, 2))
 
@@ -511,7 +550,7 @@ class LinguaLensGUIApp:
                 pady=5,
                 cursor="hand2",
                 highlightthickness=1,
-                highlightbackground="#e2e8f0",
+                highlightbackground=self.border_soft,
             )
             f_step.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
 
@@ -535,7 +574,7 @@ class LinguaLensGUIApp:
                 text=title,
                 font=(self.font_sys, 9, "bold"),
                 bg="#f8fafc",
-                fg=self.text_color,
+                fg=self.brand_indigo,
                 anchor=tk.W,
             )
             lbl_title.pack(anchor=tk.W)
@@ -569,42 +608,42 @@ class LinguaLensGUIApp:
         """Contextual Next Action Ribbon per THERAPIST_SIMPLE_WORKFLOW.md."""
         self.frame_next_action = tk.Frame(
             self.root,
-            bg="#f0f9ff",
-            padx=12,
-            pady=4,
+            bg="#f5f6ff",
+            padx=14,
+            pady=5,
             highlightthickness=1,
-            highlightbackground="#bae6fd",
+            highlightbackground=self.border_soft,
         )
         self.frame_next_action.pack(fill=tk.X, padx=12, pady=(0, 4))
 
-        left_side = tk.Frame(self.frame_next_action, bg="#f0f9ff")
+        left_side = tk.Frame(self.frame_next_action, bg="#f5f6ff")
         left_side.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         self.lbl_next_action_tag = tk.Label(
             left_side,
             text="NEXT ACTION",
             font=(self.font_sys, 8, "bold"),
-            bg="#0284c7",
+            bg=self.accent_coral,
             fg="#ffffff",
-            padx=6,
+            padx=7,
             pady=2,
             relief=tk.FLAT,
         )
-        self.lbl_next_action_tag.pack(side=tk.LEFT, padx=(0, 8))
+        self.lbl_next_action_tag.pack(side=tk.LEFT, padx=(0, 10))
 
         self.lbl_next_action_text = tk.Label(
             left_side,
             text="Select or create a Child / Case profile from the list to begin.",
             font=(self.font_sys, 9, "bold"),
-            bg="#f0f9ff",
-            fg="#0369a1",
+            bg="#f5f6ff",
+            fg=self.brand_indigo,
         )
         self.lbl_next_action_text.pack(side=tk.LEFT)
 
         self.btn_next_action = ttk.Button(
             self.frame_next_action,
             text="Open Case ➔",
-            style="Primary.TButton",
+            style="Coral.TButton",
             command=lambda: self._nav_to_step(1, 0),
         )
         self.btn_next_action.pack(side=tk.RIGHT)
@@ -673,25 +712,25 @@ class LinguaLensGUIApp:
                     if isinstance(w, tk.Frame):
                         w.config(bg="#ecfdf5")
             elif step_idx == active_step:
-                # Current active step
-                f_step.config(bg="#e0f2fe", highlightbackground="#38bdf8")
-                badge.config(text=str(step_idx), bg="#0284c7", fg="#ffffff")
-                lbl.config(bg="#e0f2fe", fg="#0369a1")
+                # Current active step (Royal Iris / Indigo from flat design)
+                f_step.config(bg="#eef2ff", highlightbackground=self.primary_light)
+                badge.config(text=str(step_idx), bg=self.primary_color, fg="#ffffff")
+                lbl.config(bg="#eef2ff", fg=self.brand_indigo)
                 if sub:
-                    sub.config(bg="#e0f2fe", fg="#0284c7")
+                    sub.config(bg="#eef2ff", fg=self.primary_color)
                 for w in f_step.winfo_children():
                     if isinstance(w, tk.Frame):
-                        w.config(bg="#e0f2fe")
+                        w.config(bg="#eef2ff")
             else:
                 # Upcoming step
-                f_step.config(bg="#f8fafc", highlightbackground="#e2e8f0")
-                badge.config(text=str(step_idx), bg="#e2e8f0", fg="#64748b")
-                lbl.config(bg="#f8fafc", fg="#475569")
+                f_step.config(bg="#ffffff", highlightbackground=self.border_soft)
+                badge.config(text=str(step_idx), bg="#f1f5f9", fg="#64748b")
+                lbl.config(bg="#ffffff", fg="#64748b")
                 if sub:
-                    sub.config(bg="#f8fafc", fg="#94a3b8")
+                    sub.config(bg="#ffffff", fg="#94a3b8")
                 for w in f_step.winfo_children():
                     if isinstance(w, tk.Frame):
-                        w.config(bg="#f8fafc")
+                        w.config(bg="#ffffff")
 
         if hasattr(self, "lbl_next_action_text"):
             self.lbl_next_action_text.config(text=next_text)
@@ -730,7 +769,7 @@ class LinguaLensGUIApp:
 
     def _build_statusbar(self) -> None:
         """Bottom status bar with operational status and indeterminate progress indicator."""
-        self.statusbar_frame = tk.Frame(self.root, bg="#f1f5f9", padx=16, pady=5, highlightthickness=1, highlightbackground=self.border_light)
+        self.statusbar_frame = tk.Frame(self.root, bg=self.surface_alt, padx=16, pady=5, highlightthickness=1, highlightbackground=self.border_soft)
         self.statusbar_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
         self.lbl_status = tk.Label(
@@ -738,7 +777,7 @@ class LinguaLensGUIApp:
             text="Ready",
             font=(self.font_sys, 9),
             fg=self.text_secondary,
-            bg="#f1f5f9",
+            bg=self.surface_alt,
         )
         self.lbl_status.pack(side=tk.LEFT)
 
@@ -754,6 +793,10 @@ class LinguaLensGUIApp:
         self.root.bind("<Control-e>", lambda e: self._export_report())
         self.root.bind("<Command-e>", lambda e: self._export_report())
         self.root.bind("<space>", lambda e: self._handle_space_shortcut(e))
+        self.root.bind("<c>", lambda e: self._handle_quick_tag("CHI", e))
+        self.root.bind("<C>", lambda e: self._handle_quick_tag("CHI", e))
+        self.root.bind("<i>", lambda e: self._handle_quick_tag("INV", e))
+        self.root.bind("<I>", lambda e: self._handle_quick_tag("INV", e))
 
     @property
     def current_mode(self) -> str:
@@ -802,12 +845,17 @@ class LinguaLensGUIApp:
         return False
 
     def _handle_space_shortcut(self, event: Any) -> None:
-        """Toggle playback when space is pressed outside text entry inputs."""
+        """Toggle playback or play selected waveform slice when space is pressed outside text entry inputs."""
         if self._is_v2_mode():
             return
         focus_w = self.root.focus_get()
         # Don't trigger playback toggle if user is editing inside a Text or Entry widget
         if isinstance(focus_w, (tk.Text, tk.Entry, ttk.Entry)):
+            return
+
+        if getattr(self, "_selected_time_range", None) and self.active_audio_path:
+            t_start, t_end = self._selected_time_range
+            self._play_audio_range(start_sec=t_start, end_sec=t_end)
             return
 
         if getattr(self, "_is_continuous_playing", False):
@@ -817,6 +865,38 @@ class LinguaLensGUIApp:
                 self._toggle_continuous_playback()
             else:
                 self._toggle_continuous_playback()
+
+    def _handle_quick_tag(self, target_spk: str, event: Any = None) -> None:
+        """Quick tag speaker for selected utterance in Treeview."""
+        if self._is_v2_mode():
+            return
+        focus_w = self.root.focus_get()
+        if isinstance(focus_w, (tk.Text, tk.Entry, ttk.Entry)):
+            return
+        if not hasattr(self, "tree_utterances") or not self.tree_utterances.winfo_exists():
+            return
+        sel = self.tree_utterances.selection()
+        if not sel or not self.active_transcript:
+            return
+        u_id = sel[0]
+        curr_text = ""
+        for u in self.active_transcript.get("utterances", []):
+            if u["id"] == u_id:
+                curr_text = u.get("text", "")
+                break
+        self.active_transcript = self.client.update_utterance(
+            self.active_transcript["transcript_id"], u_id, curr_text, target_spk
+        )
+        self.is_findings_stale = True
+        for item in self.tree_utterances.get_children():
+            if item == u_id:
+                vals = list(self.tree_utterances.item(item, "values"))
+                if len(vals) >= 2:
+                    vals[1] = target_spk
+                    self.tree_utterances.item(item, values=vals)
+                break
+        if hasattr(self, "lbl_playback_status"):
+            self.lbl_playback_status.config(text=f"Quick tagged #{u_id} as *{target_spk}*")
 
     def _handle_ctrl_s(self) -> None:
         """Handle quick save depending on current tab."""
@@ -1022,7 +1102,7 @@ class LinguaLensGUIApp:
         paned_cases.pack(fill=tk.BOTH, expand=True)
 
         # --- Left Column: Cases & Therapy Sessions ---
-        col_left = tk.Frame(paned_cases, bg="#ffffff", padx=12, pady=10, highlightthickness=1, highlightbackground=self.border_light)
+        col_left = tk.Frame(paned_cases, bg="#ffffff", padx=12, pady=10, highlightthickness=1, highlightbackground=self.border_soft)
         paned_cases.add(col_left, weight=1)
 
         # Section 1: Cases Directory
@@ -1101,7 +1181,7 @@ class LinguaLensGUIApp:
         ttk.Button(btn_bar_s, text="Open in Ingestion Workspace →", command=lambda: self.notebook.select(1)).pack(side=tk.LEFT)
 
         # --- Right Column: Assessment V2 Children & Assessments ---
-        col_right = tk.Frame(paned_cases, bg="#ffffff", padx=12, pady=10, highlightthickness=1, highlightbackground=self.border_light)
+        col_right = tk.Frame(paned_cases, bg="#ffffff", padx=12, pady=10, highlightthickness=1, highlightbackground=self.border_soft)
         paned_cases.add(col_right, weight=1)
 
         # Section 3: Active Children Directory (Assessment V2)
@@ -1389,6 +1469,7 @@ class LinguaLensGUIApp:
         self.canvas_waveform.bind("<Configure>", lambda e: self._redraw_waveform())
         self.canvas_waveform.bind("<Button-1>", self._on_waveform_click)
         self.canvas_waveform.bind("<B1-Motion>", self._on_waveform_drag)
+        self.canvas_waveform.bind("<ButtonRelease-1>", self._on_waveform_release)
 
         # Interactive Audio Scrubber & Timeline Bar
         self.frame_scrubber = tk.Frame(
@@ -1450,6 +1531,13 @@ class LinguaLensGUIApp:
             command=self._toggle_continuous_playback,
         )
         self.btn_play_continuous.pack(side=tk.LEFT, padx=(0, 6))
+
+        self.btn_play_slice = ttk.Button(
+            self.frame_audio_player,
+            text="Play Slice",
+            command=self._play_selected_slice,
+        )
+        self.btn_play_slice.pack(side=tk.LEFT, padx=(0, 6))
 
         self.btn_stop_audio = ttk.Button(
             self.frame_audio_player,
@@ -1597,7 +1685,7 @@ class LinguaLensGUIApp:
         radar_split.pack(fill=tk.BOTH, expand=True)
 
         # Left Canvas for Radar Plot
-        canvas_frame = tk.Frame(radar_split, bg="#ffffff", highlightthickness=1, highlightbackground="#cbd5e1")
+        canvas_frame = tk.Frame(radar_split, bg="#ffffff", highlightthickness=1, highlightbackground=self.border_soft)
         canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
         self.canvas_radar = tk.Canvas(canvas_frame, width=380, height=330, bg="#ffffff", highlightthickness=0)
         self.canvas_radar.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
@@ -1710,6 +1798,28 @@ class LinguaLensGUIApp:
         )
         self.lbl_longitudinal_summary.pack(fill=tk.X, pady=(0, 8))
 
+        # Interactive Multi-Session Trajectory Canvas Chart
+        self.frame_longitudinal_chart = tk.Frame(
+            self.subtab_longitudinal,
+            bg=self.surface_color,
+            highlightthickness=1,
+            highlightbackground=self.border_soft,
+            height=140,
+        )
+        self.frame_longitudinal_chart.pack(fill=tk.X, pady=(0, 8))
+        self.frame_longitudinal_chart.pack_propagate(False)
+
+        self.canvas_longitudinal = tk.Canvas(
+            self.frame_longitudinal_chart,
+            bg=self.surface_color,
+            highlightthickness=0,
+        )
+        self.canvas_longitudinal.pack(fill=tk.BOTH, expand=True)
+        self.canvas_longitudinal.bind(
+            "<Configure>",
+            lambda e: self._draw_longitudinal_chart(getattr(self, "_cached_session_metrics", [])),
+        )
+
         columns_l = ("date", "session_id", "utts", "chi_turns", "mlu", "ttr", "f0", "status")
         self.tree_longitudinal = ttk.Treeview(self.subtab_longitudinal, columns=columns_l, show="headings", height=8)
         self.tree_longitudinal.heading("date", text="Date / วันที่")
@@ -1753,6 +1863,26 @@ class LinguaLensGUIApp:
                 findings = {}
             self._draw_spider_diagram(findings.get("metrics", {}))
 
+    def _get_active_case_age_months(self) -> int | None:
+        """Estimate active case child age in months from case metadata for normative comparisons."""
+        if not self.active_case_id:
+            return None
+        try:
+            case_data = self.client.get_case(self.active_case_id)
+            if not case_data:
+                return None
+            dob_str = case_data.get("birth_date") or case_data.get("dob")
+            if not dob_str:
+                return None
+            from datetime import date
+            parts = str(dob_str).split("-")
+            birth_year = int(parts[0])
+            birth_month = int(parts[1]) if len(parts) > 1 else 1
+            today = date.today()
+            return max(12, min(84, (today.year - birth_year) * 12 + (today.month - birth_month)))
+        except Exception:
+            return None
+
     def _draw_spider_diagram(self, metrics: dict[str, Any]) -> None:
         """Render native radar chart comparing Child values vs Typical Development (TD) Norms."""
         if not hasattr(self, "radar_renderer") or self.radar_renderer is None:
@@ -1761,7 +1891,8 @@ class LinguaLensGUIApp:
                 summary_widget=getattr(self, "txt_radar_summary", None),
                 font_family=self.font_family,
             )
-        self.radar_renderer.draw(metrics)
+        age_months = self._get_active_case_age_months()
+        self.radar_renderer.draw(metrics, age_months=age_months)
 
     # --- Tab 5: Report UI (Data Ground Truth & Clinical Decision Support) ---
     def _build_tab_report(self) -> None:
@@ -1769,7 +1900,7 @@ class LinguaLensGUIApp:
         frame.pack(fill=tk.BOTH, expand=True)
 
         # Header Action Toolbar Card
-        top_r = tk.Frame(frame, bg="#ffffff", padx=12, pady=8, highlightthickness=1, highlightbackground=self.border_light)
+        top_r = tk.Frame(frame, bg="#ffffff", padx=12, pady=8, highlightthickness=1, highlightbackground=self.border_soft)
         top_r.pack(fill=tk.X, pady=(0, 6))
 
         # Left: Status & Primary Clinical Sign-off Actions
@@ -1786,20 +1917,21 @@ class LinguaLensGUIApp:
         right_exports = tk.Frame(top_r, bg="#ffffff")
         right_exports.pack(side=tk.RIGHT)
 
+        ttk.Button(right_exports, text="Export PDF Report", style="Coral.TButton", command=self._export_pdf_report).pack(side=tk.LEFT, padx=3)
         ttk.Button(right_exports, text="Export HTML Report", command=self._export_html_report).pack(side=tk.LEFT, padx=3)
         ttk.Button(right_exports, text="Export TalkBank (.cha)", command=self._export_cha_file).pack(side=tk.LEFT, padx=3)
         ttk.Button(right_exports, text="Export CSV", command=self._export_csv_biomarkers).pack(side=tk.LEFT, padx=3)
         ttk.Button(right_exports, text="Export Markdown", command=self._export_report).pack(side=tk.LEFT, padx=3)
 
         # Ground Truth & Provenance Info Card
-        prov_card = tk.Frame(frame, bg="#f0f9ff", padx=12, pady=6, highlightthickness=1, highlightbackground="#bae6fd")
+        prov_card = tk.Frame(frame, bg="#f5f6ff", padx=12, pady=6, highlightthickness=1, highlightbackground=self.border_soft)
         prov_card.pack(fill=tk.X, pady=(0, 8))
         tk.Label(
             prov_card,
             text="🔒 Ground Truth & Provenance: Sourced directly from verified session utterances & deterministic LSA metrics. Clinician sign-off seals report with SHA-256 integrity hash.",
             font=(self.font_family, 8, "italic"),
-            fg="#0369a1",
-            bg="#f0f9ff",
+            fg=self.brand_indigo,
+            bg="#f5f6ff",
         ).pack(anchor=tk.W)
 
         # Proportional Vertical PanedWindow for Narrative & Recommendations (Fills 100% Height Responsively)
@@ -1807,7 +1939,7 @@ class LinguaLensGUIApp:
         paned_editor.pack(fill=tk.BOTH, expand=True)
 
         # --- Pane 1: Clinical Narrative Card ---
-        pane_narrative = tk.Frame(paned_editor, bg="#ffffff", padx=12, pady=8, highlightthickness=1, highlightbackground=self.border_light)
+        pane_narrative = tk.Frame(paned_editor, bg="#ffffff", padx=12, pady=8, highlightthickness=1, highlightbackground=self.border_soft)
         paned_editor.add(pane_narrative, weight=1)
 
         header_n = tk.Frame(pane_narrative, bg="#ffffff")
@@ -1830,7 +1962,7 @@ class LinguaLensGUIApp:
             pady=8,
             wrap=tk.WORD,
             highlightthickness=1,
-            highlightbackground="#cbd5e1",
+            highlightbackground=self.border_soft,
             relief=tk.FLAT,
             yscrollcommand=sb_narrative.set,
         )
@@ -1838,7 +1970,7 @@ class LinguaLensGUIApp:
         sb_narrative.config(command=self.txt_narrative.yview)
 
         # --- Pane 2: Recommendations & Therapy Goals Card ---
-        pane_rec = tk.Frame(paned_editor, bg="#ffffff", padx=12, pady=8, highlightthickness=1, highlightbackground=self.border_light)
+        pane_rec = tk.Frame(paned_editor, bg="#ffffff", padx=12, pady=8, highlightthickness=1, highlightbackground=self.border_soft)
         paned_editor.add(pane_rec, weight=1)
 
         header_rec = tk.Frame(pane_rec, bg="#ffffff")
@@ -1861,7 +1993,7 @@ class LinguaLensGUIApp:
             pady=8,
             wrap=tk.WORD,
             highlightthickness=1,
-            highlightbackground="#cbd5e1",
+            highlightbackground=self.border_soft,
             relief=tk.FLAT,
             yscrollcommand=sb_rec.set,
         )
@@ -2369,7 +2501,11 @@ class LinguaLensGUIApp:
                 self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Negations (ประโยคปฏิเสธ)", str(thai_lsa.negation_count), f"การสื่อสารเชิงปฏิเสธ (สัดส่วน: {thai_lsa.negation_ratio:.1%})"))
                 self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Pronouns (สรรพนาม)", str(thai_lsa.pronoun_count), "การใช้สรรพนามสื่อสาร"))
                 self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Polite Particles (คำลงท้าย)", str(thai_lsa.polite_particle_count), "คำลงท้ายสุภาพ (เช่น ครับ/ค่ะ/จ๊ะ)"))
-                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Repetition Markers", str(thai_lsa.echolalia_count), "จำนวนการพูดซ้ำคำ/วลี (Immediate Repetition)"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Mood Particles (คำแสดงอารมณ์)", str(thai_lsa.mood_particle_count), "อนุภาคแสดงอารมณ์/ความรู้สึก (เช่น นะ/สิ/เลย/หรอก)"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Conjunctions (คำเชื่อม)", str(thai_lsa.conjunction_count), "คำเชื่อมสร้างประโยคความรวม/ความซ้อน (เช่น และ/หรือ/เพราะ/ถ้า)"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Fillers (คำเสริม/ลังเล)", str(thai_lsa.filler_word_count), f"คำลังเลขณะนึกคิด (สัดส่วน: {thai_lsa.filler_ratio:.1%})"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Echolalia (พูดตามซ้ำ)", f"{thai_lsa.echolalia_count} (ตรง:{thai_lsa.echolalia_verbatim_count}, ดัดแปลง:{thai_lsa.echolalia_mitigated_count})", "การพูดซ้ำประโยคของผู้ประเมิน (Immediate Repetition)"))
+                self.tree_metrics.insert("", tk.END, values=("5. Thai Language (LSA)", "Thai Pronoun Reversal (สลับสรรพนาม)", str(thai_lsa.pronoun_reversal_count), "การใช้สรรพนามบุรุษที่ 2 (เธอ/คุณ) แทนตนเอง (Deictic Reversal)"))
         except Exception:
             pass
 
@@ -2933,21 +3069,46 @@ class LinguaLensGUIApp:
 
         if hasattr(self, "canvas_vu_meter"):
             level = self.audio_recorder.get_current_meter_level()
+            is_voice = getattr(self.audio_recorder, "is_voice_active", lambda: False)()
+            is_clip = getattr(self.audio_recorder, "is_clipping", lambda: False)()
             w = self.canvas_vu_meter.winfo_width()
             if w <= 1:
-                w = 200
-            fill_w = int(w * min(1.0, max(0.0, level)))
+                w = 260
+            h = self.canvas_vu_meter.winfo_height()
+            if h <= 1:
+                h = 16
 
-            self.canvas_vu_meter.delete("vu")
-            if level < 0.7:
-                col = "#10b981"
-            elif level < 0.9:
-                col = "#f59e0b"
-            else:
-                col = "#ef4444"
+            self.canvas_vu_meter.delete("all")
+            num_segments = 24
+            gap = 2
+            seg_w = max(2, (w - (num_segments - 1) * gap) / num_segments)
+            active_segs = int(num_segments * min(1.0, max(0.0, level)))
 
-            if fill_w > 0:
-                self.canvas_vu_meter.create_rectangle(0, 0, fill_w, 14, fill=col, outline="", tags="vu")
+            for seg_idx in range(num_segments):
+                x1 = seg_idx * (seg_w + gap)
+                x2 = x1 + seg_w
+                ratio = seg_idx / num_segments
+                if ratio < 0.65:
+                    on_col = "#10b981"
+                    off_col = "#064e3b"
+                elif ratio < 0.85:
+                    on_col = "#f59e0b"
+                    off_col = "#78350f"
+                else:
+                    on_col = "#ef4444"
+                    off_col = "#7f1d1d"
+
+                fill_col = on_col if seg_idx < active_segs else off_col
+                self.canvas_vu_meter.create_rectangle(x1, 1, x2, h - 1, fill=fill_col, outline="")
+
+            # Update clinical recording status label with VAD and clipping state
+            if hasattr(self, "lbl_rec_status"):
+                if is_clip:
+                    self.lbl_rec_status.config(text="⚠️ CLIPPING (สัญญาณเสียงดังเกิน)", foreground="#dc2626")
+                elif is_voice:
+                    self.lbl_rec_status.config(text="● VOICE ACTIVE (ตรวจพบเสียงพูด)", foreground="#10b981")
+                else:
+                    self.lbl_rec_status.config(text="○ Ambient / Silence (รอเสียงพูด)", foreground="#64748b")
 
         self._recording_timer_job = self.root.after(50, self._update_live_recording_ui)
 
@@ -2961,7 +3122,9 @@ class LinguaLensGUIApp:
             self._recording_timer_job = None
 
         if hasattr(self, "canvas_vu_meter"):
-            self.canvas_vu_meter.delete("vu")
+            self.canvas_vu_meter.delete("all")
+        if hasattr(self, "lbl_rec_status"):
+            self.lbl_rec_status.config(text="Microphone ready", foreground="#64748b")
 
         output_wav = self.audio_recorder.stop_recording()
 
@@ -3141,12 +3304,16 @@ class LinguaLensGUIApp:
         if not self.active_case_id:
             if hasattr(self, "lbl_longitudinal_summary"):
                 self.lbl_longitudinal_summary.config(text="No active case selected.")
+            self._cached_session_metrics = []
+            self._draw_longitudinal_chart([])
             return
 
         sessions = self.client.list_sessions(self.active_case_id)
         if not sessions:
             if hasattr(self, "lbl_longitudinal_summary"):
                 self.lbl_longitudinal_summary.config(text="No sessions recorded yet for this case.")
+            self._cached_session_metrics = []
+            self._draw_longitudinal_chart([])
             return
 
         session_metrics_list = []
@@ -3181,6 +3348,9 @@ class LinguaLensGUIApp:
                     "f0_median": f0,
                 })
 
+        self._cached_session_metrics = session_metrics_list
+        self._draw_longitudinal_chart(session_metrics_list)
+
         if hasattr(self, "lbl_longitudinal_summary"):
             if len(session_metrics_list) > 1:
                 first = session_metrics_list[0]
@@ -3201,6 +3371,126 @@ class LinguaLensGUIApp:
             self.active_session_id = s_id
             self._refresh_sessions_for_active_case()
             self._on_session_selected(None)
+
+    def _draw_longitudinal_chart(self, session_metrics: list[dict[str, Any]]) -> None:
+        """Render a clean interactive dual-trend trajectory chart across recorded sessions."""
+        if not hasattr(self, "canvas_longitudinal") or not self.canvas_longitudinal.winfo_exists():
+            return
+        c = self.canvas_longitudinal
+        c.delete("all")
+        w = c.winfo_width()
+        h = c.winfo_height()
+        if w < 40 or h < 40:
+            return
+
+        bg = getattr(self, "surface_color", "#ffffff")
+        text_fg = getattr(self, "brand_indigo", "#1e1e62")
+        grid_fg = getattr(self, "border_soft", "#e2e8f0")
+        muted_fg = getattr(self, "text_muted", "#64748b")
+
+        if not session_metrics:
+            c.create_text(
+                w / 2, h / 2,
+                text="📈 No multi-session data available yet. Ingest multiple sessions to view growth trajectory.",
+                fill=muted_fg,
+                font=(self.font_sys, 9),
+            )
+            return
+
+        pad_l, pad_r, pad_t, pad_b = 55, 35, 22, 28
+        plot_w = w - pad_l - pad_r
+        plot_h = h - pad_t - pad_b
+        if plot_w <= 20 or plot_h <= 20:
+            return
+
+        # Grid lines (horizontal)
+        for i in range(4):
+            y = pad_t + (plot_h * i / 3.0)
+            c.create_line(pad_l, y, w - pad_r, y, fill=grid_fg, dash=(2, 2))
+
+        # Axes
+        c.create_line(pad_l, pad_t, pad_l, pad_t + plot_h, fill=grid_fg, width=1)
+        c.create_line(pad_l, pad_t + plot_h, w - pad_r, pad_t + plot_h, fill=grid_fg, width=1)
+
+        # Legend
+        c.create_rectangle(w - pad_r - 280, 4, w - pad_r, 20, fill=getattr(self, "surface_alt", "#f1f5f9"), outline="")
+        c.create_rectangle(w - pad_r - 275, 8, w - pad_r - 263, 16, fill="#eef2ff", outline="#c7d2fe")
+        c.create_text(w - pad_r - 232, 12, text="TD Corridor", fill="#6366f1", font=(self.font_sys, 7, "bold"))
+        c.create_oval(w - pad_r - 180, 9, w - pad_r - 172, 17, fill=self.primary_color, outline="")
+        c.create_text(w - pad_r - 135, 12, text="MLU-w", fill=text_fg, font=(self.font_sys, 7, "bold"))
+        c.create_oval(w - pad_r - 85, 9, w - pad_r - 77, 17, fill=self.accent_coral, outline="")
+        c.create_text(w - pad_r - 45, 12, text="TTR x 5", fill=text_fg, font=(self.font_sys, 7, "bold"))
+
+        n = len(session_metrics)
+        xs = []
+        for idx in range(n):
+            if n == 1:
+                x = pad_l + plot_w / 2.0
+            else:
+                x = pad_l + (plot_w * idx / (n - 1))
+            xs.append(x)
+
+        # Extract MLU values
+        mlu_vals = []
+        for s in session_metrics:
+            try:
+                val = float(s.get("mlu_w", 0.0) or 0.0)
+            except Exception:
+                val = 0.0
+            mlu_vals.append(val)
+        max_mlu = max(6.0, max(mlu_vals) * 1.25) if mlu_vals else 6.0
+
+        # Shaded Normative TD Growth Corridor (MLU-w 2.4 - 4.2 expected milestone band)
+        corridor_y_high = pad_t + plot_h - (min(max_mlu, 4.2) / max_mlu) * plot_h
+        corridor_y_low = pad_t + plot_h - (min(max_mlu, 2.4) / max_mlu) * plot_h
+        c.create_rectangle(pad_l, corridor_y_high, w - pad_r, corridor_y_low, fill="#eef2ff", outline="", tags="norm_band")
+        c.create_line(pad_l, corridor_y_high, w - pad_r, corridor_y_high, fill="#c7d2fe", dash=(3, 3))
+        c.create_line(pad_l, corridor_y_low, w - pad_r, corridor_y_low, fill="#c7d2fe", dash=(3, 3))
+        c.create_text(pad_l + 90, corridor_y_high + 8, text="TD Expected Milestone Corridor (24-48m)", fill="#6366f1", font=(self.font_sys, 6, "italic"))
+
+        # Extract TTR values
+        ttr_vals = []
+        for s in session_metrics:
+            try:
+                val = float(s.get("ttr", 0.0) or 0.0)
+            except Exception:
+                val = 0.0
+            ttr_vals.append(val)
+
+        # Connect MLU lines
+        mlu_pts = []
+        for idx, val in enumerate(mlu_vals):
+            x = xs[idx]
+            y = pad_t + plot_h - (val / max_mlu) * plot_h
+            mlu_pts.append((x, y))
+
+        for idx in range(len(mlu_pts) - 1):
+            c.create_line(mlu_pts[idx][0], mlu_pts[idx][1], mlu_pts[idx + 1][0], mlu_pts[idx + 1][1], fill=self.primary_color, width=2)
+
+        for idx, (x, y) in enumerate(mlu_pts):
+            c.create_oval(x - 3.5, y - 3.5, x + 3.5, y + 3.5, fill=self.primary_color, outline="#ffffff", width=1)
+            c.create_text(x, y - 8, text=f"{mlu_vals[idx]:.1f}", fill=self.primary_color, font=(self.font_sys, 7, "bold"))
+
+        # Connect TTR lines
+        ttr_pts = []
+        for idx, val in enumerate(ttr_vals):
+            x = xs[idx]
+            scaled_val = val * 5.0
+            y = pad_t + plot_h - (scaled_val / max_mlu) * plot_h
+            ttr_pts.append((x, y))
+
+        for idx in range(len(ttr_pts) - 1):
+            c.create_line(ttr_pts[idx][0], ttr_pts[idx][1], ttr_pts[idx + 1][0], ttr_pts[idx + 1][1], fill=self.accent_coral, width=2, dash=(3, 1))
+
+        for idx, (x, y) in enumerate(ttr_pts):
+            c.create_oval(x - 3, y - 3, x + 3, y + 3, fill=self.accent_coral, outline="#ffffff", width=1)
+            c.create_text(x, y + 8, text=f"{ttr_vals[idx]:.2f}", fill=self.accent_coral, font=(self.font_sys, 7, "bold"))
+
+        # X labels
+        for idx, s in enumerate(session_metrics):
+            x = xs[idx]
+            lbl = s.get("date", s.get("session_id", f"S{idx+1}"))
+            c.create_text(x, pad_t + plot_h + 12, text=str(lbl), fill=muted_fg, font=(self.font_sys, 7))
 
     def _load_demo_dialogue(self) -> threading.Thread | None:
         if self._guard_v2_mode("Ingesting demo dialogue"):
@@ -3721,6 +4011,27 @@ class LinguaLensGUIApp:
                 font=("Helvetica", 7),
             )
 
+        # Redraw existing region selection if active
+        if getattr(self, "_selected_time_range", None):
+            t1, t2 = self._selected_time_range
+            x1 = max(0.0, (t1 / dur) * w)
+            x2 = min(float(w), (t2 / dur) * w)
+            self.canvas_waveform.create_rectangle(
+                x1, 0, x2, h,
+                fill=self.primary_color,
+                stipple="gray25",
+                outline=self.primary_light,
+                width=1,
+                tags="waveform_selection",
+            )
+            self.canvas_waveform.create_text(
+                (x1 + x2) / 2, 10,
+                text=f"{t1:.1f}s - {t2:.1f}s ({t2 - t1:.1f}s)",
+                fill="#ffffff",
+                font=(self.font_code, 8, "bold"),
+                tags="waveform_selection",
+            )
+
         # Redraw existing playhead needle
         self._draw_playhead(float(getattr(self, "_playhead_time_sec", 0.0)))
 
@@ -3798,22 +4109,82 @@ class LinguaLensGUIApp:
             self._play_audio_range(start_sec=target_sec, end_sec=None)
 
     def _on_waveform_click(self, event: Any) -> None:
-        """Seek and play the audio from the clicked timestamp on the waveform canvas."""
+        """Begin waveform click or drag interaction."""
         w = self.canvas_waveform.winfo_width()
         if w <= 0 or not self.active_audio_path:
             return
-        total_dur = float(self._audio_waveform_duration or 10.0)
-        t_click = (max(0, event.x) / w) * total_dur
-        self._seek_and_play(t_click, auto_play=True)
+        self._drag_start_x = float(event.x)
+        self._is_waveform_dragging = False
 
     def _on_waveform_drag(self, event: Any) -> None:
-        """Interactive audio scrubbing preview while dragging across the waveform."""
+        """Interactive audio scrubbing or region drag-selection while moving across waveform."""
+        w = self.canvas_waveform.winfo_width()
+        h = self.canvas_waveform.winfo_height()
+        if w <= 0 or not self.active_audio_path or self._drag_start_x is None:
+            return
+
+        total_dur = float(self._audio_waveform_duration or 10.0)
+        dx = abs(event.x - self._drag_start_x)
+
+        if dx > 6:
+            self._is_waveform_dragging = True
+            x1 = max(0.0, min(self._drag_start_x, float(event.x)))
+            x2 = min(float(w), max(self._drag_start_x, float(event.x)))
+            t_start = (x1 / w) * total_dur
+            t_end = (x2 / w) * total_dur
+            self._selected_time_range = (t_start, t_end)
+
+            self.canvas_waveform.delete("waveform_selection")
+            self.canvas_waveform.create_rectangle(
+                x1, 0, x2, h,
+                fill=self.primary_color,
+                stipple="gray25",
+                outline=self.primary_light,
+                width=1,
+                tags="waveform_selection",
+            )
+            self.canvas_waveform.create_text(
+                (x1 + x2) / 2, 10,
+                text=f"{t_start:.1f}s - {t_end:.1f}s ({t_end - t_start:.1f}s)",
+                fill="#ffffff",
+                font=(self.font_code, 8, "bold"),
+                tags="waveform_selection",
+            )
+            if hasattr(self, "lbl_playback_status"):
+                self.lbl_playback_status.config(
+                    text=f"Selected slice: {t_start:.2f}s - {t_end:.2f}s ({t_end - t_start:.2f}s) — [Space] or 'Play Slice' to listen"
+                )
+        else:
+            t_drag = max(0.0, min(total_dur, (max(0, event.x) / w) * total_dur))
+            self._seek_and_play(t_drag, auto_play=False)
+
+    def _on_waveform_release(self, event: Any) -> None:
+        """Handle release of click or drag on waveform canvas."""
         w = self.canvas_waveform.winfo_width()
         if w <= 0 or not self.active_audio_path:
             return
         total_dur = float(self._audio_waveform_duration or 10.0)
-        t_drag = max(0.0, min(total_dur, (max(0, event.x) / w) * total_dur))
-        self._seek_and_play(t_drag, auto_play=False)
+
+        if self._is_waveform_dragging and getattr(self, "_selected_time_range", None):
+            t_start, t_end = self._selected_time_range
+            if t_end - t_start >= 0.1:
+                self._play_audio_range(start_sec=t_start, end_sec=t_end)
+        else:
+            self._selected_time_range = None
+            self.canvas_waveform.delete("waveform_selection")
+            t_click = (max(0, event.x) / w) * total_dur
+            self._seek_and_play(t_click, auto_play=True)
+
+        self._drag_start_x = None
+        self._is_waveform_dragging = False
+
+    def _play_selected_slice(self) -> None:
+        """Play the currently selected audio slice on the waveform canvas."""
+        if getattr(self, "_selected_time_range", None):
+            t_start, t_end = self._selected_time_range
+            self._play_audio_range(start_sec=t_start, end_sec=t_end)
+        elif hasattr(self, "_play_selected_utterance"):
+            self._play_selected_utterance()
 
     def _on_scrubber_press(self, event: Any) -> None:
         """User started dragging the timeline scrubber slider."""
@@ -3860,6 +4231,21 @@ class LinguaLensGUIApp:
         narrative = self.txt_narrative.get("1.0", tk.END).strip() if hasattr(self, "txt_narrative") else ""
         recommendations = self.txt_recommendations.get("1.0", tk.END).strip() if hasattr(self, "txt_recommendations") else ""
         self.export_engine.export_html_report(
+            self.client,
+            self.active_case_id,
+            self.active_session_id,
+            self.active_transcript,
+            narrative,
+            recommendations,
+        )
+
+    def _export_pdf_report(self) -> None:
+        """Export a comprehensive, publication-grade print-ready bilingual PDF clinical report."""
+        if self._guard_v2_mode("Export PDF Report"):
+            return
+        narrative = self.txt_narrative.get("1.0", tk.END).strip() if hasattr(self, "txt_narrative") else ""
+        recommendations = self.txt_recommendations.get("1.0", tk.END).strip() if hasattr(self, "txt_recommendations") else ""
+        self.export_engine.export_pdf_report(
             self.client,
             self.active_case_id,
             self.active_session_id,

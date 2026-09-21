@@ -30,6 +30,31 @@ THAI_POLITE_PARTICLES = {
     "ครับ", "ค่ะ", "ฮะ", "จ้ะ", "จ๊ะ", "คะ",
 }
 
+THAI_FILLER_WORDS = {
+    "เอ่อ", "อ่า", "แบบ", "คือ", "งะ", "นะฮะ", "เอิ่ม", "เออ",
+}
+
+THAI_MOOD_PARTICLES = {
+    "นะ", "สิ", "เลย", "หรอก", "ด้วย", "ล่ะ", "เนอะ", "น้า", "ซิ", "อ่ะ",
+}
+
+THAI_CONJUNCTIONS = {
+    "และ", "หรือ", "แต่", "เพราะ", "ถ้า", "ก็", "แล้ว", "กับ", "จึง",
+}
+
+THAI_CONVERSATIONAL_RESPONSES = {
+    "ใช่", "ไม่ใช่", "เอา", "ไม่เอา", "ชอบ", "ไม่ชอบ", "ได้", "ไม่ได้",
+    "มี", "ไม่มี", "ไป", "ไม่ไป", "ยัง", "หรือยัง", "ครับ", "ค่ะ", "ฮะ",
+    "ดี", "ไม่ดี", "อยาก", "ไม่อยาก", "ถูก", "ไม่ถูก",
+}
+
+THAI_SECOND_PERSON_PRONOUNS = {"เธอ", "คุณ", "แก", "เอ็ง"}
+
+THAI_DESIRE_AND_STATE_VERBS = {
+    "อยาก", "จะ", "เอา", "ชอบ", "หิว", "กลัว", "ปวด", "ไม่เอา", "ไม่อยาก",
+    "ไม่ชอบ", "ขอ", "ขอดู", "กิน", "เล่น", "นอน", "กลับ", "ร้อง", "ไป",
+}
+
 
 @dataclass(frozen=True)
 class ThaiLsaMetrics:
@@ -53,7 +78,15 @@ class ThaiLsaMetrics:
     pronoun_reversal_count: int
     turn_taking_count: int
     turn_taking_ratio: float
+    filler_word_count: int = 0
+    filler_ratio: float = 0.0
+    mood_particle_count: int = 0
+    conjunction_count: int = 0
     turn_taking_latency_sec: float | None = None
+    echolalia_verbatim_count: int = 0
+    echolalia_mitigated_count: int = 0
+    echolalia_details: list[dict[str, Any]] = field(default_factory=list)
+    pronoun_reversal_details: list[dict[str, Any]] = field(default_factory=list)
     guideline_links: list[dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -85,6 +118,85 @@ def tokenize_thai_words(text: str) -> list[str]:
         if c and not re.fullmatch(r"[.,!?;:\"'()]+", c):
             cleaned.append(c)
     return cleaned
+
+
+def detect_echolalia(
+    adult_text: str,
+    child_text: str,
+    latency: float | None = None,
+) -> tuple[str | None, float]:
+    """Detect immediate verbatim or mitigated echolalia from child reply to adult turn.
+
+    Returns:
+        (category, similarity_score) where category is 'immediate_verbatim', 'mitigated', or None.
+    """
+    a_clean = re.sub(r"[^\wก-๙]+", "", str(adult_text or ""))
+    c_clean = re.sub(r"[^\wก-๙]+", "", str(child_text or ""))
+    if not a_clean or not c_clean:
+        return None, 0.0
+
+    # Exclude standard short conversational affirmations/negations
+    if c_clean in THAI_CONVERSATIONAL_RESPONSES or c_clean in THAI_POLITE_PARTICLES:
+        return None, 0.0
+
+    # 1. Exact verbatim match (at least 3 characters)
+    if c_clean == a_clean and len(c_clean) >= 3:
+        return "immediate_verbatim", 1.0
+
+    # 2. Verbatim with added or omitted polite particle
+    for particle in THAI_POLITE_PARTICLES:
+        if c_clean.endswith(particle) and c_clean[:-len(particle)] == a_clean and len(a_clean) >= 3:
+            return "immediate_verbatim", 0.95
+        if a_clean.endswith(particle) and a_clean[:-len(particle)] == c_clean and len(c_clean) >= 3:
+            return "immediate_verbatim", 0.95
+
+    # 3. Substring repetition (child repeats significant part of adult prompt)
+    if len(c_clean) >= 6 and (c_clean in a_clean or a_clean in c_clean):
+        ratio = min(len(c_clean), len(a_clean)) / max(len(c_clean), len(a_clean))
+        if ratio >= 0.75:
+            return "immediate_verbatim", round(ratio, 2)
+        elif ratio >= 0.45:
+            return "mitigated", round(ratio, 2)
+
+    # 4. Token overlap if tokens are available
+    c_words = tokenize_thai_words(child_text)
+    a_words = tokenize_thai_words(adult_text)
+    if c_words and a_words:
+        c_set = set(c_words)
+        a_set = set(a_words)
+        intersection = c_set.intersection(a_set)
+        if intersection:
+            overlap = len(intersection) / max(len(c_set), 1)
+            if overlap >= 0.8 and len(intersection) >= 2:
+                return "immediate_verbatim", round(overlap, 2)
+            elif overlap >= 0.45 and len(intersection) >= 2:
+                return "mitigated", round(overlap, 2)
+
+    return None, 0.0
+
+
+def detect_thai_pronoun_reversal(text: str, tokens: list[str]) -> list[str]:
+    """Detect deictic pronoun reversal instances in Thai child speech.
+
+    Looks for 2nd/3rd person pronouns used in self-referencing contexts (e.g. desire/state verbs).
+    """
+    flagged: list[str] = []
+    # Pattern 1: Token sequences like ["เธอ", "อยาก"], ["คุณ", "จะ"], ["เธอ", "เอา"]
+    for i in range(len(tokens) - 1):
+        p = tokens[i]
+        v = tokens[i + 1]
+        if p in THAI_SECOND_PERSON_PRONOUNS and v in THAI_DESIRE_AND_STATE_VERBS:
+            flagged.append(f"{p}{v}")
+
+    # Pattern 2: Regex search for fused combinations
+    raw = re.sub(r"\s+", "", str(text or ""))
+    for p in THAI_SECOND_PERSON_PRONOUNS:
+        for v in ["อยาก", "จะเอา", "จะเล่น", "หิวน้ำ", "ปวดฉี่", "ขอดู", "ไม่เอา", "จะไป"]:
+            target = f"{p}{v}"
+            if target in raw and target not in flagged:
+                flagged.append(target)
+
+    return flagged
 
 
 class ThaiClinicalLSA:
@@ -126,7 +238,11 @@ class ThaiClinicalLSA:
                 polite_particle_count=0,
                 echolalia_count=0,
                 echolalia_ratio=0.0,
+                echolalia_verbatim_count=0,
+                echolalia_mitigated_count=0,
+                echolalia_details=[],
                 pronoun_reversal_count=0,
+                pronoun_reversal_details=[],
                 turn_taking_count=0,
                 turn_taking_ratio=0.0,
                 guideline_links=[
@@ -159,11 +275,14 @@ class ThaiClinicalLSA:
         ttr = round(unique_words / max(total_words, 1), 2)
         multi_word_pct = round((multi_word_count / n_child) * 100, 1)
 
-        # Questions & Negations
+        # Questions, Negations, Pronouns, Particles, Fillers & Conjunctions
         question_count = 0
         negation_count = 0
         pronoun_count = 0
         polite_particle_count = 0
+        filler_count = 0
+        mood_particle_count = 0
+        conjunction_count = 0
 
         for words in child_tokenized:
             has_q = any(w in THAI_QUESTION_MARKERS for w in words)
@@ -174,9 +293,13 @@ class ThaiClinicalLSA:
                 negation_count += 1
             pronoun_count += sum(1 for w in words if w in THAI_PRONOUN_MARKERS)
             polite_particle_count += sum(1 for w in words if w in THAI_POLITE_PARTICLES)
+            filler_count += sum(1 for w in words if w in THAI_FILLER_WORDS)
+            mood_particle_count += sum(1 for w in words if w in THAI_MOOD_PARTICLES)
+            conjunction_count += sum(1 for w in words if w in THAI_CONJUNCTIONS)
 
         q_ratio = round(question_count / n_child, 2)
         neg_ratio = round(negation_count / n_child, 2)
+        filler_ratio = round(filler_count / max(total_words, 1), 2)
 
         # Turn-Taking Dynamics
         turn_taking = min(n_adult, n_child)
@@ -192,20 +315,44 @@ class ThaiClinicalLSA:
         turn_latency = round(sum(latencies) / len(latencies), 2) if latencies else None
 
         # Echolalia & Repetition Markers
-        echolalia_cnt = 0
+        echolalia_details: list[dict[str, Any]] = []
+        echolalia_verbatim_cnt = 0
+        echolalia_mitigated_cnt = 0
+
         for i in range(1, len(utterances)):
             prev = utterances[i - 1]
             curr = utterances[i]
             if curr.get("speaker") == child_speaker and prev.get("speaker") != child_speaker:
-                prev_words = set(tokenize_thai_words(prev.get("text", "")))
-                curr_words = set(tokenize_thai_words(curr.get("text", "")))
-                if prev_words and curr_words and len(prev_words.intersection(curr_words)) >= min(2, len(curr_words)):
-                    echolalia_cnt += 1
+                adult_txt = prev.get("text", "")
+                child_txt = curr.get("text", "")
+                cat, sim = detect_echolalia(adult_txt, child_txt)
+                if cat:
+                    if cat == "immediate_verbatim":
+                        echolalia_verbatim_cnt += 1
+                    elif cat == "mitigated":
+                        echolalia_mitigated_cnt += 1
+                    echolalia_details.append({
+                        "category": cat,
+                        "adult_text": adult_txt,
+                        "child_text": child_txt,
+                        "similarity_score": sim,
+                        "child_id": curr.get("id"),
+                    })
 
-        pronoun_rev = sum(
-            1 for words in child_tokenized
-            if any(p in words for p in ["เธออยาก", "คุณไป", "เธอเอา"])
-        )
+        echolalia_cnt = echolalia_verbatim_cnt + echolalia_mitigated_cnt
+
+        pronoun_reversal_details: list[dict[str, Any]] = []
+        for u, words in zip(child_utts, child_tokenized):
+            txt = u.get("text", "")
+            matches = detect_thai_pronoun_reversal(txt, words)
+            if matches:
+                pronoun_reversal_details.append({
+                    "utterance_id": u.get("id"),
+                    "text": txt,
+                    "matched_patterns": matches,
+                    "explanation": "พบการใช้สรรพนามบุรุษที่ 2 (เธอ/คุณ) ในบริบทแสดงความต้องการ/สภาวะของตนเอง",
+                })
+        pronoun_rev = len(pronoun_reversal_details)
 
         # Formulate Clinical Guideline Interpretation Links
         guidelines = [
@@ -229,12 +376,12 @@ class ThaiClinicalLSA:
             {
                 "construct": "4. Functional Syntax (คำถาม/คำปฏิเสธ/สรรพนาม)",
                 "status": "Present (พบการใช้งาน)" if (question_count > 0 or negation_count > 0) else "Emerging",
-                "description": f"พบประโยคคำถาม {question_count} ครั้ง, คำปฏิเสธ {negation_count} ครั้ง, คำสรรพนาม {pronoun_count} ครั้ง",
+                "description": f"พบประโยคคำถาม {question_count} ครั้ง, คำปฏิเสธ {negation_count} ครั้ง, คำสรรพนาม {pronoun_count} ครั้ง, คำลงท้าย {polite_particle_count} ครั้ง",
             },
             {
                 "construct": "5. Repetition & Atypical Patterns (การพูดซ้ำ/สรรพนามสลับ)",
                 "status": "Low / Monitored" if (echolalia_cnt == 0 and pronoun_rev == 0) else "Observed",
-                "description": f"พบ Echolalia {echolalia_cnt} ครั้ง, สลับสรรพนาม {pronoun_rev} ครั้ง",
+                "description": f"พบ Echolalia {echolalia_cnt} ครั้ง (ตรงประโยค {echolalia_verbatim_cnt}, ดัดแปลง {echolalia_mitigated_cnt}), สลับสรรพนาม {pronoun_rev} ครั้ง",
             },
         ]
 
@@ -254,9 +401,17 @@ class ThaiClinicalLSA:
             polite_particle_count=polite_particle_count,
             echolalia_count=echolalia_cnt,
             echolalia_ratio=round(echolalia_cnt / n_child, 2),
+            echolalia_verbatim_count=echolalia_verbatim_cnt,
+            echolalia_mitigated_count=echolalia_mitigated_cnt,
+            echolalia_details=echolalia_details,
             pronoun_reversal_count=pronoun_rev,
+            pronoun_reversal_details=pronoun_reversal_details,
             turn_taking_count=turn_taking,
             turn_taking_ratio=turn_taking_ratio,
+            filler_word_count=filler_count,
+            filler_ratio=filler_ratio,
+            mood_particle_count=mood_particle_count,
+            conjunction_count=conjunction_count,
             turn_taking_latency_sec=turn_latency,
             guideline_links=guidelines,
         )

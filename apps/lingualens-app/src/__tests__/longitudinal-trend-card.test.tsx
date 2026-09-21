@@ -1,3 +1,4 @@
+import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { LongitudinalTrendCard, type LongitudinalSessionItem } from "@/features/reports/components/longitudinal-trend-card";
 

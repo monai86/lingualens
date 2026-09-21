@@ -70,3 +70,33 @@ def test_bilingual_clinical_html_report_generation():
     assert "พิมพ์รายงาน / Save as PDF" in html
     assert "Kru Aum (Certified SLP)" in html
     assert "Clinical Safety Boundary" in html
+
+
+def test_render_reportlab_pdf(tmp_path):
+    from packages.gui.export_engine import ClinicalExportEngine
+    out_pdf = str(tmp_path / "test_report.pdf")
+    metrics = {
+        "mlu_words": 3.42,
+        "ttr": 0.68,
+        "question_count": 2,
+        "negation_count": 1,
+        "pronoun_count": 3,
+        "polite_particle_count": 4,
+        "mood_particle_count": 2,
+        "conjunction_count": 2,
+        "filler_word_count": 1,
+        "turn_taking_ratio": 0.85,
+    }
+    ClinicalExportEngine._render_reportlab_pdf(
+        out_path=out_pdf,
+        case_info={"case_id": "CASE-101", "child_id": "CHI-101", "primary_language": "th"},
+        session_info={"session_id": "SESS-002", "session_date": "2026-09-20"},
+        findings={"metrics": metrics},
+        narrative="Child engaged well with toy blocks.",
+        recommendations="Continue conversational turn-taking practice.",
+        attested_by="Kru Aum (Certified SLP)",
+    )
+    import os
+    assert os.path.exists(out_pdf)
+    assert os.path.getsize(out_pdf) > 5000
+

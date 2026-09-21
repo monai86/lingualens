@@ -3668,3 +3668,67 @@ def test_gui_cached_assessment_requires_canonical_fields_not_just_age_and_clinic
     assert app.active_assessment == canonical_detail
     root.destroy()
 
+
+def test_gui_waveform_drag_and_longitudinal_chart_and_pdf_export(monkeypatch):
+    """Verify waveform slice drag selection, longitudinal canvas chart, and PDF export."""
+    try:
+        root = tk.Tk()
+    except tk.TclError:
+        pytest.skip("Headless environment without display server")
+
+    root.withdraw()
+    client = LinguaLensClient(mock_mode=True)
+    app = LinguaLensGUIApp(root, client=client)
+
+    # 1. Test Waveform Drag Selection
+    app.active_audio_path = "/tmp/dummy.wav"
+    app._audio_waveform_duration = 10.0
+
+    class DummyEvent:
+        def __init__(self, x, y=20):
+            self.x = x
+            self.y = y
+
+    # Simulate drag from x=20 to x=80 on a 200px canvas
+    app.canvas_waveform.winfo_width = lambda: 200
+    app.canvas_waveform.winfo_height = lambda: 66
+    app._on_waveform_click(DummyEvent(20))
+    assert app._drag_start_x == 20.0
+    assert app._is_waveform_dragging is False
+
+    app._on_waveform_drag(DummyEvent(80))
+    assert app._is_waveform_dragging is True
+    assert app._selected_time_range is not None
+    t1, t2 = app._selected_time_range
+    assert abs(t1 - 1.0) < 0.1
+    assert abs(t2 - 4.0) < 0.1
+
+    played_ranges = []
+    app._play_audio_range = lambda start_sec, end_sec=None, **k: played_ranges.append((start_sec, end_sec))
+    app._on_waveform_release(DummyEvent(80))
+    assert len(played_ranges) == 1
+    assert abs(played_ranges[0][0] - 1.0) < 0.1
+
+    # 3. Test Longitudinal Chart Rendering
+    app.canvas_longitudinal.winfo_width = lambda: 300
+    app.canvas_longitudinal.winfo_height = lambda: 140
+    sample_metrics = [
+        {"session_id": "s1", "date": "2026-08-01", "mlu_w": 2.4, "ttr": 0.45},
+        {"session_id": "s2", "date": "2026-08-15", "mlu_w": 3.8, "ttr": 0.62},
+    ]
+    app._draw_longitudinal_chart(sample_metrics)
+    assert len(app.canvas_longitudinal.find_all()) > 0
+
+    # 4. Test Export PDF Report invocation
+    export_called = []
+    monkeypatch.setattr(
+        app.export_engine,
+        "export_pdf_report",
+        lambda *args, **kwargs: export_called.append(True) or "/tmp/report.pdf",
+    )
+    app._export_pdf_report()
+    assert len(export_called) == 1
+
+    root.destroy()
+
+

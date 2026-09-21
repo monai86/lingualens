@@ -229,6 +229,9 @@ class AudioRecorder:
         self._current_meter_level: float = 0.0
         self._stream = None
         self._lock = threading.Lock()
+        self._is_voice_active: bool = False
+        self._is_clipping: bool = False
+        self._noise_floor: float = 0.012
 
     def start_recording(self) -> bool:
         """Start microphone stream using sounddevice with mock fallback for headless environments."""
@@ -239,6 +242,8 @@ class AudioRecorder:
             self.start_time = time.time()
             self.is_recording = True
             self._current_meter_level = 0.0
+            self._is_voice_active = False
+            self._is_clipping = False
 
             try:
                 import numpy as np
@@ -250,8 +255,14 @@ class AudioRecorder:
                     data_copy = indata.copy()
                     with self._lock:
                         self.recorded_frames.append(data_copy)
+                        peak = float(np.max(np.abs(data_copy))) if len(data_copy) > 0 else 0.0
                         rms = float(np.sqrt(np.mean(data_copy**2)))
                         self._current_meter_level = min(1.0, rms * 6.0)
+                        self._is_clipping = peak >= 0.95
+                        # Energy-based VAD: Active vocalization detection
+                        self._is_voice_active = rms > max(0.02, self._noise_floor * 1.8)
+                        if not self._is_voice_active and rms > 0.001:
+                            self._noise_floor = self._noise_floor * 0.95 + rms * 0.05
 
                 self._stream = sd.InputStream(
                     samplerate=self.sample_rate,
@@ -303,4 +314,22 @@ class AudioRecorder:
         """Return 0.0 to 1.0 audio volume meter level."""
         with self._lock:
             return self._current_meter_level
+
+    def is_voice_active(self) -> bool:
+        """Return True if incoming audio exhibits active speech vocalization."""
+        with self._lock:
+            return self._is_voice_active
+
+    def is_clipping(self) -> bool:
+        """Return True if incoming audio peaks exceed headroom limits."""
+        with self._lock:
+            return self._is_clipping
+
+    def set_simulated_meter_level(self, level: float, is_voice: bool = True, is_clipping: bool = False) -> None:
+        """Helper for headless/automated UI testing."""
+        with self._lock:
+            self._current_meter_level = min(1.0, max(0.0, level))
+            self._is_voice_active = is_voice
+            self._is_clipping = is_clipping
+
 
