@@ -40,8 +40,8 @@ class LinguaLensGUIApp:
     def __init__(self, root: tk.Tk, client: LinguaLensClient | None = None):
         self.root = root
         self.root.title("LinguaLens — Speech-Language Decision Support Desktop")
-        self.root.geometry("1050x740")
-        self.root.minsize(900, 600)
+        self.root.geometry("1140x780")
+        self.root.minsize(960, 620)
 
         self.client = client or LinguaLensClient()
         self.active_case_id: str | None = None
@@ -110,8 +110,8 @@ class LinguaLensGUIApp:
         self._build_header()
         self._build_stepper_bar()
         self._build_next_action_ribbon()
-        self._build_tabs()
         self._build_statusbar()
+        self._build_tabs()
         self._bind_shortcuts()
         self._poll_async_queue()
         self._load_initial_data()
@@ -283,6 +283,12 @@ class LinguaLensGUIApp:
             font=(sys_font, 10),
             padding=[4, 2],
         )
+        style.configure("TFrame", background=self.bg_color)
+        style.configure("Surface.TFrame", background=self.surface_color)
+        style.configure("Alt.TFrame", background=self.surface_alt)
+        style.configure("TPanedwindow", background=self.bg_color)
+        style.configure("Vertical.TPanedwindow", background=self.bg_color)
+        style.configure("Horizontal.TPanedwindow", background=self.bg_color)
 
     # --- UI Layout Builders ---
     def _build_header(self) -> None:
@@ -366,48 +372,49 @@ class LinguaLensGUIApp:
         )
         safety_lbl.pack(anchor=tk.W)
 
-        # Persistent Global Context Bar
-        ctx_bar = tk.Frame(self.root, bg="#ffffff", padx=12, pady=6, highlightthickness=1, highlightbackground=self.border_light)
-        ctx_bar.pack(fill=tk.X, padx=12, pady=(6, 2))
+        # Persistent Global Context Bar (2-Tier Responsive Layout)
+        ctx_bar = tk.Frame(self.root, bg="#ffffff", padx=14, pady=8, highlightthickness=1, highlightbackground=self.border_light)
+        ctx_bar.pack(fill=tk.X, padx=12, pady=(4, 2))
 
-        # Patient & Case Selection Group
-        tk.Label(ctx_bar, text="Search:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_secondary).pack(side=tk.LEFT, padx=(0, 2))
-        self.entry_case_search = ttk.Entry(ctx_bar, width=11, font=(self.font_sys, 9))
-        self.entry_case_search.pack(side=tk.LEFT, padx=(0, 8))
-        self.entry_case_search.bind("<KeyRelease>", self._on_case_search_typing)
+        # --- Tier 1: Patient, Session & Clinical Identity Context ---
+        row1 = tk.Frame(ctx_bar, bg="#ffffff")
+        row1.pack(fill=tk.X, pady=(0, 6))
 
-        tk.Label(ctx_bar, text="Case:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(0, 2))
-        self.combo_global_case = ttk.Combobox(ctx_bar, state="readonly", width=22, font=(self.font_sys, 9))
-        self.combo_global_case.pack(side=tk.LEFT, padx=(0, 8))
+        r1_left = tk.Frame(row1, bg="#ffffff")
+        r1_left.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        tk.Label(r1_left, text="Case:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(0, 4))
+        self.combo_global_case = ttk.Combobox(r1_left, state="readonly", width=22, font=(self.font_sys, 9))
+        self.combo_global_case.pack(side=tk.LEFT, padx=(0, 10))
         self.combo_global_case.bind("<<ComboboxSelected>>", self._on_global_case_changed)
 
-        # Session Selector
-        tk.Label(ctx_bar, text="Session:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(0, 2))
-        self.combo_global_session = ttk.Combobox(ctx_bar, state="readonly", width=18, font=(self.font_sys, 9))
-        self.combo_global_session.pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(r1_left, text="Session:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(0, 4))
+        self.combo_global_session = ttk.Combobox(r1_left, state="readonly", width=18, font=(self.font_sys, 9))
+        self.combo_global_session.pack(side=tk.LEFT, padx=(0, 10))
         self.combo_global_session.bind("<<ComboboxSelected>>", self._on_global_session_changed)
 
-        # Child Selector (Assessment V2)
-        tk.Label(ctx_bar, text="Child:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(2, 2))
-        self.combo_global_child = ttk.Combobox(ctx_bar, state="readonly", width=18, font=(self.font_sys, 9))
-        self.combo_global_child.pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(r1_left, text="Child (V2):", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_color).pack(side=tk.LEFT, padx=(0, 4))
+        self.combo_global_child = ttk.Combobox(r1_left, state="readonly", width=18, font=(self.font_sys, 9))
+        self.combo_global_child.pack(side=tk.LEFT, padx=(0, 10))
         self.combo_global_child.bind("<<ComboboxSelected>>", self._on_global_child_changed)
 
-        # Consent Status Badge & Actions
+        r1_right = tk.Frame(row1, bg="#ffffff")
+        r1_right.pack(side=tk.RIGHT)
+
         self.lbl_consent_status = tk.Label(
-            ctx_bar,
+            r1_right,
             text="[Consent Not Loaded]",
             font=(self.font_sys, 8, "bold"),
             bg="#f1f5f9",
             fg=self.text_muted,
-            padx=6,
-            pady=2,
+            padx=8,
+            pady=3,
             relief=tk.FLAT,
         )
-        self.lbl_consent_status.pack(side=tk.LEFT, padx=(2, 2))
+        self.lbl_consent_status.pack(side=tk.LEFT, padx=(0, 4))
 
         self.lbl_consent_loaded_at = tk.Label(
-            ctx_bar,
+            r1_right,
             text="",
             font=(self.font_sys, 8),
             bg="#ffffff",
@@ -415,45 +422,60 @@ class LinguaLensGUIApp:
         )
         self.lbl_consent_loaded_at.pack(side=tk.LEFT, padx=(0, 4))
 
-        self.btn_refresh_consent = ttk.Button(
-            ctx_bar,
-            text="Refresh",
-            width=7,
-            command=self._refresh_consent,
-        )
-        self.btn_refresh_consent.pack(side=tk.LEFT, padx=(0, 2))
-
-        self.btn_record_consent = ttk.Button(
-            ctx_bar,
-            text="Record Consent",
-            command=self._show_record_consent_dialog,
-        )
-        self.btn_record_consent.pack(side=tk.LEFT, padx=(2, 4))
-
         self.lbl_assessment_ctx = tk.Label(
-            ctx_bar,
+            r1_right,
             text="",
             font=(self.font_sys, 8, "bold"),
             bg="#f5f3ff",
             fg="#6d28d9",
-            padx=6,
-            pady=2,
+            padx=8,
+            pady=3,
             relief=tk.FLAT,
         )
-        self.lbl_assessment_ctx.pack(side=tk.LEFT, padx=(2, 2))
+        self.lbl_assessment_ctx.pack(side=tk.LEFT, padx=(0, 2))
+
+        # --- Tier 2: Search Filter, Workflow Actions & Quick Create ---
+        row2 = tk.Frame(ctx_bar, bg="#ffffff")
+        row2.pack(fill=tk.X)
+
+        r2_left = tk.Frame(row2, bg="#ffffff")
+        r2_left.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        tk.Label(r2_left, text="Search Filter:", font=(self.font_sys, 9, "bold"), bg="#ffffff", fg=self.text_secondary).pack(side=tk.LEFT, padx=(0, 4))
+        self.entry_case_search = ttk.Entry(r2_left, width=16, font=(self.font_sys, 9))
+        self.entry_case_search.pack(side=tk.LEFT, padx=(0, 8))
+        self.entry_case_search.bind("<KeyRelease>", self._on_case_search_typing)
+
+        self.btn_refresh_consent = ttk.Button(
+            r2_left,
+            text="⟳ Refresh",
+            width=8,
+            command=self._refresh_consent,
+        )
+        self.btn_refresh_consent.pack(side=tk.LEFT, padx=(0, 4))
+
+        self.btn_record_consent = ttk.Button(
+            r2_left,
+            text="Record Consent",
+            command=self._show_record_consent_dialog,
+        )
+        self.btn_record_consent.pack(side=tk.LEFT, padx=(0, 6))
 
         self.btn_create_assessment = ttk.Button(
-            ctx_bar,
-            text="New Assessment",
+            r2_left,
+            text="+ New Assessment",
             command=self._show_create_assessment_dialog,
         )
-        self.btn_create_assessment.pack(side=tk.LEFT, padx=(2, 6))
+        self.btn_create_assessment.pack(side=tk.LEFT, padx=(0, 6))
 
-        # Quick Actions Bar
-        ttk.Button(ctx_bar, text="Refresh All", command=self._refresh_all_data).pack(side=tk.LEFT, padx=(2, 0))
-        ttk.Button(ctx_bar, text="New Case", command=self._show_create_case_dialog).pack(side=tk.RIGHT, padx=(3, 0))
-        ttk.Button(ctx_bar, text="New Session", command=self._show_create_session_dialog).pack(side=tk.RIGHT, padx=(3, 0))
-        ttk.Button(ctx_bar, text="New Child", command=self._show_create_child_dialog).pack(side=tk.RIGHT, padx=(3, 0))
+        ttk.Button(r2_left, text="⟳ Refresh All", command=self._refresh_all_data).pack(side=tk.LEFT, padx=(0, 6))
+
+        r2_right = tk.Frame(row2, bg="#ffffff")
+        r2_right.pack(side=tk.RIGHT)
+
+        ttk.Button(r2_right, text="+ New Child", command=self._show_create_child_dialog).pack(side=tk.LEFT, padx=3)
+        ttk.Button(r2_right, text="+ New Session", command=self._show_create_session_dialog).pack(side=tk.LEFT, padx=3)
+        ttk.Button(r2_right, text="+ New Case", command=self._show_create_case_dialog).pack(side=tk.LEFT, padx=3)
 
     # --- 5-Step Guided Therapist Workflow Builders ---
     def _build_stepper_bar(self) -> None:
@@ -993,15 +1015,30 @@ class LinguaLensGUIApp:
 
     # --- Tab 1: Cases & Sessions UI ---
     def _build_tab_cases(self) -> None:
-        frame = ttk.Frame(self.tab_cases, padding=16)
+        frame = ttk.Frame(self.tab_cases, padding=12)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        # Section 1: Cases & Sessions Directory
-        lbl_c = ttk.Label(frame, text="Active Child Cases Directory", font=self.font_heading)
+        paned_cases = ttk.PanedWindow(frame, orient=tk.HORIZONTAL)
+        paned_cases.pack(fill=tk.BOTH, expand=True)
+
+        # --- Left Column: Cases & Therapy Sessions ---
+        col_left = tk.Frame(paned_cases, bg="#ffffff", padx=12, pady=10, highlightthickness=1, highlightbackground=self.border_light)
+        paned_cases.add(col_left, weight=1)
+
+        # Section 1: Cases Directory
+        lbl_c = ttk.Label(col_left, text="Active Child Cases Directory", font=self.font_heading)
         lbl_c.pack(anchor=tk.W, pady=(0, 4))
 
+        f_tree_c = tk.Frame(col_left, bg="#ffffff")
+        f_tree_c.pack(fill=tk.BOTH, expand=True, pady=(0, 4))
+
+        sb_c = ttk.Scrollbar(f_tree_c, orient=tk.VERTICAL)
+        sb_c.pack(side=tk.RIGHT, fill=tk.Y)
+
         columns_c = ("case_id", "child_id", "age", "lang", "sessions", "notes")
-        self.tree_cases = ttk.Treeview(frame, columns=columns_c, show="headings", height=5)
+        self.tree_cases = ttk.Treeview(f_tree_c, columns=columns_c, show="headings", height=5, yscrollcommand=sb_c.set)
+        sb_c.config(command=self.tree_cases.yview)
+
         self.tree_cases.heading("case_id", text="Case ID")
         self.tree_cases.heading("child_id", text="Child ID")
         self.tree_cases.heading("age", text="Age (Mo)")
@@ -1009,29 +1046,37 @@ class LinguaLensGUIApp:
         self.tree_cases.heading("sessions", text="Sessions")
         self.tree_cases.heading("notes", text="Clinical Notes")
 
-        self.tree_cases.column("case_id", width=120)
-        self.tree_cases.column("child_id", width=100)
-        self.tree_cases.column("age", width=70, anchor=tk.CENTER)
-        self.tree_cases.column("lang", width=60, anchor=tk.CENTER)
-        self.tree_cases.column("sessions", width=70, anchor=tk.CENTER)
-        self.tree_cases.column("notes", width=380)
+        self.tree_cases.column("case_id", width=110)
+        self.tree_cases.column("child_id", width=90)
+        self.tree_cases.column("age", width=65, anchor=tk.CENTER)
+        self.tree_cases.column("lang", width=55, anchor=tk.CENTER)
+        self.tree_cases.column("sessions", width=65, anchor=tk.CENTER)
+        self.tree_cases.column("notes", width=220)
 
-        self.tree_cases.pack(fill=tk.X, pady=(0, 6))
+        self.tree_cases.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tree_cases.bind("<<TreeviewSelect>>", self._on_case_selected)
 
         # Button Bar for Cases
-        btn_bar_c = ttk.Frame(frame)
-        btn_bar_c.pack(fill=tk.X, pady=(0, 10))
-        ttk.Button(btn_bar_c, text="Create New Case", command=self._show_create_case_dialog).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(btn_bar_c, text="Refresh Cases", command=self._refresh_cases).pack(side=tk.LEFT)
+        btn_bar_c = tk.Frame(col_left, bg="#ffffff")
+        btn_bar_c.pack(fill=tk.X, pady=(0, 8))
+        ttk.Button(btn_bar_c, text="+ Create New Case", command=self._show_create_case_dialog).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(btn_bar_c, text="⟳ Refresh Cases", command=self._refresh_cases).pack(side=tk.LEFT)
         ttk.Button(btn_bar_c, text="Clear Mock Data", command=self._prompt_clear_mock_data).pack(side=tk.RIGHT)
 
-        # Sessions Table
-        lbl_s = ttk.Label(frame, text="Sessions for Selected Case", font=self.font_heading)
+        # Section 2: Sessions Table
+        lbl_s = ttk.Label(col_left, text="Sessions for Selected Case", font=self.font_heading)
         lbl_s.pack(anchor=tk.W, pady=(4, 4))
 
+        f_tree_s = tk.Frame(col_left, bg="#ffffff")
+        f_tree_s.pack(fill=tk.BOTH, expand=True, pady=(0, 4))
+
+        sb_s = ttk.Scrollbar(f_tree_s, orient=tk.VERTICAL)
+        sb_s.pack(side=tk.RIGHT, fill=tk.Y)
+
         columns_s = ("session_id", "date", "number", "status", "transcript", "report")
-        self.tree_sessions = ttk.Treeview(frame, columns=columns_s, show="headings", height=4)
+        self.tree_sessions = ttk.Treeview(f_tree_s, columns=columns_s, show="headings", height=5, yscrollcommand=sb_s.set)
+        sb_s.config(command=self.tree_sessions.yview)
+
         self.tree_sessions.heading("session_id", text="Session ID")
         self.tree_sessions.heading("date", text="Date")
         self.tree_sessions.heading("number", text="Sess #")
@@ -1039,53 +1084,73 @@ class LinguaLensGUIApp:
         self.tree_sessions.heading("transcript", text="Transcript")
         self.tree_sessions.heading("report", text="Report")
 
-        self.tree_sessions.column("session_id", width=140)
-        self.tree_sessions.column("date", width=110)
-        self.tree_sessions.column("number", width=60, anchor=tk.CENTER)
-        self.tree_sessions.column("status", width=140)
-        self.tree_sessions.column("transcript", width=100, anchor=tk.CENTER)
-        self.tree_sessions.column("report", width=100, anchor=tk.CENTER)
+        self.tree_sessions.column("session_id", width=120)
+        self.tree_sessions.column("date", width=95)
+        self.tree_sessions.column("number", width=55, anchor=tk.CENTER)
+        self.tree_sessions.column("status", width=110)
+        self.tree_sessions.column("transcript", width=80, anchor=tk.CENTER)
+        self.tree_sessions.column("report", width=80, anchor=tk.CENTER)
 
-        self.tree_sessions.pack(fill=tk.X, pady=(0, 6))
+        self.tree_sessions.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tree_sessions.bind("<<TreeviewSelect>>", self._on_session_selected)
 
         # Button Bar for Sessions
-        btn_bar_s = ttk.Frame(frame)
-        btn_bar_s.pack(fill=tk.X, pady=(0, 10))
-        ttk.Button(btn_bar_s, text="Start New Session", command=self._show_create_session_dialog).pack(side=tk.LEFT, padx=(0, 8))
+        btn_bar_s = tk.Frame(col_left, bg="#ffffff")
+        btn_bar_s.pack(fill=tk.X)
+        ttk.Button(btn_bar_s, text="+ Start New Session", command=self._show_create_session_dialog).pack(side=tk.LEFT, padx=(0, 6))
         ttk.Button(btn_bar_s, text="Open in Ingestion Workspace →", command=lambda: self.notebook.select(1)).pack(side=tk.LEFT)
 
-        # Section 2: Active Children Directory (Assessment V2)
-        lbl_ch = ttk.Label(frame, text="Active Children Directory (Assessment V2)", font=self.font_heading)
-        lbl_ch.pack(anchor=tk.W, pady=(4, 4))
+        # --- Right Column: Assessment V2 Children & Assessments ---
+        col_right = tk.Frame(paned_cases, bg="#ffffff", padx=12, pady=10, highlightthickness=1, highlightbackground=self.border_light)
+        paned_cases.add(col_right, weight=1)
+
+        # Section 3: Active Children Directory (Assessment V2)
+        lbl_ch = ttk.Label(col_right, text="Active Children Directory (Assessment V2)", font=self.font_heading)
+        lbl_ch.pack(anchor=tk.W, pady=(0, 4))
+
+        f_tree_ch = tk.Frame(col_right, bg="#ffffff")
+        f_tree_ch.pack(fill=tk.BOTH, expand=True, pady=(0, 4))
+
+        sb_ch = ttk.Scrollbar(f_tree_ch, orient=tk.VERTICAL)
+        sb_ch.pack(side=tk.RIGHT, fill=tk.Y)
 
         columns_ch = ("child_id", "display_code", "birth_ym", "lang")
-        self.tree_children = ttk.Treeview(frame, columns=columns_ch, show="headings", height=4)
+        self.tree_children = ttk.Treeview(f_tree_ch, columns=columns_ch, show="headings", height=5, yscrollcommand=sb_ch.set)
+        sb_ch.config(command=self.tree_children.yview)
+
         self.tree_children.heading("child_id", text="Child ID")
         self.tree_children.heading("display_code", text="Display Code")
         self.tree_children.heading("birth_ym", text="Birth YYYY-MM")
         self.tree_children.heading("lang", text="Primary Lang")
 
-        self.tree_children.column("child_id", width=160)
-        self.tree_children.column("display_code", width=140)
-        self.tree_children.column("birth_ym", width=120, anchor=tk.CENTER)
-        self.tree_children.column("lang", width=100, anchor=tk.CENTER)
+        self.tree_children.column("child_id", width=140)
+        self.tree_children.column("display_code", width=120)
+        self.tree_children.column("birth_ym", width=110, anchor=tk.CENTER)
+        self.tree_children.column("lang", width=90, anchor=tk.CENTER)
 
-        self.tree_children.pack(fill=tk.X, pady=(0, 6))
+        self.tree_children.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tree_children.bind("<<TreeviewSelect>>", self._on_child_selected)
 
-        btn_bar_ch = ttk.Frame(frame)
+        btn_bar_ch = tk.Frame(col_right, bg="#ffffff")
         btn_bar_ch.pack(fill=tk.X, pady=(0, 8))
-        ttk.Button(btn_bar_ch, text="Create Child Profile (V2)", command=self._show_create_child_dialog).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(btn_bar_ch, text="Create Assessment (V2)", command=self._show_create_assessment_dialog).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(btn_bar_ch, text="Refresh Children", command=self._refresh_children).pack(side=tk.LEFT)
+        ttk.Button(btn_bar_ch, text="+ Create Child Profile (V2)", command=self._show_create_child_dialog).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(btn_bar_ch, text="+ Create Assessment (V2)", command=self._show_create_assessment_dialog).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(btn_bar_ch, text="⟳ Refresh Children", command=self._refresh_children).pack(side=tk.LEFT)
 
-        # Assessments Directory (Assessment V2)
-        lbl_asmt = ttk.Label(frame, text="Assessments Directory (Assessment V2)", font=self.font_heading)
+        # Section 4: Assessments Directory (Assessment V2)
+        lbl_asmt = ttk.Label(col_right, text="Assessments Directory (Assessment V2)", font=self.font_heading)
         lbl_asmt.pack(anchor=tk.W, pady=(4, 4))
 
+        f_tree_asmt = tk.Frame(col_right, bg="#ffffff")
+        f_tree_asmt.pack(fill=tk.BOTH, expand=True, pady=(0, 4))
+
+        sb_asmt = ttk.Scrollbar(f_tree_asmt, orient=tk.VERTICAL)
+        sb_asmt.pack(side=tk.RIGHT, fill=tk.Y)
+
         columns_asmt = ("asmt_id", "child_id", "purpose", "state", "clinician", "version")
-        self.tree_assessments = ttk.Treeview(frame, columns=columns_asmt, show="headings", height=4)
+        self.tree_assessments = ttk.Treeview(f_tree_asmt, columns=columns_asmt, show="headings", height=5, yscrollcommand=sb_asmt.set)
+        sb_asmt.config(command=self.tree_assessments.yview)
+
         self.tree_assessments.heading("asmt_id", text="Assessment ID")
         self.tree_assessments.heading("child_id", text="Child ID")
         self.tree_assessments.heading("purpose", text="Purpose")
@@ -1093,14 +1158,14 @@ class LinguaLensGUIApp:
         self.tree_assessments.heading("clinician", text="Clinician")
         self.tree_assessments.heading("version", text="Ver")
 
-        self.tree_assessments.column("asmt_id", width=160)
-        self.tree_assessments.column("child_id", width=120)
-        self.tree_assessments.column("purpose", width=90, anchor=tk.CENTER)
-        self.tree_assessments.column("state", width=90, anchor=tk.CENTER)
-        self.tree_assessments.column("clinician", width=140)
-        self.tree_assessments.column("version", width=50, anchor=tk.CENTER)
+        self.tree_assessments.column("asmt_id", width=140)
+        self.tree_assessments.column("child_id", width=110)
+        self.tree_assessments.column("purpose", width=85, anchor=tk.CENTER)
+        self.tree_assessments.column("state", width=85, anchor=tk.CENTER)
+        self.tree_assessments.column("clinician", width=120)
+        self.tree_assessments.column("version", width=45, anchor=tk.CENTER)
 
-        self.tree_assessments.pack(fill=tk.X, pady=(0, 6))
+        self.tree_assessments.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.tree_assessments.bind("<<TreeviewSelect>>", self._on_assessment_selected)
 
     # --- Tab 2: Ingestion UI ---
@@ -1682,7 +1747,10 @@ class LinguaLensGUIApp:
     def _do_redraw_radar(self) -> None:
         self._resize_job = None
         if hasattr(self, "active_session_id") and self.active_session_id:
-            findings = self.client.get_findings(self.active_session_id)
+            try:
+                findings = self.client.get_findings(self.active_session_id)
+            except Exception:
+                findings = {}
             self._draw_spider_diagram(findings.get("metrics", {}))
 
     def _draw_spider_diagram(self, metrics: dict[str, Any]) -> None:
@@ -1700,60 +1768,105 @@ class LinguaLensGUIApp:
         frame = ttk.Frame(self.tab_report, padding=12)
         frame.pack(fill=tk.BOTH, expand=True)
 
-        top_r = ttk.Frame(frame)
-        top_r.pack(fill=tk.X, pady=(0, 4))
-        self.lbl_report_status = ttk.Label(top_r, text="Report Status: Draft", font=(self.font_family, 10, "bold"))
-        self.lbl_report_status.pack(side=tk.LEFT)
+        # Header Action Toolbar Card
+        top_r = tk.Frame(frame, bg="#ffffff", padx=12, pady=8, highlightthickness=1, highlightbackground=self.border_light)
+        top_r.pack(fill=tk.X, pady=(0, 6))
 
-        ttk.Button(top_r, text="Generate Draft", style="Primary.TButton", command=self._generate_report_draft).pack(side=tk.LEFT, padx=(8, 4))
-        ttk.Button(top_r, text="Sign-Off Report", style="Success.TButton", command=self._sign_off_report).pack(side=tk.RIGHT, padx=(4, 0))
-        ttk.Button(top_r, text="Export Markdown", command=self._export_report).pack(side=tk.RIGHT, padx=4)
-        ttk.Button(top_r, text="Export CSV", command=self._export_csv_biomarkers).pack(side=tk.RIGHT, padx=4)
-        ttk.Button(top_r, text="Export HTML Report", command=self._export_html_report).pack(side=tk.RIGHT, padx=4)
-        ttk.Button(top_r, text="Export TalkBank (.cha)", command=self._export_cha_file).pack(side=tk.RIGHT, padx=4)
+        # Left: Status & Primary Clinical Sign-off Actions
+        left_actions = tk.Frame(top_r, bg="#ffffff")
+        left_actions.pack(side=tk.LEFT)
+
+        self.lbl_report_status = ttk.Label(left_actions, text="Report Status: Draft", font=(self.font_family, 10, "bold"))
+        self.lbl_report_status.pack(side=tk.LEFT, padx=(0, 12))
+
+        ttk.Button(left_actions, text="Generate Draft", style="Primary.TButton", command=self._generate_report_draft).pack(side=tk.LEFT, padx=(0, 6))
+        ttk.Button(left_actions, text="Sign-Off Report", style="Success.TButton", command=self._sign_off_report).pack(side=tk.LEFT, padx=(0, 6))
+
+        # Right: Export Suite Toolbar
+        right_exports = tk.Frame(top_r, bg="#ffffff")
+        right_exports.pack(side=tk.RIGHT)
+
+        ttk.Button(right_exports, text="Export HTML Report", command=self._export_html_report).pack(side=tk.LEFT, padx=3)
+        ttk.Button(right_exports, text="Export TalkBank (.cha)", command=self._export_cha_file).pack(side=tk.LEFT, padx=3)
+        ttk.Button(right_exports, text="Export CSV", command=self._export_csv_biomarkers).pack(side=tk.LEFT, padx=3)
+        ttk.Button(right_exports, text="Export Markdown", command=self._export_report).pack(side=tk.LEFT, padx=3)
 
         # Ground Truth & Provenance Info Card
-        prov_card = tk.Frame(frame, bg="#f8fafc", padx=10, pady=6, highlightthickness=1, highlightbackground="#e2e8f0")
-        prov_card.pack(fill=tk.X, pady=(4, 6))
+        prov_card = tk.Frame(frame, bg="#f0f9ff", padx=12, pady=6, highlightthickness=1, highlightbackground="#bae6fd")
+        prov_card.pack(fill=tk.X, pady=(0, 8))
         tk.Label(
             prov_card,
-            text="Ground Truth & Reliability Context: Sourced directly from verified session utterances & deterministic LSA metrics. Clinician sign-off seals report with SHA-256 integrity hash.",
-            font=(self.font_family, 9, "italic"),
+            text="🔒 Ground Truth & Provenance: Sourced directly from verified session utterances & deterministic LSA metrics. Clinician sign-off seals report with SHA-256 integrity hash.",
+            font=(self.font_family, 8, "italic"),
             fg="#0369a1",
-            bg="#f8fafc",
+            bg="#f0f9ff",
         ).pack(anchor=tk.W)
 
-        lbl_n = ttk.Label(frame, text="Clinical Narrative (Language Sample Analysis):", font=(self.font_family, 10, "bold"))
-        lbl_n.pack(anchor=tk.W, pady=(4, 2))
-        self.txt_narrative = tk.Text(
-            frame,
-            height=6,
-            font=(self.font_family, 10),
-            bg="#ffffff",
-            fg="#0f172a",
-            padx=10,
-            pady=8,
-            highlightthickness=1,
-            highlightbackground="#cbd5e1",
-            relief=tk.FLAT,
-        )
-        self.txt_narrative.pack(fill=tk.X, pady=(0, 6))
+        # Proportional Vertical PanedWindow for Narrative & Recommendations (Fills 100% Height Responsively)
+        paned_editor = ttk.PanedWindow(frame, orient=tk.VERTICAL)
+        paned_editor.pack(fill=tk.BOTH, expand=True)
 
-        lbl_rec = ttk.Label(frame, text="Recommendations & Therapy Goals:", font=(self.font_family, 10, "bold"))
-        lbl_rec.pack(anchor=tk.W, pady=(4, 2))
-        self.txt_recommendations = tk.Text(
-            frame,
-            height=5,
+        # --- Pane 1: Clinical Narrative Card ---
+        pane_narrative = tk.Frame(paned_editor, bg="#ffffff", padx=12, pady=8, highlightthickness=1, highlightbackground=self.border_light)
+        paned_editor.add(pane_narrative, weight=1)
+
+        header_n = tk.Frame(pane_narrative, bg="#ffffff")
+        header_n.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(header_n, text="Clinical Narrative (Language Sample Analysis):", font=(self.font_family, 10, "bold")).pack(side=tk.LEFT)
+        tk.Label(header_n, text="Domain 1 & 2 Findings • LSA Morphosyntactic & Pragmatic Profile", font=(self.font_family, 8), fg=self.text_muted, bg="#ffffff").pack(side=tk.RIGHT)
+
+        frame_txt_n = tk.Frame(pane_narrative, bg="#ffffff")
+        frame_txt_n.pack(fill=tk.BOTH, expand=True)
+
+        sb_narrative = ttk.Scrollbar(frame_txt_n, orient=tk.VERTICAL)
+        sb_narrative.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.txt_narrative = tk.Text(
+            frame_txt_n,
             font=(self.font_family, 10),
             bg="#ffffff",
             fg="#0f172a",
             padx=10,
             pady=8,
+            wrap=tk.WORD,
             highlightthickness=1,
             highlightbackground="#cbd5e1",
             relief=tk.FLAT,
+            yscrollcommand=sb_narrative.set,
         )
-        self.txt_recommendations.pack(fill=tk.BOTH, expand=True, pady=(0, 6))
+        self.txt_narrative.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb_narrative.config(command=self.txt_narrative.yview)
+
+        # --- Pane 2: Recommendations & Therapy Goals Card ---
+        pane_rec = tk.Frame(paned_editor, bg="#ffffff", padx=12, pady=8, highlightthickness=1, highlightbackground=self.border_light)
+        paned_editor.add(pane_rec, weight=1)
+
+        header_rec = tk.Frame(pane_rec, bg="#ffffff")
+        header_rec.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(header_rec, text="Recommendations & Therapy Goals:", font=(self.font_family, 10, "bold")).pack(side=tk.LEFT)
+        tk.Label(header_rec, text="SMART Objectives • Home Interaction Strategies • Clinician Targets", font=(self.font_family, 8), fg=self.text_muted, bg="#ffffff").pack(side=tk.RIGHT)
+
+        frame_txt_rec = tk.Frame(pane_rec, bg="#ffffff")
+        frame_txt_rec.pack(fill=tk.BOTH, expand=True)
+
+        sb_rec = ttk.Scrollbar(frame_txt_rec, orient=tk.VERTICAL)
+        sb_rec.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.txt_recommendations = tk.Text(
+            frame_txt_rec,
+            font=(self.font_family, 10),
+            bg="#ffffff",
+            fg="#0f172a",
+            padx=10,
+            pady=8,
+            wrap=tk.WORD,
+            highlightthickness=1,
+            highlightbackground="#cbd5e1",
+            relief=tk.FLAT,
+            yscrollcommand=sb_rec.set,
+        )
+        self.txt_recommendations.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sb_rec.config(command=self.txt_recommendations.yview)
 
     # --- Data Operations & Global Context Handlers ---
     def _on_case_search_typing(self, event: Any) -> None:
@@ -2198,7 +2311,10 @@ class LinguaLensGUIApp:
             )
 
         # Load findings (Full 15+ Features across 4 domains)
-        findings = self.client.get_findings(self.active_session_id)
+        try:
+            findings = self.client.get_findings(self.active_session_id)
+        except Exception:
+            findings = {}
         metrics = findings.get("metrics", {})
 
         if not findings.get("has_data") or not metrics:
@@ -3038,7 +3154,10 @@ class LinguaLensGUIApp:
             s_id = s["session_id"]
             s_date = s.get("session_date", "N/A")
             tr = self.client.get_session_transcript(s_id)
-            findings = self.client.get_findings(s_id)
+            try:
+                findings = self.client.get_findings(s_id)
+            except Exception:
+                findings = {}
             metrics = findings.get("metrics", {})
             utts = tr.get("utterances", []) if tr else []
             chi_turns = sum(1 for u in utts if u.get("speaker") == "CHI")

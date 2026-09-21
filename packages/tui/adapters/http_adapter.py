@@ -163,7 +163,79 @@ class HttpClinicalAdapter:
         return self._client._http_request("POST", f"/transcripts/{transcript_id}/attest", payload)
 
     def get_findings(self, session_id: str) -> dict[str, Any]:
-        return self._client._http_request("GET", f"/sessions/{session_id}/features")
+        from packages.tui.client import LinguaLensApiError
+        try:
+            res = self._client._http_request("GET", f"/sessions/{session_id}/features")
+        except LinguaLensApiError as exc:
+            if getattr(exc, "status_code", None) == 404 or "not found" in str(exc).lower():
+                return {
+                    "session_id": session_id,
+                    "has_data": False,
+                    "metrics": {},
+                    "guideline_links": [],
+                }
+            raise
+
+        if not isinstance(res, dict):
+            return {
+                "session_id": session_id,
+                "has_data": False,
+                "metrics": {},
+                "guideline_links": [],
+            }
+        features_list = res.get("features", [])
+        metrics: dict[str, Any] = {}
+        if isinstance(features_list, list):
+            for f in features_list:
+                if isinstance(f, dict):
+                    name = f.get("name")
+                    val = f.get("value")
+                    if name:
+                        metrics[name] = val
+
+        has_data = bool(metrics) and not res.get("insufficient_data", False)
+        guideline_links = res.get("guideline_links", [])
+        if not guideline_links and metrics:
+            mlu = metrics.get("mlu_words", 0.0)
+            ttr = metrics.get("ttr", 0.0)
+            turns = metrics.get("turn_taking_ratio", 0.0)
+            echo = metrics.get("echolalia_count", 0)
+            f0 = metrics.get("f0_median_hz")
+            guideline_links = [
+                {
+                    "construct": "1. Expressive Phrase Length (ไวยากรณ์และความยาวประโยค)",
+                    "status": "Adequate" if (isinstance(mlu, (int, float)) and mlu >= 2.0) else "Emerging (< 2.0 words)",
+                    "description": f"MLU-w อยู่ที่ {mlu} คำ/ประโยค",
+                },
+                {
+                    "construct": "2. Lexical & Vocabulary Diversity (ความหลากหลายของคำศัพท์)",
+                    "status": "Age Expected" if (isinstance(ttr, (int, float)) and ttr >= 0.5) else "Restricted Diversity",
+                    "description": f"TTR {ttr}",
+                },
+                {
+                    "construct": "3. Pragmatic Turn-Taking (การผลัดกันพูดในบทสนทนา)",
+                    "status": "Responsive" if (isinstance(turns, (int, float)) and turns >= 0.5) else "Low Interaction",
+                    "description": f"Turn-taking ratio {turns}",
+                },
+                {
+                    "construct": "4. Echolalia & Repetition (การพูดตาม/พูดซ้ำ)",
+                    "status": "Low / Monitored" if echo == 0 else f"Found {echo} events",
+                    "description": f"พบ Echolalia {echo} ครั้ง",
+                },
+                {
+                    "construct": "5. Acoustic Prosody & Pitch (ระดับเสียงและน้ำเสียง)",
+                    "status": f"F0 {f0} Hz" if f0 else "N/A (Text-only - No Audio)",
+                    "description": "วิเคราะห์จากสัญญาณเสียงพูด" if f0 else "จำเป็นต้องมีไฟล์เสียงเพื่อวัด F0",
+                },
+            ]
+
+        return {
+            "session_id": session_id,
+            "has_data": has_data,
+            "metrics": metrics,
+            "guideline_links": guideline_links,
+            "raw": res,
+        }
 
     def draft_report(self, session_id: str, prompt_notes: str = "") -> dict[str, Any]:
         payload = {"notes": prompt_notes}

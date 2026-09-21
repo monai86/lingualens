@@ -9,6 +9,8 @@ import soundfile as sf
 
 from src.audio_pipeline import AudioSessionAnalyzer, AudioSessionAnalysis
 
+pytestmark = pytest.mark.audio
+
 
 def test_audio_session_analyzer_end_to_end(tmp_path: Path):
     """Verify AudioSessionAnalyzer loads audio, computes waveform peaks, speech detection, and acoustic profile."""
