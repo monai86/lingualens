@@ -59,7 +59,7 @@ export function ReportsLibrary({ reports }: { reports: BackendReport[] }) {
         return (
           <section key={group.key} aria-labelledby={`report-group-${group.key}`} className="workspace-panel min-w-0 p-5">
             <div className="flex items-start gap-3">
-              <Icon className="mt-0.5 shrink-0 text-clinical" size={22} aria-hidden="true" />
+              <Icon className="mt-0.5 shrink-0 text-[color:var(--color-pasa-teal)]" size={22} aria-hidden="true" />
               <div>
                 <h2 id={`report-group-${group.key}`} className="text-xl font-bold text-ink">{group.title}</h2>
                 <p className="mt-1 text-sm leading-6 text-slate-600">{group.description}</p>
@@ -126,7 +126,7 @@ function ReportActionLink({ report }: { report: BackendReport }) {
   return (
     <Link
       href={reportHref(report)}
-      className="inline-flex min-h-11 items-center gap-2 rounded-[var(--radius-card)] border border-[color:var(--color-border)] px-4 py-2 text-sm font-semibold text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-accent-strong)] hover:bg-[color:var(--color-accent-soft)] hover:text-[color:var(--color-accent-strong)]"
+      className="inline-flex min-h-11 items-center gap-2 rounded-[var(--radius-card)] border border-[color:var(--color-border)] px-4 py-2 text-sm font-semibold text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-pasa-teal-border)] hover:bg-[color:var(--color-pasa-teal-soft)] hover:text-[color:var(--color-pasa-teal)]"
     >
       {reportActionLabel(report)}
       <ExternalLink size={16} aria-hidden="true" />
@@ -158,10 +158,10 @@ function ReportLibraryMobileRow({ report }: { report: BackendReport }) {
 
 function LibraryMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-[var(--radius-card)] border border-line bg-[color:var(--color-surface-muted)] p-3">
-      <dt className="text-xs font-semibold text-slate-500">{label}</dt>
-      <dd className="mt-1 flex items-center gap-2 text-xl font-bold text-ink">
-        {label === "Signed" ? <ShieldCheck size={18} aria-hidden="true" /> : null}
+    <div className="rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-white p-3">
+      <dt className="text-xs font-semibold text-[color:var(--color-text-muted)]">{label}</dt>
+      <dd className="mt-1 flex items-center gap-2 text-xl font-bold text-[color:var(--color-text-strong)]">
+        {label === "Signed" ? <ShieldCheck size={18} aria-hidden="true" className="text-[color:var(--color-pasa-teal)]" /> : null}
         {value}
       </dd>
     </div>

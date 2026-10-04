@@ -136,11 +136,11 @@ function TodayNextUp({ model }: { model: TodayWorkbenchModel }) {
     <section
       data-testid="today-next-up"
       aria-labelledby="today-next-up-title"
-      className="overflow-hidden rounded-[var(--radius-shell)] border border-[color:var(--color-accent-strong)]/30 bg-[color:var(--color-surface-reading)]"
+      className="overflow-hidden rounded-[var(--radius-shell)] border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)]/50"
     >
       <div className="flex flex-col gap-4 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
-          <p id="today-next-up-title" className="text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--color-accent-strong)]">
+          <p id="today-next-up-title" className="text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--color-pasa-teal)]">
             Next up for you
           </p>
           <h2 className="mt-1.5 text-xl font-semibold text-[color:var(--color-text-strong)] sm:text-2xl">
@@ -155,7 +155,7 @@ function TodayNextUp({ model }: { model: TodayWorkbenchModel }) {
         </div>
         <Link
           href={item.href}
-          className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-[var(--radius-card)] bg-[color:var(--color-accent-strong)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[color:var(--color-accent)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-clinical lg:w-auto"
+          className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-[var(--radius-card)] bg-[color:var(--color-pasa-teal)] px-5 text-sm font-semibold text-white transition-colors hover:bg-[color:var(--color-pasa-teal-hover)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[color:var(--color-pasa-teal)] lg:w-auto"
         >
           {item.actionLabel}
         </Link>
@@ -168,7 +168,7 @@ function TodayQueueRow({ item }: { item: TodayWorkbenchModel["items"][number] })
   return (
     <article
       data-testid="today-queue-row"
-      className="flex flex-col gap-2 px-4 py-3 sm:px-5 lg:flex-row lg:items-center lg:gap-4 lg:px-4"
+      className="flex flex-col gap-2 px-4 py-3 sm:px-5 lg:flex-row lg:items-center lg:gap-4 lg:px-4 hover:bg-[color:var(--color-surface)]/50 transition"
     >
       <div className="min-w-0 lg:w-48">
         <h4 className="truncate font-semibold text-[color:var(--color-text-strong)]">{item.caseLabel}</h4>
@@ -184,7 +184,7 @@ function TodayQueueRow({ item }: { item: TodayWorkbenchModel["items"][number] })
       <p className="min-w-0 flex-1 text-sm leading-5 text-[color:var(--color-text-strong)] lg:line-clamp-1">{item.reason}</p>
       <Link
         href={item.href}
-        className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-[var(--radius-card)] bg-[color:var(--color-accent)] px-4 text-sm font-semibold text-white transition hover:bg-[color:var(--color-accent-strong)] lg:w-auto"
+        className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-[var(--radius-card)] bg-[color:var(--color-pasa-teal)] px-4 text-sm font-semibold text-white transition hover:bg-[color:var(--color-pasa-teal-hover)] lg:w-auto"
       >
         {item.actionLabel}
       </Link>

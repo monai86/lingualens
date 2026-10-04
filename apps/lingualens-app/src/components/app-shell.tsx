@@ -7,6 +7,7 @@ import { Menu, X } from "lucide-react";
 import { Sidebar, type ShellActive } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { RightRail } from "@/components/right-rail";
+import { PasaScopeLogo } from "@/components/pasascope-logo";
 import { SupabaseAuthRuntimeBridge } from "@/components/supabase-auth-runtime-bridge";
 import { SupabaseWorkspaceAccessGate } from "@/components/supabase-workspace-access-gate";
 import { WorkspaceAccessGate } from "@/components/workspace-access-gate";
@@ -114,7 +115,7 @@ export function AppShell({
         {/* Main Content Area */}
         <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
           {/* Mobile Header Top Bar */}
-          <header className="flex h-12 items-center justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] px-4 lg:hidden">
+          <header className="flex h-14 items-center justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-4 lg:hidden">
             <button
               type="button"
               aria-label="Toggle navigation"
@@ -123,8 +124,8 @@ export function AppShell({
             >
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
-            <span className="text-sm font-semibold tracking-tight text-[color:var(--color-text-strong)]">PasaScope</span>
-            <div className="w-5" />
+            <PasaScopeLogo size="sm" showSubtitle={false} href="/dashboard" />
+            <div className="w-11" />
           </header>
 
           <main id="main-content" className="min-w-0 flex-1 overflow-y-auto bg-[color:var(--color-page-bg)] p-4 max-md:pb-44 md:p-6">
@@ -144,7 +145,7 @@ export function AppShell({
 
 export function WorkflowVisual() {
   return (
-    <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div className="p-4 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] shadow-xs">
       <Image src="/clinical-workflow.svg" width={960} height={320} alt="Case to transcript review to signed report workflow" priority />
     </div>
   );

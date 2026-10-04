@@ -31,11 +31,11 @@ export function Topbar() {
 
   return (
     <header className="sticky top-0 z-20 hidden min-w-0 border-b border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-5 py-3 md:flex md:items-center md:justify-between md:gap-4 lg:px-6">
-      <label className="control-strip hidden min-h-11 min-w-0 flex-1 items-center gap-3 px-4 xl:flex">
-        <Search size={18} aria-hidden="true" className="text-[color:var(--color-text-subtle)]" />
+      <label className="hidden min-h-11 min-w-0 flex-1 max-w-md items-center gap-2.5 rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-page-bg)] px-3.5 transition focus-within:border-[color:var(--color-pasa-teal)] focus-within:bg-[color:var(--color-surface-reading)] focus-within:ring-2 focus-within:ring-[color:var(--color-focus-ring)] xl:flex">
+        <Search size={17} aria-hidden="true" className="text-[color:var(--color-text-subtle)] shrink-0" />
         <span className="sr-only">Search workspace</span>
         <input
-          className="w-full bg-transparent text-sm text-[color:var(--color-text-strong)] outline-none focus:ring-2 focus:ring-[color:var(--color-focus-ring)] placeholder:text-[color:var(--color-text-subtle)]"
+          className="w-full bg-transparent text-sm text-[color:var(--color-text-strong)] outline-none placeholder:text-[color:var(--color-text-subtle)]"
           placeholder="Search case ID, child code, session, or report..."
         />
       </label>
@@ -44,32 +44,36 @@ export function Topbar() {
         <button
           type="button"
           onClick={handleRefresh}
-          className="flex h-11 items-center gap-1.5 rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] px-3 text-xs font-semibold text-[color:var(--color-text-strong)] transition hover:bg-slate-100"
+          className="flex h-11 items-center gap-1.5 rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] px-3 text-xs font-semibold text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-pasa-teal)] hover:bg-[color:var(--color-pasa-teal-soft)] hover:text-[color:var(--color-pasa-teal)]"
           title="Refresh workspace data"
         >
-          <RefreshCw size={14} aria-hidden="true" className="text-slate-600" />
+          <RefreshCw size={14} aria-hidden="true" className="text-[color:var(--color-text-muted)]" />
           <span>Refresh</span>
         </button>
 
         <div className="hidden min-w-0 shrink overflow-hidden xl:block xl:max-w-[15rem] 2xl:max-w-[18rem]">
           <ActiveOrganizationSummary />
         </div>
+
         <button
           type="button"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-text-strong)] motion-reduce:transition-none"
+          className="relative grid h-11 w-11 shrink-0 place-items-center rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-pasa-teal)] hover:bg-[color:var(--color-pasa-teal-soft)] motion-reduce:transition-none"
           aria-label="3 notifications"
         >
           <Bell size={18} aria-hidden="true" />
+          <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-[color:var(--color-scope-coral)] ring-2 ring-white" />
         </button>
-        <div className="min-w-0 max-w-72 rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] px-4 py-2 text-sm">
-          <p className="truncate font-medium text-[color:var(--color-text-strong)]">{clinicianLabel}</p>
-          <p className="truncate text-xs text-[color:var(--color-text-muted)]">{workspaceLabel}</p>
+
+        <div className="min-w-0 max-w-72 rounded-[var(--radius-card)] border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] px-3.5 py-1.5 text-sm">
+          <p className="truncate font-semibold text-[color:var(--color-pasa-teal)] text-xs sm:text-sm">{clinicianLabel}</p>
+          <p className="truncate text-2xs text-[color:var(--color-text-muted)]">{workspaceLabel}</p>
         </div>
+
         {showLogout ? (
           <button
             type="button"
             onClick={() => void handleLogout()}
-            className="hidden min-h-11 shrink-0 items-center gap-2 rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] px-4 py-2 text-sm font-semibold text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-text-strong)] motion-reduce:transition-none 2xl:inline-flex"
+            className="hidden min-h-11 shrink-0 items-center gap-2 rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] px-4 py-2 text-sm font-semibold text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-scope-coral)] hover:text-[color:var(--color-scope-coral)] motion-reduce:transition-none 2xl:inline-flex"
           >
             <LogOut size={16} aria-hidden="true" />
             Log out

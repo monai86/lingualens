@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Plus, LogOut } from "lucide-react";
 
+import { PasaScopeLogo } from "@/components/pasascope-logo";
 import { signOutSupabaseWorkspace } from "@/lib/supabase-workspace-logout";
 import { useRuntimeSettings } from "@/lib/use-runtime-settings";
 import { useSupabaseAccessSession } from "@/lib/use-supabase-access-session";
@@ -41,13 +42,13 @@ export function Sidebar({
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 flex w-[264px] flex-col border-r border-[color:var(--color-border)] bg-[color:var(--color-page-bg)] transition-transform duration-200 lg:static lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-50 flex w-[264px] flex-col border-r border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] transition-transform duration-200 lg:static lg:translate-x-0 ${
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}
     >
       {/* Brand */}
-      <div className="px-5 pb-2 pt-5">
-        <p className="text-[15px] font-semibold tracking-tight text-[color:var(--color-text-strong)]">PasaScope</p>
+      <div className="px-5 pb-3 pt-5">
+        <PasaScopeLogo size="md" href="/dashboard" />
       </div>
 
       {/* New Session Action */}
@@ -55,10 +56,10 @@ export function Sidebar({
         <Link
           href="/cases?intent=start-session"
           onClick={onClose}
-          className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] px-3.5 py-2.5 text-sm font-semibold text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-accent-subtle)] hover:bg-[color:var(--color-accent-soft)]"
+          className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] px-3.5 py-2.5 text-sm font-semibold text-[color:var(--color-pasa-teal)] transition hover:bg-[color:var(--color-pasa-teal)] hover:text-white shadow-xs"
         >
-          <Plus className="h-4 w-4 text-[color:var(--color-accent-strong)]" />
-          New Session
+          <Plus className="h-4 w-4" />
+          <span>New Session</span>
         </Link>
       </div>
 
@@ -72,15 +73,15 @@ export function Sidebar({
               href={item.href}
               onClick={onClose}
               aria-current={item.active ? "page" : undefined}
-              className={`flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 transition ${
+              className={`flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 transition font-medium ${
                 item.active
-                  ? "bg-[color:var(--color-accent-soft)] font-semibold text-[color:var(--color-accent-strong)]"
+                  ? "bg-[color:var(--color-pasa-teal-soft)] font-semibold text-[color:var(--color-pasa-teal)]"
                   : "text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-text-strong)]"
               }`}
             >
               <Icon
                 className={`h-4 w-4 ${
-                  item.active ? "text-[color:var(--color-accent-strong)]" : "text-[color:var(--color-text-subtle)]"
+                  item.active ? "text-[color:var(--color-pasa-teal)]" : "text-[color:var(--color-text-subtle)]"
                 }`}
               />
               <span>{item.label}</span>
@@ -95,7 +96,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => void handleLogout()}
-            className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-[color:var(--color-text-muted)] transition hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-text-strong)]"
+            className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-[color:var(--color-text-muted)] transition hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-scope-coral)]"
           >
             <LogOut className="h-4 w-4 text-[color:var(--color-text-subtle)]" />
             <span>Log out</span>
@@ -104,9 +105,12 @@ export function Sidebar({
       </div>
 
       <div className="hidden p-3 lg:block">
-        <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] p-3 text-xs text-[color:var(--color-text-muted)]">
-          <p className="font-semibold text-[color:var(--color-text-strong)]">Clinical Safety</p>
-          <p className="mt-1 text-xs leading-relaxed text-[color:var(--color-text-subtle)]">
+        <div className="rounded-lg border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] p-3 text-xs text-[color:var(--color-pasa-teal)]">
+          <div className="flex items-center gap-1.5 font-semibold">
+            <span className="h-2 w-2 rounded-full bg-[color:var(--color-scope-coral)]" />
+            <span>Clinical Safety</span>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-[color:var(--color-text-muted)]">
             Decision-support research prototype. Therapist review required.
           </p>
         </div>

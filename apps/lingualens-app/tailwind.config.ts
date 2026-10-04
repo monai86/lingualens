@@ -13,8 +13,20 @@ const config: Config = {
         field: "var(--color-surface-strong)",
         moss: "var(--color-success-text)",
         river: "var(--color-info-text)",
-        blossom: "#cb5f9e",
-        aqua: "var(--color-accent)"
+        blossom: "var(--color-scope-coral)",
+        aqua: "var(--color-accent)",
+        pasa: {
+          teal: "var(--color-pasa-teal)",
+          hover: "var(--color-pasa-teal-hover)",
+          soft: "var(--color-pasa-teal-soft)",
+          border: "var(--color-pasa-teal-border)",
+        },
+        scope: {
+          coral: "var(--color-scope-coral)",
+          hover: "var(--color-scope-coral-hover)",
+          soft: "var(--color-scope-coral-soft)",
+          border: "var(--color-scope-coral-border)",
+        },
       },
       boxShadow: {
         soft: "var(--shadow-soft)",

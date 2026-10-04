@@ -34,11 +34,11 @@ export function MockLoginFormClient({
   }, [role]);
 
   return (
-    <form className="workspace-panel self-start p-5 sm:p-6" aria-label="Mock login form">
+    <form className="workspace-panel self-start p-6 sm:p-7 shadow-xs" aria-label="Mock login form">
       <div className="mb-5 flex items-start gap-3">
-        <ShieldCheck size={22} aria-hidden="true" className="mt-0.5 shrink-0 text-[color:var(--color-accent)]" />
+        <ShieldCheck size={22} aria-hidden="true" className="mt-0.5 shrink-0 text-[color:var(--color-pasa-teal)]" />
         <div>
-          <h2 className="font-semibold text-[color:var(--color-text-strong)]">Mock login</h2>
+          <h2 className="text-lg font-bold text-[color:var(--color-text-strong)]">Mock login</h2>
           <p className="mt-1 text-sm leading-6 text-[color:var(--color-text-muted)]">Therapist, supervisor, and org-admin demo roles are available for local exploration.</p>
         </div>
       </div>
@@ -106,7 +106,7 @@ export function MockLoginFormClient({
           </div>
         </div>
       </div>
-      <div className="mb-4 rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-accent-soft)] p-3 text-sm leading-6 text-[color:var(--color-accent-strong)]">
+      <div className="mb-4 rounded-[var(--radius-card)] border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] p-3 text-sm leading-6 text-[color:var(--color-pasa-teal)]">
         <div className="flex items-start gap-2">
           <LockKeyhole size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
           <div>
@@ -125,7 +125,7 @@ export function MockLoginFormClient({
       <Link
         href={destination}
         onClick={() => saveMockAccessSession({ role, organizationId, aal })}
-        className="inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-card)] bg-[color:var(--color-accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[color:var(--color-accent-strong)] motion-reduce:transition-none"
+        className="inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-card)] bg-[color:var(--color-pasa-teal)] px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-[color:var(--color-pasa-teal-hover)] motion-reduce:transition-none"
       >
         Enter workspace
       </Link>

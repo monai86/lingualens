@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { PasaScopeLogoMark } from "@/components/pasascope-logo";
 import { listBackendCases } from "@/lib/workflow";
 
 interface Message {
@@ -203,34 +204,34 @@ export default function AssistantPage() {
 
   return (
     <AppShell active="Today">
-      <div className="flex h-full flex-col overflow-hidden bg-[#f8faff] text-[#1e1e62]">
+      <div className="flex h-full flex-col overflow-hidden bg-[color:var(--color-page-bg)] text-[color:var(--color-text-strong)]">
         {/* Top Header Banner */}
-        <header className="flex flex-shrink-0 items-center justify-between border-b border-[#e0e7ff] bg-white px-4 py-3 sm:px-6">
+        <header className="flex flex-shrink-0 items-center justify-between border-b border-[color:var(--color-border)] bg-white px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#e8607e] text-white shadow-sm">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--color-scope-coral)] text-white shadow-sm">
               <Sparkles className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-[#1e1e62] sm:text-lg">Clinician AI Assistant</h1>
-                <span className="rounded-full bg-[#eef2ff] px-2 py-0.5 text-xs font-semibold text-[#4f46e5]">
+                <h1 className="text-base font-bold text-[color:var(--color-text-strong)] sm:text-lg">PasaScope AI Assistant</h1>
+                <span className="rounded-full bg-[color:var(--color-pasa-teal-soft)] border border-[color:var(--color-pasa-teal-border)] px-2 py-0.5 text-xs font-semibold text-[color:var(--color-pasa-teal)]">
                   Thai Clinical NLP
                 </span>
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[color:var(--color-text-muted)]">
                 Interactive Decision Support • Language Sample Analysis • Report Drafting
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="hidden items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 sm:inline-flex">
+            <span className="hidden items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-xs font-medium text-emerald-800 sm:inline-flex">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               Decision-Support Ready
             </span>
             <Link
               href="/reports"
-              className="inline-flex items-center gap-1 rounded-lg border border-[#e0e7ff] bg-white px-3 py-1.5 text-xs font-semibold text-[#4f46e5] shadow-sm hover:bg-[#eef2ff]"
+              className="inline-flex items-center gap-1 rounded-lg border border-[color:var(--color-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[color:var(--color-pasa-teal)] shadow-sm hover:bg-[color:var(--color-pasa-teal-soft)]"
             >
               <FileText className="h-3.5 w-3.5" />
               <span>Reports</span>
@@ -239,20 +240,20 @@ export default function AssistantPage() {
         </header>
 
         {/* Safety Boundary Banner */}
-        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50/80 px-4 py-1.5 text-xs text-amber-900 sm:px-6">
-          <ShieldAlert className="h-3.5 w-3.5 flex-shrink-0 text-amber-600" />
+        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-950 sm:px-6">
+          <ShieldAlert className="h-3.5 w-3.5 flex-shrink-0 text-amber-700" />
           <span className="truncate">
             <strong>Clinical Safety Boundary:</strong> Research/Decision-support prototype. Non-diagnostic. All clinical conclusions require licensed clinician attestation.
           </span>
         </div>
 
         {/* Mobile View Switcher (Chat vs Case Context) */}
-        <div className="flex border-b border-[#e0e7ff] bg-white p-1 lg:hidden">
+        <div className="flex border-b border-[color:var(--color-border)] bg-white p-1 lg:hidden">
           <button
             type="button"
             onClick={() => setMobileTab("chat")}
             className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition ${
-              mobileTab === "chat" ? "bg-[#4f46e5] text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+              mobileTab === "chat" ? "bg-[color:var(--color-pasa-teal)] text-white shadow-sm" : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text-strong)]"
             }`}
           >
             💬 Chatbot Conversation
@@ -261,7 +262,7 @@ export default function AssistantPage() {
             type="button"
             onClick={() => setMobileTab("context")}
             className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition ${
-              mobileTab === "context" ? "bg-[#4f46e5] text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+              mobileTab === "context" ? "bg-[color:var(--color-pasa-teal)] text-white shadow-sm" : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text-strong)]"
             }`}
           >
             📋 Case Context & Metrics
@@ -272,19 +273,19 @@ export default function AssistantPage() {
         <div className="flex flex-1 overflow-hidden">
           {/* Left Panel: Case Context & Quick Actions (Desktop & Mobile Context Tab) */}
           <aside
-            className={`w-full lg:w-80 xl:w-96 flex-shrink-0 flex-col border-r border-[#e0e7ff] bg-white p-4 overflow-y-auto ${
+            className={`w-full lg:w-80 xl:w-96 flex-shrink-0 flex-col border-r border-[color:var(--color-border)] bg-white p-4 overflow-y-auto ${
               mobileTab === "context" ? "flex" : "hidden lg:flex"
             }`}
           >
             <div className="mb-4">
-              <label htmlFor="case-select" className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+              <label htmlFor="case-select" className="block text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-muted)] mb-1.5">
                 Active Case / เคสที่ตรวจ
               </label>
               <select
                 id="case-select"
                 value={selectedCaseId}
                 onChange={(e) => setSelectedCaseId(e.target.value)}
-                className="w-full rounded-lg border border-[#cbd5e1] bg-white px-3 py-2 text-sm font-semibold text-[#1e1e62] shadow-sm focus:border-[#4f46e5] focus:outline-none"
+                className="w-full rounded-lg border border-[color:var(--color-border)] bg-white px-3 py-2 text-sm font-semibold text-[color:var(--color-text-strong)] shadow-sm focus:border-[color:var(--color-pasa-teal)] focus:ring-1 focus:ring-[color:var(--color-pasa-teal)] focus:outline-none"
               >
                 {caseList.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -295,36 +296,36 @@ export default function AssistantPage() {
             </div>
 
             {/* Case Snapshot Card */}
-            <div className="rounded-xl border border-[#e0e7ff] bg-[#f8faff] p-3.5 shadow-sm mb-4">
+            <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-3.5 shadow-sm mb-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-[#1e1e62]">LSA Baseline & Progression</span>
-                <span className="text-[10px] font-semibold text-[#4f46e5] bg-indigo-50 px-2 py-0.5 rounded-full">
+                <span className="text-xs font-bold text-[color:var(--color-text-strong)]">LSA Baseline & Progression</span>
+                <span className="text-[10px] font-semibold text-[color:var(--color-pasa-teal)] bg-[color:var(--color-pasa-teal-soft)] border border-[color:var(--color-pasa-teal-border)] px-2 py-0.5 rounded-full">
                   Verified
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-lg bg-white p-2 border border-slate-100">
-                  <div className="text-slate-500 text-[10px]">MLU-w (Words/Utt)</div>
-                  <div className="text-base font-bold text-[#4f46e5]">{activeCase.mlu}</div>
+                <div className="rounded-lg bg-white p-2 border border-[color:var(--color-border)]">
+                  <div className="text-[color:var(--color-text-muted)] text-[10px]">MLU-w (Words/Utt)</div>
+                  <div className="text-base font-bold text-[color:var(--color-pasa-teal)]">{activeCase.mlu}</div>
                 </div>
-                <div className="rounded-lg bg-white p-2 border border-slate-100">
-                  <div className="text-slate-500 text-[10px]">TTR (Vocab Diversity)</div>
-                  <div className="text-base font-bold text-emerald-600">{activeCase.ttr.toFixed(2)}</div>
+                <div className="rounded-lg bg-white p-2 border border-[color:var(--color-border)]">
+                  <div className="text-[color:var(--color-text-muted)] text-[10px]">TTR (Vocab Diversity)</div>
+                  <div className="text-base font-bold text-emerald-700">{activeCase.ttr.toFixed(2)}</div>
                 </div>
-                <div className="rounded-lg bg-white p-2 border border-slate-100">
-                  <div className="text-slate-500 text-[10px]">Baseline Date</div>
-                  <div className="font-semibold text-slate-700 text-[11px]">{activeCase.baselineDate}</div>
+                <div className="rounded-lg bg-white p-2 border border-[color:var(--color-border)]">
+                  <div className="text-[color:var(--color-text-muted)] text-[10px]">Baseline Date</div>
+                  <div className="font-semibold text-[color:var(--color-text-strong)] text-[11px]">{activeCase.baselineDate}</div>
                 </div>
-                <div className="rounded-lg bg-white p-2 border border-slate-100">
-                  <div className="text-slate-500 text-[10px]">Latest Follow-up</div>
-                  <div className="font-semibold text-slate-700 text-[11px]">{activeCase.followUpDate}</div>
+                <div className="rounded-lg bg-white p-2 border border-[color:var(--color-border)]">
+                  <div className="text-[color:var(--color-text-muted)] text-[10px]">Latest Follow-up</div>
+                  <div className="font-semibold text-[color:var(--color-text-strong)] text-[11px]">{activeCase.followUpDate}</div>
                 </div>
               </div>
             </div>
 
             {/* Quick Prompts Panel */}
             <div className="mb-4">
-              <span className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+              <span className="block text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-muted)] mb-2">
                 Quick Clinical Prompts
               </span>
               <div className="space-y-2">
@@ -338,13 +339,13 @@ export default function AssistantPage() {
                         handleSend(qp.prompt);
                         if (mobileTab === "context") setMobileTab("chat");
                       }}
-                      className="flex w-full items-start gap-2.5 rounded-lg border border-[#e0e7ff] bg-white p-2.5 text-left text-xs font-medium text-[#1e1e62] transition hover:border-[#4f46e5] hover:bg-[#eef2ff]"
+                      className="flex w-full items-start gap-2.5 rounded-lg border border-[color:var(--color-border)] bg-white p-2.5 text-left text-xs font-medium text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-pasa-teal)] hover:bg-[color:var(--color-pasa-teal-soft)]"
                     >
-                      <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded bg-[#eef2ff] text-[#4f46e5]">
+                      <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)]">
                         <Icon className="h-3.5 w-3.5" />
                       </div>
                       <span className="flex-1 leading-snug">{qp.label}</span>
-                      <ChevronRight className="h-4 w-4 text-slate-400 mt-0.5" />
+                      <ChevronRight className="h-4 w-4 text-[color:var(--color-text-subtle)] mt-0.5" />
                     </button>
                   );
                 })}
@@ -352,11 +353,11 @@ export default function AssistantPage() {
             </div>
 
             {/* Reset Conversation Button */}
-            <div className="mt-auto pt-4 border-t border-slate-100">
+            <div className="mt-auto pt-4 border-t border-[color:var(--color-border)]">
               <button
                 type="button"
                 onClick={() => setMessages(INITIAL_MESSAGES)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2 text-xs font-semibold text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface-muted)]"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 <span>Reset Conversation</span>
@@ -366,7 +367,7 @@ export default function AssistantPage() {
 
           {/* Right Panel: Chat Stream & Input Area (Desktop & Mobile Chat Tab) */}
           <main
-            className={`flex flex-1 flex-col overflow-hidden bg-[#f8faff] ${
+            className={`flex flex-1 flex-col overflow-hidden bg-[color:var(--color-page-bg)] ${
               mobileTab === "chat" ? "flex" : "hidden lg:flex"
             }`}
           >
@@ -380,40 +381,40 @@ export default function AssistantPage() {
                       {/* Avatar */}
                       <div
                         className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold shadow-sm ${
-                          isUser ? "bg-[#1e1e62] text-white" : "bg-[#4f46e5] text-white"
+                          isUser ? "bg-[color:var(--color-pasa-teal)] text-white" : "bg-[color:var(--color-pasa-teal-soft)] border border-[color:var(--color-pasa-teal-border)] text-[color:var(--color-pasa-teal)]"
                         }`}
                       >
-                        {isUser ? "DR" : <Bot className="h-4 w-4" />}
+                        {isUser ? "DR" : <PasaScopeLogoMark size="xs" />}
                       </div>
 
                       {/* Bubble */}
                       <div
                         className={`rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
                           isUser
-                            ? "bg-[#1e1e62] text-white rounded-br-sm"
-                            : "bg-white text-[#1e1e62] border border-[#e0e7ff] rounded-bl-sm"
+                            ? "bg-[color:var(--color-pasa-teal)] text-white rounded-br-sm"
+                            : "bg-white text-[color:var(--color-text-strong)] border border-[color:var(--color-border)] rounded-bl-sm"
                         }`}
                       >
                         <div className="whitespace-pre-wrap">{msg.text}</div>
 
                         {/* Metric Highlights Card if present */}
                         {msg.metrics && (
-                          <div className="mt-3 grid grid-cols-4 gap-2 rounded-lg bg-[#f8faff] p-2.5 border border-[#e0e7ff] text-center">
+                          <div className="mt-3 grid grid-cols-4 gap-2 rounded-lg bg-[color:var(--color-surface)] p-2.5 border border-[color:var(--color-border)] text-center">
                             <div>
-                              <span className="text-[10px] text-slate-500 block">MLU-w</span>
-                              <span className="text-xs font-bold text-[#4f46e5]">{msg.metrics.mluWords}</span>
+                              <span className="text-[10px] text-[color:var(--color-text-muted)] block">MLU-w</span>
+                              <span className="text-xs font-bold text-[color:var(--color-pasa-teal)]">{msg.metrics.mluWords}</span>
                             </div>
                             <div>
-                              <span className="text-[10px] text-slate-500 block">TTR</span>
-                              <span className="text-xs font-bold text-emerald-600">{msg.metrics.ttr}</span>
+                              <span className="text-[10px] text-[color:var(--color-text-muted)] block">TTR</span>
+                              <span className="text-xs font-bold text-emerald-700">{msg.metrics.ttr}</span>
                             </div>
                             <div>
-                              <span className="text-[10px] text-slate-500 block">อนุภาค</span>
-                              <span className="text-xs font-bold text-amber-600">{msg.metrics.particles}</span>
+                              <span className="text-[10px] text-[color:var(--color-text-muted)] block">อนุภาค</span>
+                              <span className="text-xs font-bold text-amber-700">{msg.metrics.particles}</span>
                             </div>
                             <div>
-                              <span className="text-[10px] text-slate-500 block">คำลังเล</span>
-                              <span className="text-xs font-bold text-rose-600">{msg.metrics.fillers}</span>
+                              <span className="text-[10px] text-[color:var(--color-text-muted)] block">คำลังเล</span>
+                              <span className="text-xs font-bold text-[color:var(--color-scope-coral)]">{msg.metrics.fillers}</span>
                             </div>
                           </div>
                         )}
@@ -423,7 +424,7 @@ export default function AssistantPage() {
                           <div className="mt-3">
                             <Link
                               href={msg.actionUrl}
-                              className="inline-flex items-center gap-1.5 rounded-lg bg-[#e8607e] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-[#d9486c]"
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--color-scope-coral)] px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-[color:var(--color-scope-coral-hover)] transition"
                             >
                               <span>{msg.actionLabel}</span>
                               <ChevronRight className="h-3.5 w-3.5" />
@@ -432,14 +433,14 @@ export default function AssistantPage() {
                         )}
 
                         {/* Bottom Timestamp, Push to Draft, & Copy */}
-                        <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                        <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-[color:var(--color-text-subtle)]">
                           <span>{msg.timestamp}</span>
                           {!isUser && (
                             <div className="flex items-center gap-3">
                               <button
                                 type="button"
                                 onClick={() => pushToDraft(msg.text)}
-                                className="flex items-center gap-1 font-semibold text-[#4f46e5] hover:text-[#4338ca]"
+                                className="flex items-center gap-1 font-semibold text-[color:var(--color-pasa-teal)] hover:underline"
                                 title="บันทึกข้อความนี้เข้าสู่ Session Report Draft"
                               >
                                 <FileText className="h-3 w-3" />
@@ -448,13 +449,13 @@ export default function AssistantPage() {
                               <button
                                 type="button"
                                 onClick={() => copyMessage(msg.id, msg.text)}
-                                className="flex items-center gap-1 text-slate-500 hover:text-[#4f46e5]"
+                                className="flex items-center gap-1 text-[color:var(--color-text-muted)] hover:text-[color:var(--color-pasa-teal)]"
                                 title="Copy text"
                               >
                                 {copiedId === msg.id ? (
                                   <>
-                                    <Check className="h-3 w-3 text-emerald-600" />
-                                    <span className="text-emerald-600">Copied</span>
+                                    <Check className="h-3 w-3 text-emerald-700" />
+                                    <span className="text-emerald-700">Copied</span>
                                   </>
                                 ) : (
                                   <>
@@ -476,14 +477,14 @@ export default function AssistantPage() {
               {isThinking && (
                 <div className="flex justify-start">
                   <div className="flex gap-3 max-w-md">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#4f46e5] text-white text-xs">
-                      <Bot className="h-4 w-4" />
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[color:var(--color-pasa-teal-soft)] border border-[color:var(--color-pasa-teal-border)] text-[color:var(--color-pasa-teal)] text-xs">
+                      <PasaScopeLogoMark size="xs" />
                     </div>
-                    <div className="rounded-2xl rounded-bl-sm border border-[#e0e7ff] bg-white px-4 py-3 shadow-sm">
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                        <span className="h-2 w-2 rounded-full bg-[#4f46e5] animate-bounce" />
-                        <span className="h-2 w-2 rounded-full bg-[#4f46e5] animate-bounce [animation-delay:0.2s]" />
-                        <span className="h-2 w-2 rounded-full bg-[#4f46e5] animate-bounce [animation-delay:0.4s]" />
+                    <div className="rounded-2xl rounded-bl-sm border border-[color:var(--color-border)] bg-white px-4 py-3 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-xs text-[color:var(--color-text-muted)]">
+                        <span className="h-2 w-2 rounded-full bg-[color:var(--color-pasa-teal)] animate-bounce" />
+                        <span className="h-2 w-2 rounded-full bg-[color:var(--color-pasa-teal)] animate-bounce [animation-delay:0.2s]" />
+                        <span className="h-2 w-2 rounded-full bg-[color:var(--color-pasa-teal)] animate-bounce [animation-delay:0.4s]" />
                         <span className="ml-1 font-medium">กำลังวิเคราะห์ข้อมูลทางภาษา...</span>
                       </div>
                     </div>
@@ -495,7 +496,7 @@ export default function AssistantPage() {
             </div>
 
             {/* Input Bar */}
-            <div className="border-t border-[#e0e7ff] bg-white p-3 sm:p-4">
+            <div className="border-t border-[color:var(--color-border)] bg-white p-3 sm:p-4">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -508,12 +509,12 @@ export default function AssistantPage() {
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder="ถามเกี่ยวกับผลประเมิน LSA, ร่างข้อความรายงาน หรือขอคำแนะนำเป้าหมายการบำบัด..."
-                  className="flex-1 rounded-xl border border-[#cbd5e1] bg-[#f8faff] px-4 py-2.5 text-sm text-[#1e1e62] placeholder-slate-400 shadow-inner focus:border-[#4f46e5] focus:bg-white focus:outline-none"
+                  className="flex-1 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-page-bg)] px-4 py-2.5 text-sm text-[color:var(--color-text-strong)] placeholder-[color:var(--color-text-subtle)] shadow-inner focus:border-[color:var(--color-pasa-teal)] focus:bg-white focus:ring-1 focus:ring-[color:var(--color-pasa-teal)] focus:outline-none"
                 />
                 <button
                   type="submit"
                   disabled={!inputText.trim() || isThinking}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4f46e5] text-white shadow-md transition hover:bg-[#4338ca] disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-[color:var(--color-pasa-teal)] text-white shadow-sm transition hover:bg-[color:var(--color-pasa-teal-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Send className="h-4 w-4" />
                 </button>

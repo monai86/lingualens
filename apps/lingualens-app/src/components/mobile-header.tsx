@@ -1,12 +1,12 @@
-import Image from "next/image";
 import Link from "next/link";
 import { LogOut, Menu } from "lucide-react";
+import { PasaScopeLogo } from "@/components/pasascope-logo";
 import { ActiveOrganizationSummary } from "@/components/active-organization-summary";
 import { useRuntimeSettings } from "@/lib/use-runtime-settings";
 import { useSupabaseAccessSession } from "@/lib/use-supabase-access-session";
 import { signOutSupabaseWorkspace } from "@/lib/supabase-workspace-logout";
 
-export function MobileHeader({ title = "lingualens" }: { title?: string }) {
+export function MobileHeader({ title = "pasascope" }: { title?: string }) {
   const runtimeSettings = useRuntimeSettings();
   const supabaseSession = useSupabaseAccessSession();
   const showLogout = (runtimeSettings.status === "success" && runtimeSettings.data.auth_mode === "supabase")
@@ -20,15 +20,7 @@ export function MobileHeader({ title = "lingualens" }: { title?: string }) {
   return (
     <header className="grid gap-2 pb-3 md:hidden">
       <div className="flex items-center justify-between gap-3">
-        <Link href="/dashboard" aria-label="PasaScope home" className="flex items-center gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-white">
-            <Image src="/logo-mark.png" alt="" width={40} height={40} className="h-10 w-10 object-cover" />
-          </span>
-          <div>
-            <p className="text-base font-semibold text-[color:var(--color-text-strong)]">{title === "lingualens" || title === "pasascope" ? "PasaScope" : title}</p>
-            <p className="text-xs text-[color:var(--color-text-muted)]">ภาษา-สโคป • Decision Support</p>
-          </div>
-        </Link>
+        <PasaScopeLogo size="sm" href="/dashboard" subtitle="ภาษา-สโคป • Decision Support" />
 
         <div className="flex items-center gap-2">
           {showLogout ? (

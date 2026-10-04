@@ -195,12 +195,12 @@ export function SupabaseLoginFormClient({
   }
 
   return (
-    <div className="workspace-panel self-start p-5 sm:p-6">
+    <div className="workspace-panel self-start p-6 sm:p-7 shadow-xs">
       {/* Header */}
       <div className="mb-5 flex items-start gap-3">
-        <ShieldCheck size={22} aria-hidden="true" className="mt-0.5 shrink-0 text-[color:var(--color-accent)]" />
+        <ShieldCheck size={22} aria-hidden="true" className="mt-0.5 shrink-0 text-[color:var(--color-pasa-teal)]" />
         <div>
-          <h2 className="font-semibold text-[color:var(--color-text-strong)]">Secure sign in</h2>
+          <h2 className="text-lg font-bold text-[color:var(--color-text-strong)]">Secure sign in</h2>
           <p className="mt-1 text-sm leading-6 text-[color:var(--color-text-muted)]">
             เข้าสู่ระบบหรือสมัครสมาชิก PasaScope ด้วย Gmail หรืออีเมลทั่วไป
           </p>
@@ -218,7 +218,7 @@ export function SupabaseLoginFormClient({
           }}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-card)] py-2 text-sm font-semibold transition ${
             mode === "signin"
-              ? "bg-white text-[color:var(--color-text-strong)] shadow-sm"
+              ? "bg-[color:var(--color-pasa-teal)] text-white shadow-xs"
               : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text-strong)]"
           }`}
         >
@@ -234,7 +234,7 @@ export function SupabaseLoginFormClient({
           }}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-[var(--radius-card)] py-2 text-sm font-semibold transition ${
             mode === "signup"
-              ? "bg-white text-[color:var(--color-text-strong)] shadow-sm"
+              ? "bg-[color:var(--color-pasa-teal)] text-white shadow-xs"
               : "text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text-strong)]"
           }`}
         >
@@ -293,7 +293,7 @@ export function SupabaseLoginFormClient({
           <label className="mb-4 block text-sm font-medium text-[color:var(--color-text-strong)]">
             ชื่อ-นามสกุล (Display Name)
             <input
-              className="mt-1 min-h-11 w-full rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-3 py-2 text-[color:var(--color-text-strong)] placeholder:text-[color:var(--color-text-subtle)]"
+              className="mt-1.5 min-h-11 w-full rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-3.5 py-2 text-[color:var(--color-text-strong)] placeholder:text-[color:var(--color-text-subtle)] focus:border-[color:var(--color-pasa-teal)] focus:ring-2 focus:ring-[color:var(--color-focus-ring)] outline-none transition"
               type="text"
               autoComplete="name"
               placeholder="เช่น ดร. สมชาย หรือชื่อของคุณ"
@@ -306,7 +306,7 @@ export function SupabaseLoginFormClient({
         <label className="mb-4 block text-sm font-medium text-[color:var(--color-text-strong)]">
           Email
           <input
-            className="mt-1 min-h-11 w-full rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-3 py-2 text-[color:var(--color-text-strong)] placeholder:text-[color:var(--color-text-subtle)]"
+            className="mt-1.5 min-h-11 w-full rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-3.5 py-2 text-[color:var(--color-text-strong)] placeholder:text-[color:var(--color-text-subtle)] focus:border-[color:var(--color-pasa-teal)] focus:ring-2 focus:ring-[color:var(--color-focus-ring)] outline-none transition"
             type="email"
             inputMode="email"
             autoComplete="username"
@@ -319,7 +319,7 @@ export function SupabaseLoginFormClient({
         <label className="mb-4 block text-sm font-medium text-[color:var(--color-text-strong)]">
           Password
           <input
-            className="mt-1 min-h-11 w-full rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-3 py-2 text-[color:var(--color-text-strong)] placeholder:text-[color:var(--color-text-subtle)]"
+            className="mt-1.5 min-h-11 w-full rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-3.5 py-2 text-[color:var(--color-text-strong)] placeholder:text-[color:var(--color-text-subtle)] focus:border-[color:var(--color-pasa-teal)] focus:ring-2 focus:ring-[color:var(--color-focus-ring)] outline-none transition"
             type="password"
             autoComplete={mode === "signup" ? "new-password" : "current-password"}
             placeholder="Enter password"
@@ -334,7 +334,7 @@ export function SupabaseLoginFormClient({
               type="submit"
               disabled={!browserClient || isSubmitting || !email.trim() || !password}
               aria-disabled={!browserClient || isSubmitting || !email.trim() || !password}
-              className="inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-card)] bg-[color:var(--color-accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[color:var(--color-accent-strong)] disabled:cursor-not-allowed disabled:bg-[color:var(--color-border-strong)] disabled:text-[color:var(--color-text-muted)] motion-reduce:transition-none"
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-card)] bg-[color:var(--color-pasa-teal)] px-4 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-[color:var(--color-pasa-teal-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--color-border-strong)] disabled:text-[color:var(--color-text-muted)] motion-reduce:transition-none"
             >
               {isSubmitting
                 ? "Signing in..."
@@ -349,7 +349,7 @@ export function SupabaseLoginFormClient({
               type="button"
               onClick={handlePasswordRecovery}
               disabled={!browserClient || isSendingRecovery}
-              className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-4 py-2 text-sm font-medium text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-border-strong)] disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-muted)] disabled:text-[color:var(--color-text-subtle)] motion-reduce:transition-none"
+              className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-4 py-2 text-sm font-medium text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-pasa-teal)] hover:text-[color:var(--color-pasa-teal)] disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-muted)] disabled:text-[color:var(--color-text-subtle)] motion-reduce:transition-none"
             >
               {isSendingRecovery ? "Sending recovery email..." : "Send recovery email"}
             </button>
@@ -359,7 +359,7 @@ export function SupabaseLoginFormClient({
             type="submit"
             disabled={!browserClient || isSubmitting || !email.trim() || !password}
             aria-disabled={!browserClient || isSubmitting || !email.trim() || !password}
-            className="inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-card)] bg-[color:var(--color-accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[color:var(--color-accent-strong)] disabled:cursor-not-allowed disabled:bg-[color:var(--color-border-strong)] disabled:text-[color:var(--color-text-muted)] motion-reduce:transition-none"
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-card)] bg-[color:var(--color-pasa-teal)] px-4 py-2 text-sm font-semibold text-white shadow-xs transition hover:bg-[color:var(--color-pasa-teal-hover)] disabled:cursor-not-allowed disabled:bg-[color:var(--color-border-strong)] disabled:text-[color:var(--color-text-muted)] motion-reduce:transition-none"
           >
             {isSubmitting ? "กำลังสร้างบัญชี..." : "สมัครสมาชิกใหม่ (Create Account)"}
           </button>

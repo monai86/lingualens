@@ -90,12 +90,12 @@ export function InteractiveRadarChart({
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          <span className="flex items-center gap-1.5 font-medium text-emerald-700">
-            <span className="inline-block h-2 w-4 rounded-full border border-emerald-600 border-dashed bg-emerald-100"></span>
+          <span className="flex items-center gap-1.5 font-medium text-[color:var(--color-pasa-teal)]">
+            <span className="inline-block h-2 w-4 rounded-full border border-[color:var(--color-pasa-teal)] border-dashed bg-[color:var(--color-pasa-teal-soft)]"></span>
             เกณฑ์ปกติสมวัย (TD Norm 100%)
           </span>
-          <span className="flex items-center gap-1.5 font-medium text-[color:var(--color-accent-strong)]">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[color:var(--color-accent)]"></span>
+          <span className="flex items-center gap-1.5 font-medium text-[color:var(--color-scope-coral)]">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[color:var(--color-scope-coral)]"></span>
             ผลของเด็กในเซสชันนี้
           </span>
         </div>
@@ -119,7 +119,7 @@ export function InteractiveRadarChart({
                   key={rIdx}
                   points={pts}
                   fill="none"
-                  stroke={isNorm ? "#10b981" : "#e2e8f0"}
+                  stroke={isNorm ? "#265347" : "#dbe4e0"}
                   strokeWidth={isNorm ? 1.5 : 1}
                   strokeDasharray={isNorm ? "4 3" : undefined}
                 />
@@ -136,7 +136,7 @@ export function InteractiveRadarChart({
                   y1={center}
                   x2={x}
                   y2={y}
-                  stroke="#e2e8f0"
+                  stroke="#dbe4e0"
                   strokeWidth={1}
                 />
               );
@@ -145,8 +145,8 @@ export function InteractiveRadarChart({
             {/* Norm Baseline Polygon */}
             <polygon
               points={normPoints}
-              fill="rgba(16, 185, 129, 0.05)"
-              stroke="#10b981"
+              fill="rgba(38, 83, 71, 0.06)"
+              stroke="#265347"
               strokeWidth={1.75}
               strokeDasharray="4 3"
             />
@@ -154,8 +154,8 @@ export function InteractiveRadarChart({
             {/* Child Polygon */}
             <polygon
               points={childPoints}
-              fill="rgba(2, 132, 199, 0.18)"
-              stroke="#0284c7"
+              fill="rgba(244, 91, 105, 0.16)"
+              stroke="#f45b69"
               strokeWidth={2.5}
             />
 
@@ -174,7 +174,7 @@ export function InteractiveRadarChart({
                     cx={x}
                     cy={y}
                     r={isHovered ? 6 : 4}
-                    fill={ax.value !== null ? "#0284c7" : "#94a3b8"}
+                    fill={ax.value !== null ? "#f45b69" : "#94a3b8"}
                     stroke="#ffffff"
                     strokeWidth={1.5}
                     className="cursor-pointer transition-all duration-150"
@@ -197,7 +197,7 @@ export function InteractiveRadarChart({
                   textAnchor="middle"
                   dominantBaseline="central"
                   className={`text-xs font-semibold transition-colors duration-150 ${
-                    isHovered ? "fill-sky-700 font-bold" : "fill-slate-700"
+                    isHovered ? "fill-[color:var(--color-pasa-teal)] font-bold" : "fill-[color:var(--color-text-strong)]"
                   }`}
                 >
                   <tspan x={x} dy="-0.6em">{ax.label}</tspan>

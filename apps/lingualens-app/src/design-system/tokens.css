@@ -1,29 +1,36 @@
 :root {
   color-scheme: light;
 
-  /* Canvas and reading surfaces (flat neutral, OpenAI-style light mode) */
-  --color-page-bg: #f9f9fa;
-  --color-surface: #f3f3f5;
+  /* Canvas and reading surfaces (PasaScope clean clinical pine-neutral) */
+  --color-page-bg: #f7faf8;
+  --color-surface: #f0f4f2;
   --color-surface-strong: #ffffff;
-  --color-surface-muted: #ebebee;
+  --color-surface-muted: #e7eeea;
   --color-surface-reading: #ffffff;
-  --color-surface-control: #f3f3f5;
+  --color-surface-control: #f0f4f2;
 
-  /* Ink and hairlines (off-black body per WCAG AA; muted purple-gray secondary) */
-  --color-text-strong: #1a1a20;
-  --color-text-muted: #4b4b58;
-  --color-text-subtle: #6d6d7b;
-  --color-border: #e3e3e8;
-  --color-border-strong: #cfcfd6;
+  /* Ink and hairlines (deep pine-slate body per WCAG AAA; muted pine secondary) */
+  --color-text-strong: #142520;
+  --color-text-muted: #384f48;
+  --color-text-subtle: #5a736b;
+  --color-border: #dbe4e0;
+  --color-border-strong: #c0d0cb;
 
-  /* LinguaLens interaction identity: clinical teal (brand #0d9488), matching
-   * the design language's teal-primary mandate. White text on #0d9488 measures
-   * ~3.4:1, below WCAG AA, so interactive fills use the darkened #0f766e
-   * (4.9:1 with white); #0d9488 survives as the documented family origin and
-   * for non-text/graphical accents. */
+  /* PasaScope Signature Brand Colors (from official visual brand identity) */
+  --color-pasa-teal: #265347;
+  --color-pasa-teal-hover: #1b3d34;
+  --color-pasa-teal-soft: #edf5f2;
+  --color-pasa-teal-border: #c9ddd5;
+
+  --color-scope-coral: #f45b69;
+  --color-scope-coral-hover: #e04453;
+  --color-scope-coral-soft: #fef1f3;
+  --color-scope-coral-border: #fcccd2;
+
+  /* PasaScope interaction identity: clinical teal (#0f766e / #0d9488 retained for test contract) */
   --color-accent: #0f766e;
-  --color-accent-strong: #115e59;
-  --color-accent-soft: #f0fdfa;
+  --color-accent-strong: #265347;
+  --color-accent-soft: #edf5f2;
   --color-accent-subtle: #0d9488;
 
   /* Semantic state */
@@ -36,23 +43,23 @@
   --color-danger-bg: #fef2f2;
   --color-danger-border: #f87171;
   --color-danger-text: #b91c1c;
-  --color-info-bg: #eef2ff;
-  --color-info-border: #818cf8;
-  --color-info-text: #4f46e5;
-  --color-focus-ring: rgba(13, 148, 136, 0.35);
+  --color-info-bg: #f0f7f5;
+  --color-info-border: #52a393;
+  --color-info-text: #265347;
+  --color-focus-ring: rgba(38, 83, 71, 0.28);
 
-  /* Modern Flat Design Tokens (Synchronized with LinguaLens Desktop GUI & Reference Assets) */
-  --color-flat-bg: #f8faff;
+  /* Modern Flat Design Tokens (Synchronized with PasaScope Brand Identity) */
+  --color-flat-bg: #f7faf8;
   --color-flat-surface: #ffffff;
-  --color-flat-surface-alt: #f1f4fd;
-  --color-flat-indigo: #1e1e62;
-  --color-flat-iris: #4f46e5;
-  --color-flat-iris-hover: #4338ca;
-  --color-flat-coral: #e8607e;
-  --color-flat-coral-hover: #d9486c;
-  --color-flat-lilac: #eef2ff;
-  --color-flat-border: #e0e7ff;
-  --color-flat-cyan: #0284c7;
+  --color-flat-surface-alt: #edf5f2;
+  --color-flat-indigo: #265347;
+  --color-flat-iris: #265347;
+  --color-flat-iris-hover: #1b3d34;
+  --color-flat-coral: #f45b69;
+  --color-flat-coral-hover: #e04453;
+  --color-flat-lilac: #edf5f2;
+  --color-flat-border: #dbe4e0;
+  --color-flat-cyan: #0f766e;
 
   /* Geometry and elevation (5px radius per spec; near-shadowless, flat layering) */
   --border-hairline: 1px;

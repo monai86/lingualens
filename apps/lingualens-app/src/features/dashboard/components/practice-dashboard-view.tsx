@@ -38,33 +38,33 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
       />
 
       {/* Quick Launchpad Hero */}
-      <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 via-white to-teal-50/50 p-5 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 border border-teal-200 px-2.5 py-0.5 text-xs font-semibold text-teal-800">
-              <Sparkles className="h-3 w-3 text-teal-600" />
+      <div className="rounded-[var(--radius-panel)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] p-6 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-5">
+          <div className="max-w-2xl">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--color-pasa-teal-soft)] border border-[color:var(--color-pasa-teal-border)] px-3 py-1 text-xs font-semibold text-[color:var(--color-pasa-teal)]">
+              <span className="h-2 w-2 rounded-full bg-[color:var(--color-scope-coral)]" />
               PasaScope Clinical Suite (ภาษา-สโคป) v1.7.0
             </span>
-            <h2 className="mt-2 text-base font-bold text-slate-900">
-              Speech-Language Assessment & Decision Support
+            <h2 className="mt-3 text-xl font-bold tracking-tight text-[color:var(--color-text-strong)] sm:text-2xl">
+              Speech-Language Assessment &amp; Decision Support
             </h2>
-            <p className="mt-1 text-xs text-slate-600 max-w-2xl leading-relaxed">
+            <p className="mt-2 text-sm text-[color:var(--color-text-muted)] leading-relaxed">
               รองรับการนำเข้าไฟล์เสียง (.wav/.mp3), ไฟล์ TalkBank (.cha), สตูดิโอตรวจคำพูด Dual-Mode, กราฟใยแมงมุม (Spider Diagram) เทียบเกณฑ์สมวัย 100%, และร่างรายงานคลินิกอ้างอิงข้อมูลจริง
             </p>
           </div>
-          <div className="flex flex-wrap gap-2.5">
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/sessions/session_demo_001?view=transcript"
-              className="flex min-h-11 items-center gap-1.5 rounded-lg bg-[color:var(--color-accent)] px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[color:var(--color-accent-strong)] transition-all"
+              className="flex min-h-11 items-center gap-2 rounded-[var(--radius-card)] bg-[color:var(--color-pasa-teal)] px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-[color:var(--color-pasa-teal-hover)] transition-all"
             >
-              <FileCode className="h-3.5 w-3.5" />
+              <FileCode className="h-4 w-4" />
               <span>Open TalkBank Studio</span>
             </Link>
             <Link
               href="/sessions/session_demo_001?view=findings"
-              className="flex min-h-11 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-800 shadow-xs hover:bg-slate-50 transition-all"
+              className="flex min-h-11 items-center gap-2 rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] px-4 py-2.5 text-sm font-semibold text-[color:var(--color-text-strong)] shadow-xs hover:border-[color:var(--color-pasa-teal)] hover:bg-[color:var(--color-pasa-teal-soft)] transition-all"
             >
-              <Activity className="h-3.5 w-3.5 text-slate-600" />
+              <Activity className="h-4 w-4 text-[color:var(--color-pasa-teal)]" />
               <span>View Spider Diagram</span>
             </Link>
           </div>
