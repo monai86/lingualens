@@ -1219,31 +1219,27 @@ VALUES ('org_alpha', 'LinguaLens Clinical Pilot Clinic', true, now(), now())
 ON CONFLICT (organization_id) DO NOTHING;
 
 INSERT INTO public.protocol_versions (
-  protocol_version_key, display_label, description, primary_language,
-  minimum_age_months, maximum_age_months, supported_purposes, active, created_at, updated_at
+  protocol_version_key, primary_language,
+  minimum_age_months, maximum_age_months, supported_purposes, created_at
 )
 VALUES (
   'thai_guided_language_sample:v0',
-  'Thai Guided Language Sample Protocol v0',
-  'Standardized guided language sample protocol for Thai pediatric language and communication assessment.',
   'th',
   18,
   72,
   'initial,developmental_follow_up,post_intervention_follow_up,additional_evidence',
-  true,
-  now(),
   now()
 )
 ON CONFLICT (protocol_version_key) DO NOTHING;
 
 INSERT INTO public.protocol_activities (
-  protocol_version_key, activity_key, display_label, prompt_summary,
-  required, target_duration_seconds, minimum_duration_seconds, sort_order, active, created_at, updated_at
+  protocol_version_key, activity_key,
+  required, target_duration_seconds, minimum_duration_seconds, sort_order, created_at
 )
 VALUES
-  ('thai_guided_language_sample:v0', 'free_play', 'Free Play Interaction (การเล่นอิสระ)', 'Semi-structured play with familiar toys to elicit spontaneous child-directed vocalizations.', true, 180, 120, 1, true, now(), now()),
-  ('thai_guided_language_sample:v0', 'shared_book', 'Shared Book Reading (การอ่านหนังสือนิทานร่วมกัน)', 'Dialogic book sharing to assess joint attention, pointing, and narrative vocabulary.', false, 120, 60, 2, true, now(), now()),
-  ('thai_guided_language_sample:v0', 'turn_taking', 'Turn-Taking Social Routine (กิจกรรมผลัดกันพูด)', 'Structured turn-taking routine or game to evaluate reciprocal social communication.', false, 120, 60, 3, true, now(), now())
+  ('thai_guided_language_sample:v0', 'free_play', true, 180, 120, 1, now()),
+  ('thai_guided_language_sample:v0', 'shared_book', false, 120, 60, 2, now()),
+  ('thai_guided_language_sample:v0', 'turn_taking', false, 120, 60, 3, now())
 ON CONFLICT (protocol_version_key, activity_key) DO NOTHING;
 
 -- Backfill existing Supabase Auth users into user_profiles & organization_memberships
