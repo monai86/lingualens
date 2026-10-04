@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, ReactNode } from "react";
+import { useState, useEffect, ReactNode } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
 import { Sidebar, type ShellActive } from "@/components/sidebar";
@@ -13,7 +15,7 @@ import { SupabaseWorkspaceAccessGate } from "@/components/supabase-workspace-acc
 import { WorkspaceAccessGate } from "@/components/workspace-access-gate";
 import { ConfirmedRuntimeSettingsProvider } from "@/lib/confirmed-runtime-settings";
 import { loadMockAccessSession } from "@/lib/mock-access-session";
-import { useSupabaseAccessSession } from "@/lib/use-supabase-access-session";
+import { loadOrRestoreSupabaseAccessSession, useSupabaseAccessSession } from "@/lib/use-supabase-access-session";
 import { useRuntimeSettings } from "@/lib/use-runtime-settings";
 
 export type { ShellActive };
@@ -31,11 +33,21 @@ export function AppShell({
   activeCaseId?: string;
   rightRail?: ReactNode;
 }) {
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const runtimeSettings = useRuntimeSettings();
   const confirmedRuntimeSettings = runtimeSettings.status === "success" ? runtimeSettings.data : null;
   const session = typeof window !== "undefined" ? loadMockAccessSession() : null;
   const supabaseSession = useSupabaseAccessSession();
+
+  useEffect(() => {
+    // If user is completely unauthenticated on the client, redirect directly to /login
+    const restored = loadOrRestoreSupabaseAccessSession();
+    const mock = loadMockAccessSession();
+    if (!mock && (!restored || restored.stage === "signed_out")) {
+      router.replace("/login");
+    }
+  }, [router]);
 
   const gateRequired = confirmedRuntimeSettings?.auth_mode === "mock" && session?.aal === "aal1";
   const mfaRequired = confirmedRuntimeSettings?.access_model?.required_app_aal === "aal2";
@@ -61,6 +73,14 @@ export function AppShell({
           <p className="mt-3 text-sm leading-6 text-slate-600">
             Authentication mode and access requirements must be confirmed before workspace content can load.
           </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link
+              href="/login"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-700 px-5 text-sm font-semibold text-white transition hover:bg-emerald-800"
+            >
+              Go to login • เข้าสู่ระบบ
+            </Link>
+          </div>
         </section>
       </main>
     );

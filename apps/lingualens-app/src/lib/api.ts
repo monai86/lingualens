@@ -70,10 +70,65 @@ export async function apiGet<T>(path: string, init: RequestInit = {}): Promise<T
   return apiRequest<T>(path, init);
 }
 
+export const DEFAULT_PRODUCTION_RUNTIME_SETTINGS: RuntimeSettings = {
+  mock_mode: false,
+  auth_mode: "supabase",
+  model_version: "v2-mock",
+  feature_schema: "lingualens-app.1",
+  guideline_mapping: "review-support-only",
+  user_roles: ["therapist", "clinical_supervisor", "org_admin"],
+  access_model: {
+    invitation_only: true,
+    required_app_aal: "aal2",
+    active_organization_session: "explicit_selection_when_ambiguous",
+    production_mock_mode: "forbidden",
+  },
+  data_retention: "configured",
+  consent_policy: "required",
+  capabilities: {
+    cases: "available",
+    audio_upload: "experimental",
+    transcription: "experimental",
+    transcript_qa: "available",
+    feature_extraction: "available",
+    ai_review: "disabled",
+    report_drafting: "disabled",
+    pdf_export: "unavailable",
+  },
+  pipeline_settings: {
+    audio_processing: "experimental_async",
+    job_queue_mode: "memory",
+    repository_mode: "json",
+    storage_mode: "supabase_private",
+  },
+};
+
+function isNetworkOrConnectionError(error: unknown): boolean {
+  if (error instanceof ApiError) return false;
+  if (error && typeof error === "object" && "name" in error && error.name === "ZodError") return false;
+  if (error instanceof TypeError) return true;
+  const message = String(error ?? "").toLowerCase();
+  return (
+    message.includes("failed to fetch") ||
+    message.includes("networkerror") ||
+    message.includes("econnrefused") ||
+    message.includes("network request failed") ||
+    message.includes("load failed")
+  );
+}
+
 export async function getRuntimeSettings(): Promise<RuntimeSettings> {
-  const settings = runtimeSettingsSchema.parse(await apiGet("/settings"));
-  runtimeSettingsCache = settings;
-  return settings;
+  try {
+    const settings = runtimeSettingsSchema.parse(await apiGet("/settings"));
+    runtimeSettingsCache = settings;
+    return settings;
+  } catch (error) {
+    if (typeof window !== "undefined" && isNetworkOrConnectionError(error)) {
+      runtimeSettingsCache = DEFAULT_PRODUCTION_RUNTIME_SETTINGS;
+      return DEFAULT_PRODUCTION_RUNTIME_SETTINGS;
+    }
+    throw error;
+  }
 }
 
 export async function checkBackendAvailability(): Promise<boolean> {
