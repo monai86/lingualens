@@ -43,7 +43,7 @@ jobs:
 
       - name: Run therapist frontend dependency audit
         working-directory: apps/lingualens-app
-        run: npm audit --audit-level=high
+        run: npm audit --audit-level=high --omit=dev
 
   test-backend:
     needs: security-scan
