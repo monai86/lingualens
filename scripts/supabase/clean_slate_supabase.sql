@@ -5,9 +5,9 @@
 --   Completely wipes existing public schema in Supabase and initializes:
 --   1. Schema reset & permissions (anon, authenticated, service_role)
 --   2. Extensions (uuid-ossp, pgcrypto)
---   3. Multi-Tenant Helper Functions (current_org_id, is_org_member)
---   4. All 28 Assessment V2 Tables with PKs, FKs, Unique and Check Constraints
---   5. All 100 Performance & Query Indexes
+--   3. All 28 Assessment V2 Tables with PKs, FKs, Unique and Check Constraints
+--   4. All 100 Performance & Query Indexes
+--   5. Multi-Tenant Helper Functions (current_org_id, is_org_member)
 --   6. Multi-Tenant Row Level Security (RLS) enabled & forced
 --   7. Supabase Auth Automatic Sync Trigger (auth.users -> user_profiles)
 --   8. Private Audio Storage Bucket (audio-recordings) and storage RLS policies
@@ -34,53 +34,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 -- ------------------------------------------------------------------------------
--- PART 2: HELPER FUNCTIONS FOR TENANT RLS & AUTH RESOLUTION
--- ------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.current_org_id()
-RETURNS text
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-AS $$
-  SELECT coalesce(
-    nullif(current_setting('app.current_organization_id', true), ''),
-    (
-      SELECT organization_id
-      FROM public.organization_memberships
-      WHERE user_id = auth.uid()::text
-        AND active = true
-      LIMIT 1
-    )
-  );
-$$;
-
-CREATE OR REPLACE FUNCTION public.is_org_member(target_org_id text)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-AS $$
-  SELECT (
-    -- 1. Session setting override (used by FastAPI backend connection pool)
-    current_setting('app.current_organization_id', true) = target_org_id
-    -- 2. Service role bypass (Supabase service_role API key)
-    OR auth.role() = 'service_role'
-    -- 3. Supabase Auth user membership lookup
-    OR (
-      auth.uid() IS NOT NULL
-      AND EXISTS (
-        SELECT 1
-        FROM public.organization_memberships
-        WHERE organization_id = target_org_id
-          AND user_id = auth.uid()::text
-          AND active = true
-      )
-    )
-  );
-$$;
-
--- ------------------------------------------------------------------------------
--- PART 3: TABLE DEFINITIONS & CONSTRAINTS
+-- PART 2: TABLE DEFINITIONS & CONSTRAINTS
 -- ------------------------------------------------------------------------------
 
 -- Table: organizations
@@ -920,7 +874,53 @@ CREATE INDEX ix_assessment_reports_signed_snapshot_hash ON assessment_reports (s
 CREATE INDEX ix_assessment_reports_assessment_id ON assessment_reports (assessment_id);
 
 -- ------------------------------------------------------------------------------
--- PART 5: ROW LEVEL SECURITY (RLS) POLICIES
+-- PART 3: HELPER FUNCTIONS FOR TENANT RLS & AUTH RESOLUTION
+-- ------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.current_org_id()
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+  SELECT coalesce(
+    nullif(current_setting('app.current_organization_id', true), ''),
+    (
+      SELECT organization_id
+      FROM public.organization_memberships
+      WHERE user_id = auth.uid()::text
+        AND active = true
+      LIMIT 1
+    )
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_org_member(target_org_id text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+  SELECT (
+    -- 1. Session setting override (used by FastAPI backend connection pool)
+    current_setting('app.current_organization_id', true) = target_org_id
+    -- 2. Service role bypass (Supabase service_role API key)
+    OR auth.role() = 'service_role'
+    -- 3. Supabase Auth user membership lookup
+    OR (
+      auth.uid() IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.organization_memberships
+        WHERE organization_id = target_org_id
+          AND user_id = auth.uid()::text
+          AND active = true
+      )
+    )
+  );
+$$;
+
+-- ------------------------------------------------------------------------------
+-- PART 4: ROW LEVEL SECURITY (RLS) POLICIES
 -- ------------------------------------------------------------------------------
 -- Organizations access
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
@@ -1131,7 +1131,7 @@ CREATE POLICY assessment_reports_tenant_isolation ON public.assessment_reports
   WITH CHECK (public.is_org_member(organization_id));
 
 -- ------------------------------------------------------------------------------
--- PART 6: SUPABASE AUTH INTEGRATION TRIGGER
+-- PART 5: SUPABASE AUTH INTEGRATION TRIGGER
 -- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
@@ -1180,7 +1180,7 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ------------------------------------------------------------------------------
--- PART 7: SUPABASE STORAGE BUCKET & POLICIES
+-- PART 6: SUPABASE STORAGE BUCKET & POLICIES
 -- ------------------------------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
@@ -1212,7 +1212,7 @@ USING (bucket_id = 'audio-recordings')
 WITH CHECK (bucket_id = 'audio-recordings');
 
 -- ------------------------------------------------------------------------------
--- PART 8: CLINICAL PILOT SEED DATA
+-- PART 7: CLINICAL PILOT SEED DATA
 -- ------------------------------------------------------------------------------
 INSERT INTO public.organizations (organization_id, display_label, active, created_at, updated_at)
 VALUES ('org_alpha', 'LinguaLens Clinical Pilot Clinic', true, now(), now())
@@ -1271,7 +1271,7 @@ FROM auth.users
 ON CONFLICT (organization_id, user_id) DO NOTHING;
 
 -- ------------------------------------------------------------------------------
--- PART 9: ALEMBIC VERSION REGISTRATION
+-- PART 8: ALEMBIC VERSION REGISTRATION
 -- ------------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.alembic_version (
   version_num VARCHAR(32) NOT NULL,
