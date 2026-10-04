@@ -1,5 +1,5 @@
 -- ==============================================================================
--- LinguaLens Assessment V2: Clean-Slate Supabase Migration & Initialization
+-- PasaScope Assessment V2: Clean-Slate Supabase Migration & Initialization
 -- 
 -- Summary:
 --   Completely wipes existing public schema in Supabase and initializes:
@@ -1215,7 +1215,7 @@ WITH CHECK (bucket_id = 'audio-recordings');
 -- PART 7: CLINICAL PILOT SEED DATA
 -- ------------------------------------------------------------------------------
 INSERT INTO public.organizations (organization_id, display_label, active, created_at, updated_at)
-VALUES ('org_alpha', 'LinguaLens Clinical Pilot Clinic', true, now(), now())
+VALUES ('org_alpha', 'PasaScope Clinical Pilot Clinic', true, now(), now())
 ON CONFLICT (organization_id) DO NOTHING;
 
 INSERT INTO public.protocol_versions (
@@ -1280,6 +1280,6 @@ INSERT INTO public.alembic_version (version_num) VALUES ('0012_clinical_review_r
 -- Completion notification
 DO $$
 BEGIN
-  RAISE NOTICE 'LinguaLens Assessment V2 clean-slate initialization completed successfully.';
+  RAISE NOTICE 'PasaScope Assessment V2 clean-slate initialization completed successfully.';
 END;
 $$;

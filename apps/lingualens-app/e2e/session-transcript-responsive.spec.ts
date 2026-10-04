@@ -80,6 +80,7 @@ for (const viewport of viewports) {
     await expect(line).toHaveAttribute("aria-selected", "true");
     await expect(line.getByRole("button", { name: "More actions for line 1" })).toBeVisible();
 
+    await page.waitForTimeout(250);
     const dimensions = await page.evaluate(() => ({
       viewport: window.innerWidth,
       document: document.documentElement.scrollWidth,
