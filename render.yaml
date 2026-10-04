@@ -41,10 +41,7 @@ services:
         value: "true"
       - key: LINGUALENS_CORS_ALLOWED_ORIGINS
         sync: false
-        value: "http://localhost:3000"
       - key: LINGUALENS_DATABASE_URL
         sync: false
-        value: ""
       - key: LINGUALENS_SUPABASE_SERVICE_ROLE_KEY
         sync: false
-        value: ""
