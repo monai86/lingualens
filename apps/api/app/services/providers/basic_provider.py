@@ -40,7 +40,7 @@ _CAUTION = (
 _SCHEMA_VERSION = "features-basic-v1"
 _PROVIDER_ID = "basic_feature_provider"
 _PROVIDER_NAME = "BasicFeatureProvider"
-_PROVIDER_VERSION = "v1.6.3"
+_PROVIDER_VERSION = "v1.7.0"
 
 # Minimum child utterances below which we set insufficient_data=True
 _MIN_CHILD_UTTS = 3

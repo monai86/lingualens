@@ -100,7 +100,7 @@ def draft_report(
         therapist_notes=payload.therapist_notes or session.notes,
         session_goals=payload.session_goals,
         generated_from_versions={
-            "app_version": "v1.6.3",
+            "app_version": "v1.7.0",
             "schema_version": feature_set.schema_version if feature_set else "features-basic-v1",
             "transcript_version": str(transcript.version),
         },

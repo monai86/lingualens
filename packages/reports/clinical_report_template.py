@@ -415,7 +415,7 @@ def generate_bilingual_clinical_html(
   </div>
 
   <div class="footer">
-    LinguaLens v1.6.3 • Department of Medical Technology, Mahidol University • TalkBank / CHILDES Compliant
+    LinguaLens v1.7.0 • Department of Medical Technology, Mahidol University • TalkBank / CHILDES Compliant
   </div>
 </div>
 

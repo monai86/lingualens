@@ -348,7 +348,7 @@ class LinguaLensGUIApp:
 
         tk.Label(
             title_frame,
-            text="v1.6.3",
+            text="v1.7.0",
             font=(self.font_sys, 8, "bold"),
             fg=self.primary_color,
             bg="#ede9fe",

@@ -1,6 +1,6 @@
 # LinguaLens Clinical Pilot Deployment & Operational Guide
 
-This document outlines the deployment and local execution workflows for the **LinguaLens v1.6.3** speech-language assessment decision-support system during clinical evaluator trials.
+This document outlines the deployment and local execution workflows for the **LinguaLens v1.7.0** speech-language assessment decision-support system during clinical evaluator trials.
 
 ---
 

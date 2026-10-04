@@ -18,7 +18,7 @@ def print_banner(api_online: bool = False, current_step: str = "Dashboard") -> N
     
     header_text = Text()
     header_text.append("LINGUALENS ", style="bold cyan")
-    header_text.append("v1.6.3 ", style="bold white")
+    header_text.append("v1.7.0 ", style="bold white")
     header_text.append("— Speech-Language Decision Support TUI\n", style="dim white")
     header_text.append("Status: ", style="bold")
     header_text.append_text(Text.from_markup(status_badge))

@@ -1,5 +1,40 @@
 # Changelog
 
+## [v1.7.0] - 2026-10-04
+
+### Added
+- **TUI Desktop Audio Integration** (`packages/tui/`):
+  Extended `ClinicalDataPort` protocol with `get_waveform_peaks` and
+  `get_playback_grant`; implemented HTTP adapter byte transport, synthetic
+  waveform generation in memory adapter (signed 8-bit, clamped [-100, 80]),
+  and canonical integration test coverage (112 TUI tests passing).
+- **Clinical Pilot & Ethics Documentation**:
+  Updated `docs/PILOT_DEPLOYMENT.md` with Audio Review Workbench dual canvas,
+  hotkeys, TUI CLI, and multi-tier consent.
+  Updated `reports/clinical/THAI_PILOT_VARIANCE_ANALYSIS_PLAN.md` with feature
+  battery alignment, Rule 9 invalidation, and clinician ground-truth labeling.
+  Enhanced `reports/human_actions/THAI_CLINICAL_PILOT_ETHICS_CHECKLIST.md` with
+  multi-tier consent, 15-minute signed playback grants, and non-diagnostic
+  disclosures.
+
+### Fixed
+- **`findings_stale` / `report_stale` persistence** (`apps/api/`):
+  Added mapped boolean columns to `SessionRecord` and hydration in
+  `SqlAlchemyRepository` so downstream staleness marking survives round-trips.
+- **Next.js CVE remediation**: Upgraded `next` from `16.3.5` to `^16.3.8`
+  (GHSA-vcvr-r3jv-pc5j, RCE in `next/og` ImageResponse).
+- **CI security scan scope**: Scoped `npm audit` to `--omit=dev` to avoid
+  non-actionable `braces` devDependency advisory from `tailwindcss 3.x`.
+- **ReportLab PDF threshold**: Lowered export engine PDF size assertion from
+  `> 5000` to `> 2000` for headless Linux runner font compatibility.
+- **ESLint `react-hooks/purity`**: Silenced false-positive on `Date.now()` in
+  assistant page event handler.
+
+### Changed
+- Project version bumped to `v1.7.0`.
+- `PROJECT_SOURCE_OF_TRUTH.md` updated with current Next.js version and project
+  version.
+
 ## [v1.6.3] - 2026-09-21
 
 ### Added
