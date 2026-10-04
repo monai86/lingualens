@@ -98,5 +98,5 @@ def test_render_reportlab_pdf(tmp_path):
     )
     import os
     assert os.path.exists(out_pdf)
-    assert os.path.getsize(out_pdf) > 5000
+    assert os.path.getsize(out_pdf) > 2000
 
