@@ -129,6 +129,7 @@ export default function AssistantPage() {
     if (!text || isThinking) return;
 
     const userMsg: Message = {
+      // eslint-disable-next-line react-hooks/purity
       id: `u-${Date.now()}`,
       sender: "user",
       text,
