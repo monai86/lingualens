@@ -1,7 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { AlertTriangle, CheckCircle2, Gauge, ShieldCheck } from "lucide-react";
 
+import { AudioReviewWorkbench } from "@/components/audio-review/audio-review-workbench";
 import { PrimaryActionButton } from "@/components/workbench-ui";
 import { SafetyNotice } from "@/components/safety-notice";
 import { TranscriptEditorPanel } from "@/components/transcript-editor-panel";
@@ -59,6 +61,7 @@ export function SessionTranscriptView({
   const canExtractFeatures = Boolean(
     isTranscriptUnlocked(state) && !state.featuresExtracted && state.backendTranscriptId,
   );
+  const [reviewMode, setReviewMode] = useState<"audio" | "classic">(audioUrl ? "audio" : "classic");
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-5">
@@ -96,7 +99,49 @@ export function SessionTranscriptView({
         </div>
       ) : null}
       <div className="space-y-5">
-        <section className="min-w-0">
+        <section className="min-w-0 space-y-4">
+          {audioUrl && (
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReviewMode("audio")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                    reviewMode === "audio"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                  }`}
+                >
+                  Audio & Diarization Workbench
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewMode("classic")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                    reviewMode === "classic"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                  }`}
+                >
+                  Classic Text Editor
+                </button>
+              </div>
+            </div>
+          )}
+
+          {audioUrl && reviewMode === "audio" ? (
+            <AudioReviewWorkbench
+              lines={lines}
+              onLinesChange={onLinesChange}
+              audioUrl={audioUrl}
+              sessionId={sessionContext.sessionId}
+              isAttested={state.transcriptAttested}
+              onAttest={onAttest}
+              onSaveDraft={onSaveDraft}
+              isBusy={busy}
+              findingsStale={Boolean(state.featuresExtracted && state.transcriptSaveStatus === "unsaved")}
+            />
+          ) : (
             <TranscriptEditorPanel
               lines={lines}
               qaStatus={state.qaStatus}
@@ -112,6 +157,7 @@ export function SessionTranscriptView({
               onExport={onExport}
               audioUrl={audioUrl}
             />
+          )}
         </section>
         <details className="responsive-details rounded-[var(--radius-panel)] border border-line bg-[color:var(--color-surface-reading)]" data-testid="mobile-transcript-report-readiness">
           <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-ink">

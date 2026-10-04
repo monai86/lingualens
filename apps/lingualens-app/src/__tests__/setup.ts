@@ -22,6 +22,21 @@ export async function renderAsyncPage(
   return render(content);
 }
 
+if (typeof HTMLCanvasElement !== "undefined") {
+  HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
+    clearRect: vi.fn(),
+    fillRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    fill: vi.fn(),
+    fillText: vi.fn(),
+    strokeRect: vi.fn(),
+    setLineDash: vi.fn(),
+  }) as any;
+}
+
 beforeEach(() => {
   resetApiRuntimeSettingsCacheForTests();
 });
