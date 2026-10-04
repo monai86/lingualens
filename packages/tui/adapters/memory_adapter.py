@@ -1105,3 +1105,26 @@ class InMemoryClinicalAdapter:
                 if a.get("id") == assessment_id:
                     return a
         raise LinguaLensApiError(f"Assessment '{assessment_id}' not found.")
+
+    def get_waveform_peaks(self, session_id: str) -> bytes:
+        import struct
+        # Synthetic 50 points of signed 8-bit integers (-128 to 127)
+        samples = [int(20 * ((i % 10) - 5)) for i in range(50)]
+        return struct.pack(f"{len(samples)}b", *samples)
+
+    def get_playback_grant(self, session_id: str) -> dict[str, Any]:
+        from packages.tui.client import LinguaLensApiError
+        found = False
+        for s_list in self._mock_data.get("sessions", {}).values():
+            for s in s_list:
+                if s.get("session_id") == session_id:
+                    found = True
+                    break
+        if not found:
+            raise LinguaLensApiError(f"Session '{session_id}' not found.")
+        return {
+            "playback_url": f"/api/v1/audio/{session_id}_mock/file",
+            "expires_at": self._get_now().isoformat(),
+            "audio_sha256": "mock_sha256_e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        }
+

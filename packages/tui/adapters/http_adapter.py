@@ -352,3 +352,10 @@ class HttpClinicalAdapter:
 
     def get_assessment(self, assessment_id: str) -> dict[str, Any]:
         return self._client._http_request("GET", f"/api/v2/assessments/{assessment_id}")
+
+    def get_waveform_peaks(self, session_id: str) -> bytes:
+        return self._client._http_request_bytes("GET", f"/sessions/{session_id}/audio/waveform-peaks")
+
+    def get_playback_grant(self, session_id: str) -> dict[str, Any]:
+        return self._client._http_request("POST", f"/sessions/{session_id}/audio/playback-grant")
+

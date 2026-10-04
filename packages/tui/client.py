@@ -325,6 +325,66 @@ class LinguaLensClient:
         except Exception:
             raise LinguaLensApiError("API request failed unexpectedly.") from None
 
+    def _http_request_bytes(self, method: str, endpoint: str, data: dict[str, Any] | None = None) -> bytes:
+        if endpoint.startswith("/api/v2"):
+            if self.base_url.endswith("/api/v1"):
+                url = f"{self.base_url[:-7]}{endpoint}"
+            else:
+                url = f"{self.base_url}{endpoint}"
+        else:
+            url = f"{self.base_url}{endpoint}"
+        headers = {"Accept": "application/octet-stream"}
+
+        req_data = json.dumps(data).encode("utf-8") if data is not None else None
+        if req_data:
+            headers["Content-Type"] = "application/json"
+
+        with self._session_lock:
+            active_session = self._session
+
+        session_gen: int | None = active_session.generation if active_session else None
+        token_used: str | None = active_session.access_token if active_session else None
+
+        if active_session and active_session.access_token:
+            base_p = urllib.parse.urlparse(self.base_url)
+            req_p = urllib.parse.urlparse(url)
+            base_port = base_p.port or (443 if base_p.scheme == "https" else 80)
+            req_port = req_p.port or (443 if req_p.scheme == "https" else 80)
+            if (base_p.scheme, base_p.hostname, base_port) == (req_p.scheme, req_p.hostname, req_port):
+                headers["Authorization"] = f"Bearer {active_session.access_token}"
+                if active_session.organization_id:
+                    headers["X-Organization-ID"] = active_session.organization_id
+
+        req = urllib.request.Request(url, data=req_data, headers=headers, method=method)
+        try:
+            with self._opener.open(req, timeout=5.0) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401:
+                self._handle_auth_failure(failed_session_generation=session_gen, token_used=token_used)
+                raise LinguaLensAuthError("Authentication failed: HTTP 401 Session expired or invalid token.") from None
+            elif exc.code == 403:
+                raise LinguaLensPermissionError("Permission denied: HTTP 403 Action forbidden for current role.") from None
+            elif exc.code == 409:
+                raise LinguaLensConflictError("Conflict error: HTTP 409 Resource state conflict or concurrent edit.") from None
+            elif exc.code == 429:
+                retry_val = exc.headers.get("Retry-After") if exc.headers else None
+                retry_sec = _parse_retry_after(retry_val)
+                raise LinguaLensRateLimitError(
+                    "Rate limit exceeded: HTTP 429 Too many requests. Retry later.",
+                    retry_after_seconds=retry_sec,
+                ) from None
+            elif exc.code >= 500:
+                raise LinguaLensServerError(f"Server error: HTTP {exc.code} Internal server failure.") from None
+            else:
+                raise LinguaLensApiError(f"API request failed: HTTP {exc.code}.") from None
+        except urllib.error.URLError:
+            raise LinguaLensApiError("API connection failed. Service is currently unavailable.") from None
+        except LinguaLensApiError:
+            raise
+        except Exception:
+            raise LinguaLensApiError("API request failed unexpectedly.") from None
+
     # Delegated Clinical Domain Operations
     def check_health(self) -> bool:
         """Check if backend API is reachable."""
@@ -503,3 +563,12 @@ class LinguaLensClient:
     def get_assessment(self, assessment_id: str) -> dict[str, Any]:
         """Retrieve assessment details (V2)."""
         return self._adapter.get_assessment(assessment_id)
+
+    def get_waveform_peaks(self, session_id: str) -> bytes:
+        """Fetch binary waveform peaks for session audio visualization."""
+        return self._adapter.get_waveform_peaks(session_id)
+
+    def get_playback_grant(self, session_id: str) -> dict[str, Any]:
+        """Request time-limited consent-gated audio playback grant."""
+        return self._adapter.get_playback_grant(session_id)
+

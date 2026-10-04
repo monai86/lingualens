@@ -468,3 +468,71 @@ def test_canonical_consent_versioning_per_purpose_and_child_isolation(canonical_
     assert c2_1["child_id"] == child_2
 
 
+def test_client_audio_waveform_peaks_and_playback_grant_in_memory():
+    """Verify in-memory client adapter handles peaks and playback grant with validation."""
+    client = LinguaLensClient(mock_mode=True, seed_demo=True)
+
+    # 1. Waveform peaks returns 50 bytes of binary samples
+    peaks = client.get_waveform_peaks("sess-demo-101")
+    assert isinstance(peaks, bytes)
+    assert len(peaks) == 50
+
+    # 2. Playback grant returns time-limited payload
+    grant = client.get_playback_grant("sess-demo-101")
+    assert isinstance(grant, dict)
+    assert grant["playback_url"].startswith("/api/v1/audio/")
+    assert "expires_at" in grant
+    assert grant["audio_sha256"].startswith("mock_sha256_")
+
+    # 3. Nonexistent session raises error
+    with pytest.raises(LinguaLensApiError) as exc_info:
+        client.get_playback_grant("nonexistent_session")
+    assert "not found" in str(exc_info.value).lower()
+
+
+def test_client_audio_waveform_peaks_and_playback_grant_canonical(canonical_client):
+    """Verify canonical HTTP client adapter fetches binary waveform peaks and playback grant."""
+    client, _ = canonical_client
+    from app.api.v1.dependencies import get_repository
+    from app.repositories.mock_repository import MockRepository
+    from app.schemas.clinical import AudioFileMetadata
+
+    repo = MockRepository()
+    audio = AudioFileMetadata(
+        audio_file_id="audio_demo_001",
+        organization_id="pilot_org_001",
+        session_id="session_demo_001",
+        case_id="case_demo_001",
+        original_filename="sample.wav",
+        content_type="audio/wav",
+        size_bytes=10240,
+        storage_mode="local_private",
+        object_key="pilot_org_001/case_demo_001/session_demo_001/audio_demo_001.wav",
+        upload_status="uploaded",
+        duration_seconds=120.0,
+        sample_rate_hz=16000,
+        channels=2,
+        checksum_sha256="4a7d1ed414474e4033ac29ccb8653d9b",
+    )
+    repo.audio_files[audio.audio_file_id] = audio
+    app.dependency_overrides[get_repository] = lambda: repo
+    try:
+        # Set authenticated session
+        client.set_session(access_token="therapist-token", organization_id="pilot_org_001")
+
+        # 1. Binary waveform peaks
+        peaks = client.get_waveform_peaks("session_demo_001")
+        assert isinstance(peaks, bytes)
+        assert len(peaks) > 0
+
+        # 2. Playback grant
+        grant = client.get_playback_grant("session_demo_001")
+        assert isinstance(grant, dict)
+        assert grant["playback_url"] == "/api/v1/audio/audio_demo_001/file"
+        assert grant["audio_sha256"] == "4a7d1ed414474e4033ac29ccb8653d9b"
+        assert "expires_at" in grant
+    finally:
+        app.dependency_overrides.pop(get_repository, None)
+
+
+
