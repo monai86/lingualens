@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, LockKeyhole, ShieldCheck } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Building2, Loader2, LockKeyhole, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { SupabaseMfaPanel } from "@/components/supabase-mfa-panel";
@@ -18,7 +19,11 @@ export function SupabaseWorkspaceAccessGate({
 }: {
   children: React.ReactNode;
 }) {
-  const [session, setSession] = useState<SupabaseAccessSession | null>(null);
+  const router = useRouter();
+  const [session, setSession] = useState<SupabaseAccessSession | null>(() => {
+    if (typeof window === "undefined") return null;
+    return loadOrRestoreSupabaseAccessSession();
+  });
   const [pendingOrganizationId, setPendingOrganizationId] = useState("");
   const availableOrganizationIds = session?.availableOrganizations
     ?.map((option) => option.organizationId)
@@ -30,6 +35,12 @@ export function SupabaseWorkspaceAccessGate({
     window.addEventListener(SUPABASE_ACCESS_SESSION_EVENT, syncSession);
     return () => window.removeEventListener(SUPABASE_ACCESS_SESSION_EVENT, syncSession);
   }, []);
+
+  useEffect(() => {
+    if (!session || session.stage === "signed_out") {
+      router.replace("/login");
+    }
+  }, [session, router]);
 
   useEffect(() => {
     if (session?.stage !== "org_selection_required") {
@@ -185,11 +196,11 @@ export function SupabaseWorkspaceAccessGate({
 
         <div className="mt-5 rounded-[var(--radius-panel)] border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] p-4 text-sm text-[color:var(--color-pasa-teal)]">
           <div className="flex items-start gap-3">
-            <ShieldCheck size={18} aria-hidden="true" className="mt-0.5 shrink-0" />
+            <Loader2 size={18} aria-hidden="true" className="mt-0.5 shrink-0 animate-spin" />
             <div>
-              <p className="font-semibold text-[color:var(--color-text-strong)]">Production boundary</p>
+              <p className="font-semibold text-[color:var(--color-text-strong)]">Redirecting to login portal...</p>
               <p className="mt-1 text-[color:var(--color-text-muted)]">
-                Invitation-only onboarding, MFA, and explicit organization context are enforced before app access.
+                Authentication is required to access workspace routes. Automatically taking you to the sign-in page.
               </p>
             </div>
           </div>

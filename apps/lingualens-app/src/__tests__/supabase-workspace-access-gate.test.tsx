@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { routerReplace } from "@/__tests__/setup";
 import { SupabaseWorkspaceAccessGate } from "@/components/supabase-workspace-access-gate";
 
 const listFactors = vi.fn();
@@ -260,6 +261,20 @@ describe("SupabaseWorkspaceAccessGate", () => {
     expect(await screen.findByText("Unlocked workspace")).toBeInTheDocument();
     expect(window.sessionStorage.getItem("lingualens.supabase-access-session.v1")).toContain("\"stage\":\"authenticated\"");
     expect(window.sessionStorage.getItem("lingualens.supabase-session-token.v1")).toBeTruthy();
+  });
+
+  it("automatically redirects unauthenticated visitors to /login", async () => {
+    render(
+      <SupabaseWorkspaceAccessGate>
+        <div>Unlocked workspace</div>
+      </SupabaseWorkspaceAccessGate>,
+    );
+
+    await waitFor(() => {
+      expect(routerReplace).toHaveBeenCalledWith("/login");
+    });
+    expect(await screen.findByRole("heading", { name: "Workspace access is blocked" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to login" })).toHaveAttribute("href", "/login");
   });
 });
 

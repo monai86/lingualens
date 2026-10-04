@@ -5,6 +5,7 @@ import { beforeEach, vi } from "vitest";
 import { resetApiRuntimeSettingsCacheForTests } from "@/lib/api";
 
 export const routerPush = vi.fn();
+export const routerReplace = vi.fn();
 export const routerRefresh = vi.fn();
 export const redirectMock = vi.fn((href: string): never => {
   const error = new Error("NEXT_REDIRECT");
@@ -39,13 +40,16 @@ if (typeof HTMLCanvasElement !== "undefined") {
 
 beforeEach(() => {
   resetApiRuntimeSettingsCacheForTests();
+  routerPush.mockReset();
+  routerReplace.mockReset();
+  routerRefresh.mockReset();
 });
 
 vi.mock("next/navigation", () => ({
   redirect: redirectMock,
   useRouter: () => ({
     push: routerPush,
-    replace: vi.fn(),
+    replace: routerReplace,
     prefetch: vi.fn(),
     refresh: routerRefresh,
   })
