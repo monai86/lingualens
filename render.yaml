@@ -1,0 +1,50 @@
+# Render Blueprint Specification for LinguaLens API
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: lingualens-api
+    runtime: docker
+    plan: starter
+    region: singapore
+    dockerfilePath: Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: PYTHONPATH
+        value: ".:apps/api:src"
+      - key: LINGUALENS_APP_ENV
+        value: staging
+      - key: LINGUALENS_MOCK_MODE
+        value: "false"
+      - key: LINGUALENS_AUTH_MODE
+        value: supabase
+      - key: LINGUALENS_REPOSITORY_MODE
+        value: sql
+      - key: LINGUALENS_STORAGE_MODE
+        value: supabase_private
+      - key: LINGUALENS_SUPABASE_JWT_VERIFICATION_MODE
+        value: jwks_url
+      - key: LINGUALENS_SUPABASE_JWT_JWKS_URL
+        value: https://cbhwxklvcpgizeqriqxi.supabase.co/auth/v1/.well-known/jwks.json
+      - key: LINGUALENS_SUPABASE_JWT_JWKS_CACHE_TTL_SECONDS
+        value: "300"
+      - key: LINGUALENS_SUPABASE_JWT_ISSUER
+        value: https://cbhwxklvcpgizeqriqxi.supabase.co/auth/v1
+      - key: LINGUALENS_SUPABASE_JWT_AUDIENCE
+        value: authenticated
+      - key: LINGUALENS_SUPABASE_REQUIRE_MFA
+        value: "true"
+      - key: LINGUALENS_SUPABASE_REQUIRE_INVITATION
+        value: "true"
+      - key: LINGUALENS_CORS_ALLOWED_ORIGINS
+        sync: false
+        value: "http://localhost:3000"
+      - key: LINGUALENS_DATABASE_URL
+        sync: false
+        value: ""
+      - key: LINGUALENS_SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+        value: ""

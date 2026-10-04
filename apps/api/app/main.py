@@ -173,5 +173,6 @@ async def handle_unexpected_error(request: Request, exception: Exception):
 
 
 @app.get("/health")
+@app.get("/api/v1/health")
 def health():
     return {"status": "ok", "mock_mode": settings_obj.mock_mode}
