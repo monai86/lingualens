@@ -34,12 +34,12 @@ export function MockLoginFormClient({
   }, [role]);
 
   return (
-    <form className="workspace-panel self-start p-6 sm:p-7 shadow-xs" aria-label="Mock login form">
+    <form className="rounded-3xl border border-slate-200/90 bg-white p-6 sm:p-8 lg:p-9 shadow-xl shadow-slate-900/5 transition-all" aria-label="Mock login form">
       <div className="mb-5 flex items-start gap-3">
-        <ShieldCheck size={22} aria-hidden="true" className="mt-0.5 shrink-0 text-[color:var(--color-pasa-teal)]" />
+        <ShieldCheck size={22} aria-hidden="true" className="mt-0.5 shrink-0 text-emerald-700" />
         <div>
-          <h2 className="text-lg font-bold text-[color:var(--color-text-strong)]">Mock login</h2>
-          <p className="mt-1 text-sm leading-6 text-[color:var(--color-text-muted)]">Therapist, supervisor, and org-admin demo roles are available for local exploration.</p>
+          <h2 className="text-lg font-bold text-slate-900">Mock login</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500">Therapist, supervisor, and org-admin demo roles are available for local exploration.</p>
         </div>
       </div>
       <label className="mb-4 block text-sm font-medium text-[color:var(--color-text-strong)]">
@@ -125,7 +125,7 @@ export function MockLoginFormClient({
       <Link
         href={destination}
         onClick={() => saveMockAccessSession({ role, organizationId, aal })}
-        className="inline-flex min-h-11 w-full items-center justify-center rounded-[var(--radius-card)] bg-[color:var(--color-pasa-teal)] px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-[color:var(--color-pasa-teal-hover)] motion-reduce:transition-none"
+        className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#F05A77] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#F05A77]/25 transition hover:bg-[#E04363] active:scale-[0.99] motion-reduce:transition-none"
       >
         Enter workspace
       </Link>
