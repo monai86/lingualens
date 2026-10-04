@@ -12,6 +12,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.v1.routes import (
     ai_review,
     audit,
+    audio_review,
     cases,
     dashboard,
     evaluation,
@@ -97,6 +98,7 @@ app.include_router(ai_review.router, prefix=settings_obj.api_prefix)
 app.include_router(ml_review.router, prefix=settings_obj.api_prefix)
 app.include_router(reports.router, prefix=settings_obj.api_prefix)
 app.include_router(jobs.router, prefix=settings_obj.api_prefix)
+app.include_router(audio_review.router, prefix=settings_obj.api_prefix)
 app.include_router(privacy.router, prefix=settings_obj.api_prefix)
 app.include_router(settings.router, prefix=settings_obj.api_prefix)
 app.include_router(evaluation.router, prefix=settings_obj.api_prefix)
