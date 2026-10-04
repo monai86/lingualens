@@ -28,11 +28,11 @@ services:
       - key: LINGUALENS_SUPABASE_JWT_VERIFICATION_MODE
         value: jwks_url
       - key: LINGUALENS_SUPABASE_JWT_JWKS_URL
-        value: https://cbhwxklvcpgizeqriqxi.supabase.co/auth/v1/.well-known/jwks.json
+        value: https://lliodfzujsmapwmpqmjb.supabase.co/auth/v1/.well-known/jwks.json
       - key: LINGUALENS_SUPABASE_JWT_JWKS_CACHE_TTL_SECONDS
         value: "300"
       - key: LINGUALENS_SUPABASE_JWT_ISSUER
-        value: https://cbhwxklvcpgizeqriqxi.supabase.co/auth/v1
+        value: https://lliodfzujsmapwmpqmjb.supabase.co/auth/v1
       - key: LINGUALENS_SUPABASE_JWT_AUDIENCE
         value: authenticated
       - key: LINGUALENS_SUPABASE_REQUIRE_MFA
