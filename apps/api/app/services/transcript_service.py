@@ -437,3 +437,52 @@ def unsupported_language_codes(language_headers: list[str]) -> list[str]:
                 continue
             codes.append(code)
     return sorted({code for code in codes if code not in SUPPORTED_LANGUAGE_CODES})
+
+
+def update_reviewed_transcript(repo: MockRepository, session_id: str, payload: any) -> Transcript:
+    session = repo.sessions[session_id]
+    if not session.transcript_id or session.transcript_id not in repo.transcripts:
+        from app.core.errors import not_found
+        raise not_found("Transcript not found for this session.")
+    
+    transcript = repo.transcripts[session.transcript_id]
+    if transcript.version != payload.base_version:
+        from app.core.errors import conflict
+        raise conflict(f"Transcript version conflict: base_version={payload.base_version} does not match current version={transcript.version}")
+
+    utterances = [
+        Utterance(
+            utterance_id=line.line_id or new_id("u"),
+            speaker=line.speaker,
+            text=line.text,
+            start_ms=line.start_ms,
+            end_ms=line.end_ms,
+        )
+        for line in payload.lines
+    ]
+
+    transcript.utterances = utterances
+    transcript.raw_text = build_cha_text(utterances, **chat_build_options(transcript.raw_text))
+    transcript.version += 1
+    transcript.qa_status = QaStatus.not_run
+    transcript.qa_issues = []
+    transcript.therapist_attested = False
+    if payload.review_status:
+        try:
+            transcript.review_status = ReviewStatus(payload.review_status.lower())
+        except ValueError:
+            transcript.review_status = ReviewStatus.needs_review
+
+    session.findings_stale = True
+    session.report_stale = True
+
+    return repo.update_transcript(
+        transcript,
+        session_status=ReviewStatus.needs_review,
+        expected_version=payload.base_version,
+        actor_id="therapist",
+        audit_action="transcript.review_update",
+        audit_message="Transcript reviewed and updated with optimistic locking.",
+        invalidate_downstream=True,
+    )
+

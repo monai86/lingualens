@@ -13,6 +13,7 @@ from app.schemas.clinical import (
     TranscriptManualCreate,
     TranscriptMergeRequest,
     TranscriptPatch,
+    TranscriptReviewUpdate,
     TranscriptSplitRequest,
     TranscriptUploadCha,
 )
@@ -65,6 +66,22 @@ def get_session_transcript(
     if not transcript_id:
         raise not_found("Transcript not found.")
     return repo.clone(repo.transcripts[transcript_id])
+
+
+@router.put("/sessions/{session_id}/transcript", response_model=Transcript)
+def update_session_transcript(
+    session_id: str,
+    payload: TranscriptReviewUpdate,
+    repo: MockRepository = Depends(get_repository),
+    user: CurrentUser = Depends(get_current_user),
+):
+    require_session(repo, session_id, user)
+    assert_clinical_mutation_allowed(user)
+    try:
+        ensure_session_consent_active(repo, session_id)
+        return transcript_service.update_reviewed_transcript(repo, session_id, payload)
+    except ValueError as exc:
+        raise bad_request(str(exc)) from exc
 
 
 @router.get("/transcripts/{transcript_id}", response_model=Transcript)

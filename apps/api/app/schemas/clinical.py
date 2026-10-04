@@ -239,6 +239,8 @@ class TherapySession(BaseModel):
     ml_result_id: str | None = None
     ai_review_id: str | None = None
     report_id: str | None = None
+    findings_stale: bool = False
+    report_stale: bool = False
     cues_acknowledged_at: str | None = None
     cues_acknowledged_by: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
@@ -342,6 +344,21 @@ class TranscriptPatch(BaseModel):
     utterances: list[Utterance] | None = None
     raw_text: str | None = None
     reviewer_note: str = ""
+
+
+class TranscriptReviewLine(BaseModel):
+    line_id: str | None = None
+    speaker: str
+    text: str
+    start_ms: int | None = None
+    end_ms: int | None = None
+    unclear: bool = False
+
+
+class TranscriptReviewUpdate(BaseModel):
+    base_version: int
+    lines: list[TranscriptReviewLine]
+    review_status: str | None = "IN_REVIEW"
 
 
 class TranscriptSplitRequest(BaseModel):
