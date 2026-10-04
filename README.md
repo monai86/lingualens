@@ -23,7 +23,7 @@ Research prototype for extracting speech-language features from Thai language sa
 This project is a **research prototype and educational demo**. It supports screening support, concern level estimation, and progress tracking only. It does not diagnose ASD and does not replace clinician judgment. The model was trained on English-speaking public corpora and is **not validated for Thai children**.
 
 ### Prototype Status & Limitations
-- **Persistent Therapist Workflow**: lingualens persists case, session,
+- **Persistent Therapist Workflow**: PasaScope persists case, session,
   transcript, QA, attestation, feature, and report records through `apps/api`.
   Local API development defaults to durable JSON storage; browser session
   storage is only a lightweight UI/navigation cache and never stores audio
@@ -40,7 +40,7 @@ This project is a **research prototype and educational demo**. It supports scree
   `local_private` upload intents only after consent is granted. Production
   private audio/video storage still requires managed signed URLs, encryption,
   retention controls, and audit logs.
-- **Backend Boundaries**: `apps/api/` is the canonical lingualens API.
+- **Backend Boundaries**: `apps/api/` is the canonical PasaScope API.
   The experimental audio-to-CHAT implementation remains in
   `src/audio_pipeline/`. `src/therapist_backend/` is retained only as a legacy
   research compatibility API.
@@ -51,7 +51,7 @@ This project is a **research prototype and educational demo**. It supports scree
   Compose is optional packaging verification.
 - **Human Review Gate**: Generated transcripts require clinician review before preliminary feature outputs or AI-assisted explanation are interpreted.
 - **Decision-Support AI Output**: All AI output is strictly designed for screening support (e.g., concern level, review priority, clinician review support) and must never be interpreted as an automated clinical conclusion.
-- **Feature-Based ML Review**: lingualens can persist transparent review
+- **Feature-Based ML Review**: PasaScope can persist transparent review
   cues only after transcript attestation and feature extraction. The default
   provider is rule-based, outputs are not diagnostic, browser ML fallback is
   disabled, and cues are not inserted into reports automatically. See
@@ -155,7 +155,7 @@ against real MFA claims are still required.
 The production boundary is now frozen around Supabase Auth/Postgres/private
 Storage plus FastAPI as the authoritative clinical policy layer. Browser clients
 may use Supabase Auth and short-lived signed storage URLs only; clinical
-workflow reads/writes go through `apps/api`. lingualens is responsive
+workflow reads/writes go through `apps/api`. PasaScope is responsive
 web/PWA only, and the removed Vite/Capacitor app must not be recreated.
 The maintained `/login` surface is now runtime-aware: mock auth mode still
 offers explicit local role/org/AAL simulation, while `supabase` auth mode now
