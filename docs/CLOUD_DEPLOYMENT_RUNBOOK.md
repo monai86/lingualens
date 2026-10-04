@@ -41,13 +41,13 @@
 
 ### 1.1 ข้อมูลโปรเจกต์ Supabase ที่เตรียมไว้แล้ว
 - **Organization:** `LinguaLens` (`whgbnlqvrgjodiquclnr`)
-- **Staging Project Ref:** `cbhwxklvcpgizeqriqxi`
+- **Staging Project Ref:** `lliodfzujsmapwmpqmjb`
 - **Region:** `ap-southeast-1` (Singapore)
-- **Supabase URL:** `https://cbhwxklvcpgizeqriqxi.supabase.co`
+- **Supabase URL:** `https://lliodfzujsmapwmpqmjb.supabase.co`
 - **Publishable Key:** `sb_publishable_zC7wscUPHNtoqQb4amCEEQ_K2dCC5si`
 
 ### 1.2 รัน SQL Schema & RLS Policies
-1. เข้าไปที่ [Supabase Dashboard - SQL Editor](https://supabase.com/dashboard/project/cbhwxklvcpgizeqriqxi/sql)
+1. เข้าไปที่ [Supabase Dashboard - SQL Editor](https://supabase.com/dashboard/project/lliodfzujsmapwmpqmjb/sql)
 2. คัดลอกเนื้อหาทั้งหมดจากไฟล์ [`scripts/supabase/clean_slate_supabase.sql`](file:///Users/porschecaa/lingualens/scripts/supabase/clean_slate_supabase.sql)
 3. กด **RUN** เพื่อสร้าง:
    - โครงสร้างตาราง 28 ตาราง (Cases, Assessments, Transcripts, Reports, Care-teams ฯลฯ)
@@ -61,7 +61,7 @@
 2. เลื่อนลงไปที่ **Connection string** > เลือกแท็บ **URI**
 3. คัดลอก URI มาใช้งาน (แทนที่ `[YOUR-PASSWORD]` ด้วยรหัสผ่านของฐานข้อมูล):
    ```text
-   postgresql://postgres:[YOUR-PASSWORD]@db.cbhwxklvcpgizeqriqxi.supabase.co:5432/postgres
+   postgresql://postgres:[YOUR-PASSWORD]@db.lliodfzujsmapwmpqmjb.supabase.co:5432/postgres
    ```
 4. เข้าไปที่ **Project Settings** > **API** คัดลอก `service_role secret` เก็บไว้ใช้ใน Render
 
@@ -98,7 +98,7 @@
 5. ในส่วน **Environment Variables** ให้กรอกค่าดังนี้:
    ```env
    NEXT_PUBLIC_API_BASE_URL=https://lingualens-api.onrender.com/api/v1
-   NEXT_PUBLIC_SUPABASE_URL=https://cbhwxklvcpgizeqriqxi.supabase.co
+   NEXT_PUBLIC_SUPABASE_URL=https://lliodfzujsmapwmpqmjb.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_zC7wscUPHNtoqQb4amCEEQ_K2dCC5si
    NEXT_PUBLIC_DEMO_MODE=false
    ```
