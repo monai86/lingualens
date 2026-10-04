@@ -10,7 +10,7 @@ export default function LoginPage() {
             Clinical transcript workbench
           </p>
           <h1 className="max-w-2xl text-4xl font-semibold leading-tight text-[color:var(--color-text-strong)] sm:text-5xl">
-            LinguaLens
+            PasaScope <span className="text-2xl font-normal text-[color:var(--color-text-muted)]">(ภาษา-สโคป)</span>
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-[color:var(--color-text-muted)]">
             Review child language samples, verify transcript evidence, and prepare therapist-signed progress reports from one controlled workspace.

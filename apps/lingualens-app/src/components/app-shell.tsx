@@ -119,7 +119,7 @@ export function AppShell({
             >
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
-            <span className="text-sm font-semibold tracking-tight text-[color:var(--color-text-strong)]">LinguaLens</span>
+            <span className="text-sm font-semibold tracking-tight text-[color:var(--color-text-strong)]">PasaScope</span>
             <div className="w-5" />
           </header>
 

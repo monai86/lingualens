@@ -20,13 +20,13 @@ export function MobileHeader({ title = "lingualens" }: { title?: string }) {
   return (
     <header className="grid gap-2 pb-3 md:hidden">
       <div className="flex items-center justify-between gap-3">
-        <Link href="/dashboard" aria-label="LinguaLens home" className="flex items-center gap-3">
+        <Link href="/dashboard" aria-label="PasaScope home" className="flex items-center gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-white">
             <Image src="/logo-mark.png" alt="" width={40} height={40} className="h-10 w-10 object-cover" />
           </span>
           <div>
-            <p className="text-base font-semibold text-[color:var(--color-text-strong)]">{title === "lingualens" ? "LinguaLens" : title}</p>
-            <p className="text-xs text-[color:var(--color-text-muted)]">Transcript workbench</p>
+            <p className="text-base font-semibold text-[color:var(--color-text-strong)]">{title === "lingualens" || title === "pasascope" ? "PasaScope" : title}</p>
+            <p className="text-xs text-[color:var(--color-text-muted)]">ภาษา-สโคป • Decision Support</p>
           </div>
         </Link>
 

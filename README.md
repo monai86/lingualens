@@ -1,6 +1,6 @@
-# AI-Assisted Speech-Language ASD Screening Support (Term Paper)
+# PasaScope (ภาษา-สโคป) — AI-Assisted Thai Pediatric Speech-Language Assessment
 
-Research prototype for extracting speech-language features from CHAT (`.cha`) transcripts and audio recordings to support ASD clinical assessment. Developed as a term paper project — **not a diagnostic tool**.
+Research prototype for extracting speech-language features from Thai language samples, CHAT (`.cha`) transcripts, and audio recordings to support pediatric therapist assessment workflows. Developed as an educational/research decision-support system — **not a diagnostic tool**.
 
 ## Project Version Mapping
 - **Project version:** `v1.7.0`

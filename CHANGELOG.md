@@ -31,6 +31,9 @@
   assistant page event handler.
 
 ### Changed
+- Rebranded application surfaces and documentation from LinguaLens to **PasaScope (ภาษา-สโคป)**.
+- Added backward-compatible `PASASCOPE_` environment variable alias resolution in backend settings.
+- Updated Next.js application package name to `pasascope` and layout metadata branding.
 - Project version bumped to `v1.7.0`.
 - `PROJECT_SOURCE_OF_TRUTH.md` updated with current Next.js version and project
   version.

@@ -57,7 +57,7 @@ export function StartSessionSelector({ cases, preselectedCaseId }: { cases: Back
     <div className="space-y-6">
       <PageHeader
         title="Choose a case to start a session"
-        description="Select one consented case. LinguaLens creates the session on the backend before opening Intake."
+        description="Select one consented case. PasaScope creates the session on the backend before opening Intake."
         meta={["No session is created until you confirm"]}
         actions={<ActionButton href="/cases" tone="ghost"><ArrowLeft size={16} aria-hidden="true" />Back to Cases</ActionButton>}
       />

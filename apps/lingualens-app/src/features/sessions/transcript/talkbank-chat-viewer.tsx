@@ -40,7 +40,7 @@ export function TalkbankChatViewer({
       "@Begin",
       "@Languages:\ttha, eng",
       `@Participants:\tCHI ${childId} Child, INV Clinician`,
-      `@ID:\ttha|LinguaLens|CHI|4;00.|male|ASD||Child||`,
+      `@ID:\ttha|PasaScope|CHI|4;00.|male|ASD||Child||`,
       `@Media:\t${sessionId}, audio`,
       "",
     ];

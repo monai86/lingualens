@@ -1,6 +1,6 @@
-# lingualens API
+# PasaScope (ภาษา-สโคป) API
 
-FastAPI boundary for the case-centered lingualens workflow.
+FastAPI boundary for the case-centered PasaScope clinical workflow.
 
 Local development defaults to a durable JSON repository at
 `.local/lingualens-app-repository.json`. Set

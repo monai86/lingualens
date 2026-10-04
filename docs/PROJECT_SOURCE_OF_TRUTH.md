@@ -5,6 +5,7 @@
 
 ## สถานะปัจจุบัน
 
+- ชื่อโครงการ: **PasaScope (ภาษา-สโคป)** (เดิม LinguaLens)
 - รุ่นโครงการ: `v1.7.0`
 - active user-facing surfaces และ API ใช้ version `v1.7.0`
 - branch หลัก: `main`

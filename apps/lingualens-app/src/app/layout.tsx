@@ -8,8 +8,8 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:30
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "lingualens",
-  description: "Case-centered clinical decision-support prototype for therapist review workflows."
+  title: "PasaScope | Thai Pediatric Speech-Language Assessment",
+  description: "PasaScope (ภาษา-สโคป) — Clinical decision-support platform for Thai pediatric speech-language therapist review workflows."
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

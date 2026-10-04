@@ -112,7 +112,7 @@ export function ClinicalPdfReport({ data }: { data: ClinicalReportData }) {
                 <div>
                   <div className="flex items-center gap-2 text-[#10a37f] print:text-emerald-700 mb-1">
                     <Building2 className="h-5 w-5" />
-                    <span className="text-xs font-bold uppercase tracking-widest">LinguaLens Clinical Suite</span>
+                    <span className="text-xs font-bold uppercase tracking-widest">PasaScope Clinical Suite (ภาษา-สโคป)</span>
                   </div>
                   <h2 className="text-2xl font-bold uppercase tracking-tight text-slate-900 print:text-xl">
                     Speech-Language Assessment Report

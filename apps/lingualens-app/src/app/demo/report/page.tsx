@@ -150,7 +150,7 @@ export default function DemoReport() {
 
       {/* Footer */}
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500 text-center leading-normal">
-        🛡️ <strong>Clinical Safety Gate:</strong> หน้านี้เป็นข้อมูลตัวอย่างจาก LinguaLens Therapist Workspace สำหรับสนับสนุนการทบทวนโดยนักบำบัดเท่านั้น ไม่ใช่เครื่องมือวินิจฉัยและห้ามใช้เพื่อวินิจฉัย การลงนามไม่เปลี่ยนข้อจำกัดนี้
+        🛡️ <strong>Clinical Safety Gate:</strong> หน้านี้เป็นข้อมูลตัวอย่างจาก PasaScope Therapist Workspace สำหรับสนับสนุนการทบทวนโดยนักบำบัดเท่านั้น ไม่ใช่เครื่องมือวินิจฉัยและห้ามใช้เพื่อวินิจฉัย การลงนามไม่เปลี่ยนข้อจำกัดนี้
       </div>
 
       {/* Action Buttons Bottom */}

@@ -105,7 +105,7 @@ export function SupabaseMfaPanel({
     try {
       const { data, error } = await browserClient.auth.mfa.enroll({
         factorType: "totp",
-        friendlyName: "LinguaLens Authenticator",
+        friendlyName: "PasaScope Authenticator",
       });
 
       if (error) {
@@ -218,7 +218,7 @@ export function SupabaseMfaPanel({
               <p className="mt-1">
                 Add the new TOTP factor
                 {" "}
-                <strong>{enrollment?.friendlyName ?? "LinguaLens Authenticator"}</strong>
+                <strong>{enrollment?.friendlyName ?? "PasaScope Authenticator"}</strong>
                 {" "}
                 and verify the first code.
               </p>

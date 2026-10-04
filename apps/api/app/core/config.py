@@ -43,12 +43,15 @@ _SUPABASE_PROJECT_HOST_RE = re.compile(
 )
 
 
-def getenv_compat(new_name: str, legacy_name: str, default: str = "") -> str:
+def getenv_compat(new_name: str, legacy_name: str = "", default: str = "") -> str:
+    pasascope_name = new_name.replace("LINGUALENS_", "PASASCOPE_")
+    if pasascope_name in os.environ:
+        return os.environ[pasascope_name]
     if new_name in os.environ:
         return os.environ[new_name]
-    if legacy_name in os.environ:
+    if legacy_name and legacy_name in os.environ:
         warnings.warn(
-            f"{legacy_name} is deprecated; use {new_name} instead.",
+            f"{legacy_name} is deprecated; use {new_name} or {pasascope_name} instead.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -146,7 +149,7 @@ def _is_positive_int(value: int) -> bool:
 
 
 class Settings(BaseModel):
-    app_name: str = "lingualens API"
+    app_name: str = "PasaScope API"
     api_prefix: str = "/api/v1"
     assessment_api_prefix: str = "/api/v2"
     mock_mode: bool = True
@@ -358,7 +361,8 @@ class Settings(BaseModel):
             ),
             database_url=getenv_compat("LINGUALENS_DATABASE_URL", "THERAPIST_APP_V2_DATABASE_URL", DEFAULT_DATABASE_URL),
             assessment_database_url=(
-                os.getenv("LINGUALENS_ASSESSMENT_DATABASE_URL")
+                os.getenv("PASASCOPE_ASSESSMENT_DATABASE_URL")
+                or os.getenv("LINGUALENS_ASSESSMENT_DATABASE_URL")
                 or getenv_compat("LINGUALENS_DATABASE_URL", "THERAPIST_APP_V2_DATABASE_URL", "")
                 or DEFAULT_ASSESSMENT_DATABASE_URL
             ),
@@ -374,8 +378,9 @@ class Settings(BaseModel):
                 "false",
             ).lower()
             == "true",
-            run_assessment_migrations_on_startup=os.getenv(
-                "LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP", "false"
+            run_assessment_migrations_on_startup=(
+                os.getenv("PASASCOPE_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP")
+                or os.getenv("LINGUALENS_RUN_ASSESSMENT_MIGRATIONS_ON_STARTUP", "false")
             ).lower()
             == "true",
             job_queue_mode=getenv_compat("LINGUALENS_JOB_QUEUE_MODE", "THERAPIST_APP_V2_JOB_QUEUE_MODE", "memory"),

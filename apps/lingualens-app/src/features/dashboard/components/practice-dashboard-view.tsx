@@ -43,7 +43,7 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
           <div>
             <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 border border-teal-200 px-2.5 py-0.5 text-xs font-semibold text-teal-800">
               <Sparkles className="h-3 w-3 text-teal-600" />
-              LinguaLens Clinical Suite v1.7.0
+              PasaScope Clinical Suite (ภาษา-สโคป) v1.7.0
             </span>
             <h2 className="mt-2 text-base font-bold text-slate-900">
               Speech-Language Assessment & Decision Support

@@ -1,5 +1,5 @@
 /**
- * LinguaLens Domain Models and Type Definitions
+ * PasaScope Domain Models and Type Definitions
  *
  * Core domain contracts for cases, sessions, transcripts, acoustic/linguistic features,
  * normative developmental bands, decision support, safety audits, and reports.

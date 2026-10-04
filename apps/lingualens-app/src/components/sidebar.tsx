@@ -47,7 +47,8 @@ export function Sidebar({
     >
       {/* Brand */}
       <div className="px-5 pb-2 pt-5">
-        <p className="text-[15px] font-semibold tracking-tight text-[color:var(--color-text-strong)]">LinguaLens</p>
+        <p className="text-[16px] font-semibold tracking-tight text-[color:var(--color-text-strong)]">PasaScope</p>
+        <p className="text-[11px] text-[color:var(--color-text-muted)]">ภาษา-สโคป • Clinical Decision Support</p>
       </div>
 
       {/* New Session Action */}

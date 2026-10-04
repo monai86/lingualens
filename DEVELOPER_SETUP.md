@@ -1,6 +1,6 @@
-# ASD Therapist Clinical Pilot - Developer Setup Guide
+# PasaScope (ภาษา-สโคป) Clinical Pilot - Developer Setup Guide
 
-Welcome to the development guide for the ASD Speech-Language Screening Support tool. This document explains how to set up, build, test, and run the project's applications.
+Welcome to the development guide for the PasaScope (ภาษา-สโคป) ASD Speech-Language Screening Support tool. This document explains how to set up, build, test, and run the project's applications.
 
 > [!IMPORTANT]
 > **Safety Notice**: This project is a research prototype and educational demo. It is **not a diagnostic tool** and is **not clinically validated** for Thai children. Real child names, surnames, and identifiers are strictly prohibited in the system caseload.
