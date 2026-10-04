@@ -18,13 +18,19 @@ services:
       - key: LINGUALENS_APP_ENV
         value: staging
       - key: LINGUALENS_MOCK_MODE
-        value: "false"
+        value: "true"
       - key: LINGUALENS_AUTH_MODE
         value: supabase
       - key: LINGUALENS_REPOSITORY_MODE
         value: sql
       - key: LINGUALENS_STORAGE_MODE
         value: supabase_private
+      - key: LINGUALENS_SUPABASE_STORAGE_URL
+        value: https://lliodfzujsmapwmpqmjb.supabase.co
+      - key: LINGUALENS_SUPABASE_STORAGE_BUCKET
+        value: audio-recordings
+      - key: LINGUALENS_SUPABASE_STORAGE_TUS_ENDPOINT
+        value: https://lliodfzujsmapwmpqmjb.supabase.co/storage/v1/upload/resumable
       - key: LINGUALENS_SUPABASE_JWT_VERIFICATION_MODE
         value: jwks_url
       - key: LINGUALENS_SUPABASE_JWT_JWKS_URL

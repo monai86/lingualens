@@ -357,7 +357,11 @@ class Settings(BaseModel):
                 ".local/lingualens-app-repository.json",
             ),
             database_url=getenv_compat("LINGUALENS_DATABASE_URL", "THERAPIST_APP_V2_DATABASE_URL", DEFAULT_DATABASE_URL),
-            assessment_database_url=os.getenv("LINGUALENS_ASSESSMENT_DATABASE_URL", DEFAULT_ASSESSMENT_DATABASE_URL),
+            assessment_database_url=(
+                os.getenv("LINGUALENS_ASSESSMENT_DATABASE_URL")
+                or getenv_compat("LINGUALENS_DATABASE_URL", "THERAPIST_APP_V2_DATABASE_URL", "")
+                or DEFAULT_ASSESSMENT_DATABASE_URL
+            ),
             sql_create_schema=getenv_compat(
                 "LINGUALENS_SQL_CREATE_SCHEMA",
                 "THERAPIST_APP_V2_SQL_CREATE_SCHEMA",
