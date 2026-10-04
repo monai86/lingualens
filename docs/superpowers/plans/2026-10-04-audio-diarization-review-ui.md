@@ -17,7 +17,7 @@
 - Modify: `apps/api/app/main.py:40-70`
 - Test: `apps/api/tests/test_audio_review_api.py`
 
-- [ ] **Step 1: Write the failing API test**
+- [x] **Step 1: Write the failing API test**
 
 ```python
 # apps/api/tests/test_audio_review_api.py
@@ -43,12 +43,12 @@ def test_playback_grant_requires_consent_and_returns_signed_url():
     assert "audio_sha256" in data
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `PYTHONPATH=apps/api:src pytest apps/api/tests/test_audio_review_api.py -v`  
 Expected: FAIL with 404 Not Found
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `apps/api/app/api/v1/routes/audio_review.py` implementing:
 - `GET /api/v1/sessions/{session_id}/audio/waveform-peaks`: Returns binary packed `int8` peaks array for CH1 and CH2.
@@ -56,12 +56,12 @@ Create `apps/api/app/api/v1/routes/audio_review.py` implementing:
 
 Register router in `apps/api/app/main.py`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `PYTHONPATH=apps/api:src pytest apps/api/tests/test_audio_review_api.py -v`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/app/api/v1/routes/audio_review.py apps/api/app/main.py apps/api/tests/test_audio_review_api.py
@@ -79,7 +79,7 @@ Co-Authored-By: Gemini <gemini@google.com>"
 - Modify: `apps/api/app/services/transcript_service.py:50-90`
 - Test: `apps/api/tests/test_transcript_attestation.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # apps/api/tests/test_transcript_attestation.py
@@ -112,24 +112,24 @@ def test_transcript_update_sets_downstream_stale():
     assert response.json()["findings_stale"] is True
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `PYTHONPATH=apps/api:src pytest apps/api/tests/test_transcript_attestation.py -v`  
 Expected: FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Update `workflow.py` and `transcript_service.py` to:
 - Compare incoming `base_version` with current `transcript.version`; raise 409 if mismatched.
 - Set `session.findings_stale = True` and `session.report_stale = True` on mutation per Source of Truth Rule 9.
 - Implement `/api/v1/sessions/{session_id}/transcript/attest` which computes canonical CHAT text hash and sets status to `CLINICIAN_CONFIRMED`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `PYTHONPATH=apps/api:src pytest apps/api/tests/test_transcript_attestation.py -v`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/app/api/v1/routes/workflow.py apps/api/app/services/transcript_service.py apps/api/tests/test_transcript_attestation.py
@@ -149,7 +149,7 @@ Co-Authored-By: Gemini <gemini@google.com>"
 - Create: `apps/lingualens-app/src/components/audio-review/dual-view-waveform.tsx`
 - Test: `apps/lingualens-app/src/__tests__/waveform-components.test.tsx`
 
-- [ ] **Step 1: Write the failing frontend test**
+- [x] **Step 1: Write the failing frontend test**
 
 ```tsx
 // apps/lingualens-app/src/__tests__/waveform-components.test.tsx
@@ -183,12 +183,12 @@ describe("AudioScrubberBar", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd apps/lingualens-app && npm test -- src/__tests__/waveform-components.test.tsx`  
 Expected: FAIL with module not found
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Implement:
 - `audio-scrubber-bar.tsx`: Time formatter, speed toggle buttons (0.75x, 1.0x, 1.25x), Loop toggle, F0 toggle, Play/Pause.
@@ -196,12 +196,12 @@ Implement:
 - `waveform-detail-canvas.tsx`: Canvas rendering high-resolution multi-track segments (`CHI` in blue, `INV` in green, `MOT` in purple), playhead cursor, and drag handles for onset/offset.
 - `dual-view-waveform.tsx`: Combining minimap and detail canvas with synchronized viewport state.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd apps/lingualens-app && npm test -- src/__tests__/waveform-components.test.tsx`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/lingualens-app/src/components/audio-review/ apps/lingualens-app/src/__tests__/waveform-components.test.tsx
@@ -219,7 +219,7 @@ Co-Authored-By: Gemini <gemini@google.com>"
 - Create: `apps/lingualens-app/src/components/audio-review/utterance-review-list.tsx`
 - Test: `apps/lingualens-app/src/__tests__/utterance-review-list.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 // apps/lingualens-app/src/__tests__/utterance-review-list.test.tsx
@@ -251,23 +251,23 @@ describe("UtteranceReviewList", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd apps/lingualens-app && npm test -- src/__tests__/utterance-review-list.test.tsx`  
 Expected: FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Implement:
 - `use-keyboard-review.ts`: Global key listener for `Space`, `Cmd+1` (CHI), `Cmd+2` (INV), `Cmd+3` (MOT), `Cmd+L` (Loop), `Cmd+Enter` (Mark verified and advance).
 - `utterance-review-list.tsx`: List of utterance rows with speaker selector, time markers, inline text input, clinical badges (Mitigated Echolalia, Pronoun Reversal), and play buttons.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd apps/lingualens-app && npm test -- src/__tests__/utterance-review-list.test.tsx`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/lingualens-app/src/components/audio-review/use-keyboard-review.ts apps/lingualens-app/src/components/audio-review/utterance-review-list.tsx apps/lingualens-app/src/__tests__/utterance-review-list.test.tsx
@@ -285,7 +285,7 @@ Co-Authored-By: Gemini <gemini@google.com>"
 - Modify: `apps/lingualens-app/src/features/sessions/transcript/session-transcript-view.tsx:90-130`
 - Test: `apps/lingualens-app/src/__tests__/audio-review-integration.test.tsx`
 
-- [ ] **Step 1: Write integration test**
+- [x] **Step 1: Write integration test**
 
 ```tsx
 // apps/lingualens-app/src/__tests__/audio-review-integration.test.tsx
@@ -318,18 +318,18 @@ describe("SessionTranscriptView with AudioReviewWorkbench", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd apps/lingualens-app && npm test -- src/__tests__/audio-review-integration.test.tsx`  
 Expected: FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Implement:
 - `audio-review-workbench.tsx`: Orchestrating `AudioScrubberBar`, `DualViewWaveform`, `UtteranceReviewList`, and `ReviewAttestationBar`.
 - Embed `AudioReviewWorkbench` inside `session-transcript-view.tsx` with fallback to text editor if audio is not yet uploaded or offline.
 
-- [ ] **Step 4: Run full frontend and backend verification**
+- [x] **Step 4: Run full frontend and backend verification**
 
 Run:
 ```bash
@@ -338,7 +338,7 @@ PYTHONPATH=apps/api:src pytest apps/api/tests -m "not assessment_postgres"
 ```
 Expected: All tests PASS with 0 errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/lingualens-app/src/features/sessions/transcript/session-transcript-view.tsx apps/lingualens-app/src/components/audio-review/audio-review-workbench.tsx apps/lingualens-app/src/__tests__/audio-review-integration.test.tsx
