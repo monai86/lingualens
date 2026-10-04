@@ -677,6 +677,9 @@ class SqlAlchemyRepository(MockRepository):
             if case_row is not None:
                 case_row.latest_report_status = ReviewStatus.stale.value
             invalidated = True
+        if invalidated:
+            session_row.findings_stale = True
+            session_row.report_stale = True
         return invalidated
 
     @staticmethod
@@ -1531,6 +1534,8 @@ class SqlAlchemyRepository(MockRepository):
             ml_result_id=row.ml_result_id,
             ai_review_id=row.ai_review_id,
             report_id=row.report_id,
+            findings_stale=getattr(row, "findings_stale", False),
+            report_stale=getattr(row, "report_stale", False),
             cues_acknowledged_at=row.cues_acknowledged_at,
             cues_acknowledged_by=row.cues_acknowledged_by,
             created_at=row.created_at,
