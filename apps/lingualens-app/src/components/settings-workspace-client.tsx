@@ -60,7 +60,6 @@ function SettingsWorkspaceClientIdentity({
     setBrowserIdentityHydrated(true);
   }, []);
   const authenticatedSupabaseSession = supabaseSession?.stage === "authenticated"
-    && supabaseSession.aal === "aal2"
     && supabaseSession.organizationId
       ? supabaseSession
       : null;

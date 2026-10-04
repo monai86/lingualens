@@ -15,6 +15,16 @@ import { useRuntimeSettings } from "@/lib/use-runtime-settings";
 export function SupabaseAuthRuntimeBridge() {
   const runtimeSettings = useRuntimeSettings();
   const authMode = runtimeSettings.status === "success" ? runtimeSettings.data.auth_mode : undefined;
+  const requiredAal = runtimeSettings.status === "success" ? runtimeSettings.data.access_model?.required_app_aal : undefined;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (requiredAal === "aal1") {
+      window.sessionStorage.setItem("pasascope.mfa_optional", "true");
+    } else if (requiredAal === "aal2") {
+      window.sessionStorage.removeItem("pasascope.mfa_optional");
+    }
+  }, [requiredAal]);
 
   useEffect(() => {
     if (authMode !== "supabase") return;

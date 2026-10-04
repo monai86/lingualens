@@ -47,7 +47,7 @@ export function SupabaseWorkspaceAccessGate({
     availableOrganizationIds,
   ]);
 
-  if (session?.stage === "authenticated" && session.organizationId && session.aal === "aal2") {
+  if (session?.stage === "authenticated" && session.organizationId) {
     return <>{children}</>;
   }
 
@@ -125,7 +125,7 @@ export function SupabaseWorkspaceAccessGate({
     );
   }
 
-  if (session?.stage === "mfa_required" || session?.aal === "aal1") {
+  if (session?.stage === "mfa_required") {
     return (
       <main className="mx-auto flex min-h-dvh w-full max-w-3xl items-center px-4 py-10 sm:px-6">
         <section className="w-full rounded-[1.75rem] border border-amber-200 bg-white p-6">

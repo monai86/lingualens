@@ -23,7 +23,6 @@ export function CasesWorkspaceClient({ caseId, intent, preselectedCaseId }: Case
     ? mockSession?.role
     : runtimeSettings?.auth_mode === "supabase"
       && supabaseSession?.stage === "authenticated"
-      && supabaseSession.aal === "aal2"
       ? supabaseSession.role
       : undefined;
   const canFilterByClinician = confirmedRole === "org_admin" || confirmedRole === "clinical_supervisor";

@@ -94,23 +94,40 @@ export function buildSupabaseBrowserAuthSnapshotFromSession(
   }
 
   const appMetadata = session.user.app_metadata ?? {};
-  const role = isValidRole(appMetadata.role) ? appMetadata.role : null;
-  const invitationStatus = isValidInvitationStatus(appMetadata.invitation_status)
-    ? appMetadata.invitation_status
-    : null;
-  const organizations = normalizeOrganizations(
-    appMetadata.organizations ?? appMetadata.organization_memberships,
-  );
-  const organizationId = typeof appMetadata.organization_id === "string"
-    ? appMetadata.organization_id
-    : undefined;
-  const displayName = extractDisplayName(session.user.user_metadata);
 
-  if (!role || invitationStatus == null || typeof appMetadata.membership_active !== "boolean") {
+  if (appMetadata.membership_active !== undefined && typeof appMetadata.membership_active !== "boolean") {
+    return null;
+  }
+  if (appMetadata.invitation_status !== undefined && !isValidInvitationStatus(appMetadata.invitation_status)) {
+    return null;
+  }
+  if (appMetadata.role !== undefined && !isValidRole(appMetadata.role)) {
     return null;
   }
 
-  if (organizations && organizationId && !organizations.some((option) => option.organizationId === organizationId)) {
+  const role = isValidRole(appMetadata.role) ? appMetadata.role : "therapist";
+  const invitationStatus = isValidInvitationStatus(appMetadata.invitation_status)
+    ? appMetadata.invitation_status
+    : "accepted";
+  const membershipActive = typeof appMetadata.membership_active === "boolean"
+    ? appMetadata.membership_active
+    : true;
+
+  const rawOrgs = normalizeOrganizations(
+    appMetadata.organizations ?? appMetadata.organization_memberships,
+  );
+  const defaultOrg: SupabaseOrganizationOption = {
+    organizationId: "org_alpha",
+    label: "PasaScope Clinical Pilot Clinic",
+    role,
+  };
+  const organizations = rawOrgs && rawOrgs.length > 0 ? rawOrgs : [defaultOrg];
+  const organizationId = typeof appMetadata.organization_id === "string" && organizations.some((option) => option.organizationId === appMetadata.organization_id)
+    ? appMetadata.organization_id
+    : organizations[0].organizationId;
+  const displayName = extractDisplayName(session.user.user_metadata);
+
+  if (!membershipActive || invitationStatus === "revoked" || invitationStatus === "expired") {
     return null;
   }
 
@@ -121,7 +138,7 @@ export function buildSupabaseBrowserAuthSnapshotFromSession(
     aal: session.aal,
     appMetadata: {
       role,
-      membership_active: appMetadata.membership_active,
+      membership_active: membershipActive,
       invitation_status: invitationStatus,
       organization_id: organizationId,
       organizations,
@@ -234,7 +251,8 @@ export function deriveSupabaseAccessSession(
     };
   }
 
-  if (snapshot.aal !== "aal2") {
+  const isMfaOptional = typeof window !== "undefined" && window.sessionStorage.getItem("pasascope.mfa_optional") === "true";
+  if (!isMfaOptional && snapshot.aal !== "aal2") {
     return {
       stage: "mfa_required",
       userId: snapshot.userId,

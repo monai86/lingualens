@@ -37,12 +37,16 @@ export function AppShell({
   const supabaseSession = useSupabaseAccessSession();
 
   const gateRequired = confirmedRuntimeSettings?.auth_mode === "mock" && session?.aal === "aal1";
+  const mfaRequired = confirmedRuntimeSettings?.access_model?.required_app_aal === "aal2";
+  const hasValidAal = mfaRequired
+    ? supabaseSession?.aal === "aal2"
+    : Boolean(supabaseSession?.aal && (supabaseSession.aal === "aal1" || supabaseSession.aal === "aal2"));
   const supabaseGateRequired =
     confirmedRuntimeSettings?.auth_mode === "supabase" &&
     !(
       supabaseSession?.stage === "authenticated" &&
       supabaseSession.organizationId &&
-      supabaseSession.aal === "aal2"
+      hasValidAal
     );
 
   if (runtimeSettings.status !== "success") {
