@@ -29,6 +29,22 @@ export function ensureSupabaseAuthRuntimeSync(): void {
 
   runtimeSyncStarted = true;
 
+  if (typeof client.auth?.exchangeCodeForSession === "function") {
+    const searchParams = new URLSearchParams(window.location.search);
+    const code = searchParams.get("code");
+    if (code) {
+      void client.auth.exchangeCodeForSession(code).then(({ data, error }) => {
+        if (!error && data?.session) {
+          publishSupabaseSessionPayload(data.session);
+          if (typeof window !== "undefined" && window.history?.replaceState) {
+            const cleanUrl = window.location.pathname + window.location.hash;
+            window.history.replaceState({}, document.title, cleanUrl);
+          }
+        }
+      }).catch(() => undefined);
+    }
+  }
+
   void client.auth.getSession().then(({ data }) => {
     publishSupabaseSessionPayload(data.session ?? loadPersistedSupabaseSessionFromStorage());
   });

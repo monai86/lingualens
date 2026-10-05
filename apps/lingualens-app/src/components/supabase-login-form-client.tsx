@@ -14,12 +14,13 @@ import {
   ShieldCheck,
   UserPlus,
 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { useEffect, type FormEvent, useState } from "react";
 
 import { type RuntimeSettings } from "@/lib/api";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser-client";
 import { getSupabaseBrowserClientConfigStatus } from "@/lib/supabase-browser-client-config";
 import { publishSupabaseSessionPayload } from "@/lib/supabase-session-source";
+import { useSupabaseAccessSession } from "@/lib/use-supabase-access-session";
 
 function resolvePostLoginRoute(role: unknown): string {
   if (role === "org_admin" || role === "platform_operator") {
@@ -35,6 +36,14 @@ export function SupabaseLoginFormClient({
   runtimeSettings: RuntimeSettings;
 }) {
   const router = useRouter();
+  const supabaseSession = useSupabaseAccessSession();
+
+  useEffect(() => {
+    if (supabaseSession?.stage === "authenticated") {
+      router.replace(resolvePostLoginRoute(supabaseSession.role));
+    }
+  }, [supabaseSession?.stage, supabaseSession?.role, router]);
+
   const invitationOnly = runtimeSettings.access_model?.invitation_only !== false;
   const browserClientStatus = getSupabaseBrowserClientConfigStatus();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
