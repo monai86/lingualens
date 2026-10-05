@@ -61,6 +61,50 @@ export function SupabaseLoginFormClient({
   const [statusMessage, setStatusMessage] = useState("");
 
   const browserClient = browserClientStatus.configured ? getSupabaseBrowserClient() : null;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Check query params for error
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryError = searchParams.get("error_description") || searchParams.get("error");
+
+    // Check hash fragment for error or access_token
+    let hashError: string | null = null;
+    let hashAccessToken: string | null = null;
+    if (window.location.hash && window.location.hash.startsWith("#")) {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      hashError = hashParams.get("error_description") || hashParams.get("error");
+      hashAccessToken = hashParams.get("access_token");
+    }
+
+    const detectedError = queryError || hashError;
+    if (detectedError) {
+      setErrorMessage(decodeURIComponent(detectedError.replace(/\+/g, " ")));
+      return;
+    }
+
+    // If OAuth code or access token is in URL on login page, exchange and sync
+    const code = searchParams.get("code");
+    if (code || hashAccessToken) {
+      setIsGoogleSubmitting(true);
+      setStatusMessage("กำลังยืนยันข้อมูลการเข้าสู่ระบบ...");
+      if (browserClient && code && typeof browserClient.auth?.exchangeCodeForSession === "function") {
+        void browserClient.auth.exchangeCodeForSession(code).then(({ data, error }) => {
+          if (error) {
+            setErrorMessage(error.message);
+            setIsGoogleSubmitting(false);
+          } else if (data?.session) {
+            publishSupabaseSessionPayload(data.session);
+            router.replace("/dashboard");
+          }
+        }).catch((err) => {
+          setErrorMessage(err instanceof Error ? err.message : "Exchange failed");
+          setIsGoogleSubmitting(false);
+        });
+      }
+    }
+  }, [browserClient, router]);
   const configStatusLabel = browserClientStatus.configured
     ? "NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY detected."
     : browserClientStatus.missingUrl || browserClientStatus.missingAnonKey

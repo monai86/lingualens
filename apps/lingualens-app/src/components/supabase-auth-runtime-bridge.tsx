@@ -21,8 +21,10 @@ export function SupabaseAuthRuntimeBridge() {
     if (typeof window === "undefined") return;
     if (requiredAal === "aal1") {
       window.sessionStorage.setItem("pasascope.mfa_optional", "true");
+      syncSupabaseAccessSessionFromBrowserAuth();
     } else if (requiredAal === "aal2") {
       window.sessionStorage.removeItem("pasascope.mfa_optional");
+      syncSupabaseAccessSessionFromBrowserAuth();
     }
   }, [requiredAal]);
 
