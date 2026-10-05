@@ -20,6 +20,7 @@ const config: Config = {
           hover: "var(--color-pasa-teal-hover)",
           soft: "var(--color-pasa-teal-soft)",
           border: "var(--color-pasa-teal-border)",
+          dark: "var(--color-pasa-pine-dark)",
         },
         scope: {
           coral: "var(--color-scope-coral)",
@@ -27,10 +28,16 @@ const config: Config = {
           soft: "var(--color-scope-coral-soft)",
           border: "var(--color-scope-coral-border)",
         },
+        butter: {
+          DEFAULT: "var(--color-warm-butter)",
+          soft: "var(--color-warm-butter-soft)",
+          border: "var(--color-warm-butter-border)",
+        },
       },
       boxShadow: {
         soft: "var(--shadow-soft)",
-        lift: "var(--shadow-lift)"
+        lift: "var(--shadow-lift)",
+        floating: "var(--shadow-floating)",
       }
     }
   },

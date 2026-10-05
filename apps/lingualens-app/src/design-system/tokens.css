@@ -21,11 +21,16 @@
   --color-pasa-teal-hover: #1b3d34;
   --color-pasa-teal-soft: #edf5f2;
   --color-pasa-teal-border: #c9ddd5;
+  --color-pasa-pine-dark: #12362c;
 
   --color-scope-coral: #f45b69;
   --color-scope-coral-hover: #e04453;
   --color-scope-coral-soft: #fef1f3;
   --color-scope-coral-border: #fcccd2;
+
+  --color-warm-butter: #f9c74f;
+  --color-warm-butter-soft: #fef9e7;
+  --color-warm-butter-border: #fde68a;
 
   /* PasaScope interaction identity: clinical teal (#0f766e / #0d9488 retained for test contract) */
   --color-accent: #0f766e;
@@ -61,14 +66,14 @@
   --color-flat-border: #dbe4e0;
   --color-flat-cyan: #0f766e;
 
-  /* Geometry and elevation (5px radius per spec; near-shadowless, flat layering) */
+  /* Geometry and elevation (Friendly rounded modern clinical geometry) */
   --border-hairline: 1px;
-  --shadow-soft: 0 1px 2px rgba(26, 26, 32, 0.04);
-  --shadow-lift: 0 2px 6px rgba(26, 26, 32, 0.06);
-  --shadow-floating: 0 6px 16px rgba(26, 26, 32, 0.08);
-  --radius-card: 0.3125rem;
-  --radius-panel: 0.3125rem;
-  --radius-shell: 0.3125rem;
+  --shadow-soft: 0 1px 3px rgba(20, 37, 32, 0.05);
+  --shadow-lift: 0 4px 12px rgba(20, 37, 32, 0.07);
+  --shadow-floating: 0 8px 24px rgba(20, 37, 32, 0.10);
+  --radius-card: 0.75rem;
+  --radius-panel: 1rem;
+  --radius-shell: 1.25rem;
   --radius-pill: 9999px;
 
   /* Spacing and layout */

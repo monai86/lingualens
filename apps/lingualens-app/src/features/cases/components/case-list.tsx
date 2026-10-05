@@ -173,14 +173,14 @@ export function CaseList({
 
           {showCreateForm ? <CreateCaseForm onCancel={() => setShowCreateForm(false)} /> : null}
 
-          <section className="workspace-panel p-4">
+          <section className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] p-5 sm:p-6 shadow-2xs">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="flex-1">
-                <label htmlFor="case-search" className="mb-2 block text-sm font-medium text-[color:var(--color-text-strong)]">
+                <label htmlFor="case-search" className="mb-2 block text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-strong)]">
                   Search cases
                 </label>
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-text-subtle)]" size={18} aria-hidden="true" />
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[color:var(--color-text-subtle)]" size={17} aria-hidden="true" />
                   <input
                     id="case-search"
                     type="search"
@@ -188,14 +188,14 @@ export function CaseList({
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="Search by child label, case code, language, or clinician"
-                    className="min-h-11 w-full rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] pl-10 pr-4 text-sm text-[color:var(--color-text-strong)] outline-none transition focus-visible:ring-4 focus-visible:ring-[color:var(--color-focus-ring)]"
+                    className="min-h-11 w-full rounded-xl border border-[color:var(--color-border)] bg-white pl-10 pr-4 text-sm text-[color:var(--color-text-strong)] outline-none transition focus:border-[color:var(--color-pasa-teal)] focus:ring-2 focus:ring-[color:var(--color-pasa-teal)]/20"
                   />
                 </div>
               </div>
 
               {canFilterByClinician && clinicianOptions.length ? (
                 <div className="w-full lg:max-w-[16rem]">
-                  <label htmlFor="clinician-filter" className="mb-2 block text-sm font-medium text-[color:var(--color-text-strong)]">
+                  <label htmlFor="clinician-filter" className="mb-2 block text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-strong)]">
                     Clinician filter
                   </label>
                   <select
@@ -203,7 +203,7 @@ export function CaseList({
                     aria-label="Clinician filter"
                     value={clinicianFilter}
                     onChange={(event) => setClinicianFilter(event.target.value)}
-                    className="min-h-11 w-full rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-4 text-sm text-[color:var(--color-text-strong)] outline-none transition focus-visible:ring-4 focus-visible:ring-[color:var(--color-focus-ring)]"
+                    className="min-h-11 w-full rounded-xl border border-[color:var(--color-border)] bg-white px-3.5 text-sm text-[color:var(--color-text-strong)] outline-none transition focus:border-[color:var(--color-pasa-teal)] focus:ring-2 focus:ring-[color:var(--color-pasa-teal)]/20"
                   >
                     <option value="all">All clinicians</option>
                     {clinicianOptions.map((userId) => (
@@ -224,28 +224,28 @@ export function CaseList({
                     key={option}
                     type="button"
                     onClick={() => setStatusFilter(option)}
-                    className={`inline-flex min-h-11 items-center gap-2 rounded-[var(--radius-card)] border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--color-focus-ring)] ${
+                    className={`inline-flex min-h-10 items-center gap-2 rounded-xl border px-3.5 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--color-pasa-teal)] ${
                       active
-                        ? "border-[color:var(--color-accent-strong)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent-strong)]"
-                        : "border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] text-[color:var(--color-text-muted)]"
+                        ? "border-[color:var(--color-pasa-teal)] bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)] font-bold shadow-2xs"
+                        : "border-[color:var(--color-border)] bg-white text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface-muted)]"
                     }`}
                     aria-pressed={active}
                   >
-                    <Filter size={16} aria-hidden="true" />
+                    <Filter size={14} aria-hidden="true" />
                     {option === "all" ? "All statuses" : option}
                   </button>
                 );
               })}
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <label className="grid gap-2 text-sm font-medium text-[color:var(--color-text-strong)]">
+            <div className="mt-4 grid grid-cols-2 gap-3 pt-3 border-t border-[color:var(--color-border)]/60">
+              <label className="grid gap-1.5 text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-strong)]">
                 Consent filter
                 <select
                   aria-label="Consent filter"
                   value={consentFilter}
                   onChange={(event) => setConsentFilter(event.target.value)}
-                  className="min-h-11 min-w-0 rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-3 text-sm text-[color:var(--color-text-strong)] outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--color-focus-ring)] sm:px-4"
+                  className="min-h-10 min-w-0 rounded-xl border border-[color:var(--color-border)] bg-white px-3 text-xs font-medium text-[color:var(--color-text-strong)] outline-none transition focus:border-[color:var(--color-pasa-teal)] sm:px-3.5"
                 >
                   <option value="all">All consent states</option>
                   <option value="granted">Consent active</option>
@@ -253,13 +253,13 @@ export function CaseList({
                   <option value="withdrawn">Consent withdrawn</option>
                 </select>
               </label>
-              <label className="grid gap-2 text-sm font-medium text-[color:var(--color-text-strong)]">
+              <label className="grid gap-1.5 text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-strong)]">
                 Sort cases
                 <select
                   aria-label="Sort cases"
                   value={sortBy}
                   onChange={(event) => setSortBy(event.target.value as "latest-activity" | "next-action")}
-                  className="min-h-11 min-w-0 rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-3 text-sm text-[color:var(--color-text-strong)] outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--color-focus-ring)] sm:px-4"
+                  className="min-h-10 min-w-0 rounded-xl border border-[color:var(--color-border)] bg-white px-3 text-xs font-medium text-[color:var(--color-text-strong)] outline-none transition focus:border-[color:var(--color-pasa-teal)] sm:px-3.5"
                 >
                   <option value="latest-activity">Latest activity</option>
                   <option value="next-action">Next action</option>
@@ -320,26 +320,28 @@ export function CaseList({
                 />
               </div>
 
-              <ul className="xl:hidden" aria-label="Cases">
+              <ul className="xl:hidden space-y-3" aria-label="Cases">
                 {filteredCases.map((caseItem) => {
                   const action = nextAction(caseItem);
                   const selected = selectedCase?.case_id === caseItem.case_id;
                   return (
                     <li
                       key={caseItem.case_id}
-                      className={`border-b border-[color:var(--color-border)] last:border-b-0 ${
-                        selected ? "bg-[color:var(--color-accent-soft)]" : ""
+                      className={`rounded-2xl border transition-all ${
+                        selected
+                          ? "border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] shadow-2xs"
+                          : "border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] shadow-2xs"
                       }`}
                     >
-                      <div className="flex items-center gap-3 px-2 py-3">
-                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-[var(--radius-card)] bg-[color:var(--color-surface-muted)] text-xs font-semibold text-[color:var(--color-text-muted)]">
+                      <div className="flex items-center gap-3 p-4">
+                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--color-pasa-teal-soft)] text-xs font-bold text-[color:var(--color-pasa-teal)] border border-[color:var(--color-pasa-teal-border)]/60">
                           {childInitials(caseItem)}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <Link
                               href={`/cases/${caseItem.case_id}`}
-                              className="flex min-h-11 min-w-11 items-center truncate font-semibold text-[color:var(--color-text-strong)] hover:text-[color:var(--color-accent-strong)]"
+                              className="truncate font-bold text-[color:var(--color-text-strong)] hover:text-[color:var(--color-pasa-teal)]"
                             >
                               {caseLabel(caseItem)}
                             </Link>
@@ -351,10 +353,10 @@ export function CaseList({
                         </div>
                         <Link
                           href={action.href}
-                          className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-[var(--radius-card)] border border-[color:var(--color-border)] px-3 text-xs font-semibold text-[color:var(--color-text-strong)] transition hover:border-[color:var(--color-accent-strong)] hover:bg-[color:var(--color-accent-soft)]"
+                          className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[color:var(--color-border)] bg-white px-3 text-xs font-semibold text-[color:var(--color-pasa-teal)] transition hover:border-[color:var(--color-pasa-teal-border)] hover:bg-[color:var(--color-pasa-teal-soft)] shadow-2xs"
                         >
                           {action.label}
-                          <ArrowRight size={14} aria-hidden="true" />
+                          <ArrowRight size={13} aria-hidden="true" />
                         </Link>
                       </div>
                     </li>
@@ -371,49 +373,49 @@ export function CaseList({
             />
           )}
 
-          <footer className="control-strip px-4 py-3 text-sm text-[color:var(--color-text-muted)]">
+          <footer className="control-strip rounded-xl border border-[color:var(--color-border)] bg-white px-4 py-3 text-xs font-medium text-[color:var(--color-text-muted)] shadow-2xs">
             Showing {filteredCases.length ? `1-${filteredCases.length}` : "0-0"} of {cases.length} cases
           </footer>
 
         </div>
 
         <aside className="space-y-4" aria-label="Selected case context">
-          <section className="workspace-panel hidden p-5 lg:block">
-            <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[color:var(--color-text-subtle)]">Selected case context</p>
+          <section className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] p-6 shadow-2xs hidden lg:block">
+            <p className="text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-subtle)] pb-3 border-b border-[color:var(--color-border)]/60">Selected case context</p>
             {selectedCase ? (
-              <div className="mt-3 space-y-4">
+              <div className="mt-4 space-y-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-[color:var(--color-text-strong)]">{caseLabel(selectedCase)}</h2>
-                  <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
+                  <h2 className="text-lg font-bold text-[color:var(--color-text-strong)]">{caseLabel(selectedCase)}</h2>
+                  <p className="mt-1 text-xs text-[color:var(--color-text-muted)]">
                     {codeLabel(selectedCase)} · {ageLabel(selectedCase)} · {languageLabel(selectedCase)}
                   </p>
                 </div>
-                <div className="rounded-[var(--radius-panel)] border border-[color:var(--color-accent-subtle)] bg-[color:var(--color-accent-soft)] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--color-accent-strong)]">Next action</p>
-                  <p className="mt-1 font-semibold text-[color:var(--color-text-strong)]">{nextAction(selectedCase).label}</p>
-                  <ActionButton href={nextAction(selectedCase).href} className="mt-3 w-full">
+                <div className="rounded-xl border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] p-4">
+                  <p className="text-xs font-bold uppercase tracking-wider text-[color:var(--color-pasa-teal)]">Next action</p>
+                  <p className="mt-1 font-bold text-[color:var(--color-text-strong)] text-sm">{nextAction(selectedCase).label}</p>
+                  <ActionButton href={nextAction(selectedCase).href} className="mt-3 w-full" tone="primary">
                     {nextAction(selectedCase).label}
                   </ActionButton>
                 </div>
-                <dl className="grid gap-2 text-sm">
-                  <div className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] py-2">
+                <dl className="grid gap-2 text-xs">
+                  <div className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)]/60 py-2">
                     <dt className="text-[color:var(--color-text-muted)]">Workflow status</dt>
-                    <dd className="font-medium text-[color:var(--color-text-strong)]">{workflowStage(selectedCase)}</dd>
+                    <dd className="font-semibold text-[color:var(--color-text-strong)]">{workflowStage(selectedCase)}</dd>
                   </div>
-                  <div className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] py-2">
+                  <div className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)]/60 py-2">
                     <dt className="text-[color:var(--color-text-muted)]">Latest activity</dt>
-                    <dd className="font-medium text-[color:var(--color-text-strong)]">{selectedCase.latest_session_date ?? "None yet"}</dd>
+                    <dd className="font-semibold text-[color:var(--color-text-strong)]">{selectedCase.latest_session_date ?? "None yet"}</dd>
                   </div>
                 </dl>
-                <details className="responsive-details rounded-[var(--radius-card)] border border-[color:var(--color-border)]">
-                  <summary className="flex min-h-11 cursor-pointer items-center justify-between px-3 text-sm font-semibold text-[color:var(--color-text-strong)]">
+                <details className="responsive-details rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)]/40">
+                  <summary className="flex min-h-10 cursor-pointer items-center justify-between px-3 text-xs font-bold text-[color:var(--color-text-strong)]">
                     <span>More case context</span>
                     <span aria-hidden="true">›</span>
                   </summary>
-                  <dl className="space-y-2 border-t border-[color:var(--color-border)] p-3 text-sm text-[color:var(--color-text-muted)]">
-                    <div><dt className="font-medium text-[color:var(--color-text-strong)]">Consent and priority</dt><dd>{consentLabel(selectedCase.consent_status)} consent · {priorityLabel(selectedCase.review_priority)}</dd></div>
-                    <div><dt className="font-medium text-[color:var(--color-text-strong)]">Latest report</dt><dd>{reportLabel(selectedCase.latest_report_status)}</dd></div>
-                    <div><dt className="font-medium text-[color:var(--color-text-strong)]">Primary clinician</dt><dd>{primaryClinician(selectedCase)}</dd></div>
+                  <dl className="space-y-2 border-t border-[color:var(--color-border)] p-3 text-xs text-[color:var(--color-text-muted)]">
+                    <div><dt className="font-bold text-[color:var(--color-text-strong)]">Consent and priority</dt><dd>{consentLabel(selectedCase.consent_status)} consent · {priorityLabel(selectedCase.review_priority)}</dd></div>
+                    <div><dt className="font-bold text-[color:var(--color-text-strong)]">Latest report</dt><dd>{reportLabel(selectedCase.latest_report_status)}</dd></div>
+                    <div><dt className="font-bold text-[color:var(--color-text-strong)]">Primary clinician</dt><dd>{primaryClinician(selectedCase)}</dd></div>
                   </dl>
                 </details>
                 <ActionButton href={`/cases/${encodeURIComponent(selectedCase.case_id)}`} tone="secondary" className="w-full">
@@ -421,7 +423,7 @@ export function CaseList({
                 </ActionButton>
               </div>
             ) : (
-              <p className="mt-3 text-sm leading-6 text-[color:var(--color-text-muted)]">No case matches the current filters.</p>
+              <p className="mt-3 text-xs leading-6 text-[color:var(--color-text-muted)]">No case matches the current filters.</p>
             )}
           </section>
         </aside>

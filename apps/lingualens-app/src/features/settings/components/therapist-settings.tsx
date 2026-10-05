@@ -111,7 +111,7 @@ function SettingsCard({
   return (
     <section className="rounded-[var(--radius-card)] border border-line bg-[color:var(--color-surface-reading)] p-5">
       <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-[var(--radius-control)] bg-cyan-50 text-cyan-700">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)] border border-[color:var(--color-pasa-teal-border)]/60">
           <Icon size={21} aria-hidden="true" />
         </span>
         <div>

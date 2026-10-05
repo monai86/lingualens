@@ -37,7 +37,7 @@ export function WorkspaceAccessGate({
           workspace remains blocked until the session reaches <strong>aal2</strong>.
         </p>
 
-        <div className="mt-5 rounded-[var(--radius-panel)] border border-cyan-100 bg-cyan-50 p-4 text-sm text-cyan-950">
+        <div className="mt-5 rounded-2xl border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] p-4 text-sm text-[color:var(--color-pasa-teal)] shadow-2xs">
           <div className="flex items-start gap-3">
             <LockKeyhole size={18} aria-hidden="true" className="mt-0.5 shrink-0" />
             <div>

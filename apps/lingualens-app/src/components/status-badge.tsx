@@ -18,23 +18,23 @@ export type WorkflowStatus =
   | "Report Ready";
 
 const styles: Record<WorkflowStatus, string> = {
-  Draft: "border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-strong)] text-[color:var(--color-text-muted)]",
+  Draft: "border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] text-[color:var(--color-text-muted)]",
   "Needs Review": "border-[color:var(--color-warning-border)] bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-text)]",
-  Attested: "border-[color:var(--color-success-border)] bg-[color:var(--color-success-bg)] text-[color:var(--color-success-text)]",
-  Processing: "border-[color:var(--color-info-border)] bg-[color:var(--color-info-bg)] text-[color:var(--color-info-text)]",
+  Attested: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  Processing: "border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)]",
   Failed: "border-[color:var(--color-danger-border)] bg-[color:var(--color-danger-bg)] text-[color:var(--color-danger-text)]",
-  Ready: "border-[color:var(--color-success-border)] bg-[color:var(--color-success-bg)] text-[color:var(--color-success-text)]",
-  "Signed Off": "border-[color:var(--color-accent-strong)] bg-[color:var(--color-accent-strong)] text-white",
-  Withdrawn: "border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-muted)] text-[color:var(--color-text-muted)]",
-  "Awaiting Consent": "border-orange-200 bg-orange-50 text-orange-800",
-  "Ready for Audio": "border-blue-200 bg-blue-50 text-blue-800",
-  "Recording": "border-red-200 bg-red-50 text-red-800 animate-pulse",
-  "Uploading": "border-blue-200 bg-blue-50 text-blue-800 animate-pulse",
-  "Transcribing": "border-indigo-200 bg-indigo-50 text-indigo-800",
-  "CHA Generating": "border-purple-200 bg-purple-50 text-purple-800",
-  "ML Pending": "border-amber-200 bg-amber-50 text-amber-800",
+  Ready: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  "Signed Off": "border-[color:var(--color-pasa-teal)] bg-[color:var(--color-pasa-teal)] text-white",
+  Withdrawn: "border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] text-[color:var(--color-text-muted)]",
+  "Awaiting Consent": "border-[color:var(--color-warm-butter-border)] bg-[color:var(--color-warm-butter-soft)] text-[color:var(--color-warning-text)]",
+  "Ready for Audio": "border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)]",
+  "Recording": "border-[color:var(--color-scope-coral-border)] bg-[color:var(--color-scope-coral-soft)] text-[color:var(--color-scope-coral-hover)] animate-pulse font-bold",
+  "Uploading": "border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)] animate-pulse",
+  "Transcribing": "border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)]",
+  "CHA Generating": "border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)]",
+  "ML Pending": "border-[color:var(--color-warm-butter-border)] bg-[color:var(--color-warm-butter-soft)] text-[color:var(--color-warning-text)]",
   "Review Required": "border-[color:var(--color-warning-border)] bg-[color:var(--color-warning-bg)] text-[color:var(--color-warning-text)]",
-  "Report Ready": "border-[color:var(--color-success-border)] bg-[color:var(--color-success-bg)] text-[color:var(--color-success-text)]",
+  "Report Ready": "border-emerald-200 bg-emerald-50 text-emerald-800",
 };
 
 export function StatusBadge({ status }: { status: string }) {

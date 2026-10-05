@@ -74,10 +74,10 @@ export function InteractiveRadarChart({
     .join(" ");
 
   return (
-    <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] p-5 shadow-xs">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--color-border)] pb-3">
+    <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] p-6 shadow-2xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--color-border)]/60 pb-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent-strong)]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)]">
             <Activity className="h-4 w-4" />
           </div>
           <div>
@@ -90,11 +90,11 @@ export function InteractiveRadarChart({
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          <span className="flex items-center gap-1.5 font-medium text-[color:var(--color-pasa-teal)]">
+          <span className="flex items-center gap-1.5 font-semibold text-[color:var(--color-pasa-teal)]">
             <span className="inline-block h-2 w-4 rounded-full border border-[color:var(--color-pasa-teal)] border-dashed bg-[color:var(--color-pasa-teal-soft)]"></span>
             เกณฑ์ปกติสมวัย (TD Norm 100%)
           </span>
-          <span className="flex items-center gap-1.5 font-medium text-[color:var(--color-scope-coral)]">
+          <span className="flex items-center gap-1.5 font-semibold text-[color:var(--color-scope-coral)]">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-[color:var(--color-scope-coral)]"></span>
             ผลของเด็กในเซสชันนี้
           </span>
@@ -212,17 +212,17 @@ export function InteractiveRadarChart({
 
         {/* Breakdown & Benchmark Cards */}
         <div className="space-y-3 lg:col-span-5">
-          <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-            <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-              <Info className="h-3.5 w-3.5 text-sky-600" />
+          <div className="rounded-xl border border-[color:var(--color-border)]/60 bg-[color:var(--color-surface-muted)]/50 p-3.5 text-xs text-[color:var(--color-text-muted)]">
+            <div className="flex items-center gap-1.5 font-bold text-[color:var(--color-text-strong)]">
+              <Info className="h-3.5 w-3.5 text-[color:var(--color-pasa-teal)]" />
               สรุปผลเปรียบเทียบเทียบเกณฑ์สมวัย:
             </div>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-[color:var(--color-text-muted)]">
               ค่าเปอร์เซ็นต์คำนวณจากสัดส่วนเทียบกับเกณฑ์สมวัย (TD Reference Benchmark)
             </p>
           </div>
 
-          <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+          <div className="divide-y divide-[color:var(--color-border)]/60 rounded-xl border border-[color:var(--color-border)] bg-white shadow-2xs">
             {axes.map((ax) => {
               const pct =
                 ax.value !== null && ax.norm > 0
@@ -230,34 +230,34 @@ export function InteractiveRadarChart({
                   : null;
               const isSelected = hoveredAxis?.key === ax.key;
 
-              let statusColor = "text-emerald-700 bg-emerald-50 border-emerald-200";
+              let statusColor = "text-[color:var(--color-pasa-teal)] bg-[color:var(--color-pasa-teal-soft)] border-[color:var(--color-pasa-teal-border)]";
               let statusText = "สมวัย";
               if (pct === null) {
                 statusColor = "text-slate-600 bg-slate-50 border-slate-200";
                 statusText = "ไม่มีเสียง";
               } else if (pct < 65) {
-                statusColor = "text-amber-800 bg-amber-50 border-amber-200";
+                statusColor = "text-[color:var(--color-scope-coral)] bg-[color:var(--color-scope-coral-soft)] border-[color:var(--color-scope-coral-border)]";
                 statusText = "ควรส่งเสริม";
               } else if (pct < 85) {
-                statusColor = "text-sky-800 bg-sky-50 border-sky-200";
+                statusColor = "text-[color:var(--color-warm-butter-strong)] bg-[color:var(--color-warm-butter-soft)] border-[color:var(--color-warm-butter-border)]";
                 statusText = "กำลังพัฒนา";
               }
 
               return (
                 <div
                   key={ax.key}
-                  className={`flex items-center justify-between p-2.5 transition-colors ${
-                    isSelected ? "bg-sky-50/70" : "hover:bg-slate-50/50"
+                  className={`flex items-center justify-between p-3 transition-colors ${
+                    isSelected ? "bg-[color:var(--color-pasa-teal-soft)]/50" : "hover:bg-[color:var(--color-surface-muted)]/40"
                   }`}
                   onMouseEnter={() => setHoveredAxis(ax)}
                   onMouseLeave={() => setHoveredAxis(null)}
                 >
                   <div>
-                    <span className="font-semibold text-slate-800">{ax.label}</span>{" "}
-                    <span className="text-xs text-slate-500">({ax.labelTh})</span>
-                    <div className="text-xs text-slate-500">
+                    <span className="font-bold text-xs text-[color:var(--color-text-strong)]">{ax.label}</span>{" "}
+                    <span className="text-xs text-[color:var(--color-text-muted)]">({ax.labelTh})</span>
+                    <div className="text-xs text-[color:var(--color-text-muted)] mt-0.5">
                       วัดได้:{" "}
-                      <strong className="text-slate-700">
+                      <strong className="text-[color:var(--color-text-strong)]">
                         {ax.value !== null ? `${ax.value} ${ax.unit}` : "N/A"}
                       </strong>{" "}
                       | เกณฑ์: {ax.norm} {ax.unit}
@@ -266,7 +266,7 @@ export function InteractiveRadarChart({
 
                   <div className="text-right">
                     <span
-                      className={`inline-block rounded border px-2 py-0.5 text-xs font-semibold ${statusColor}`}
+                      className={`inline-block rounded-lg border px-2.5 py-1 text-xs font-bold ${statusColor}`}
                     >
                       {pct !== null ? `${pct}% · ${statusText}` : statusText}
                     </span>

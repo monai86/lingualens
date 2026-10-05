@@ -156,7 +156,7 @@ function ReportSummaryIdentityScope({ caseId, sessionId, transcriptId, reportId 
         ) : null}
 
         {isSnapshotIntegrityChecking ? (
-          <div className="rounded-[var(--radius-panel)] border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-950" role="status" aria-live="polite">
+          <div className="rounded-[var(--radius-panel)] border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] p-4 text-sm text-[color:var(--color-pasa-teal)]" role="status" aria-live="polite">
             <p className="font-semibold">Verifying signed snapshot integrity…</p>
             <p className="mt-1">Export, revision, and sharing remain blocked until the signed payload hash is verified.</p>
           </div>
@@ -175,7 +175,7 @@ function ReportSummaryIdentityScope({ caseId, sessionId, transcriptId, reportId 
               {signedSnapshotVerified ? (
                 <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-900">Signed snapshot · immutable</span>
               ) : isSnapshotIntegrityChecking ? (
-                <span className="rounded-full bg-cyan-100 px-3 py-1 text-xs font-bold text-cyan-950">Verifying signed snapshot</span>
+                <span className="rounded-full border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] px-3 py-1 text-xs font-bold text-[color:var(--color-pasa-teal)]">Verifying signed snapshot</span>
               ) : hasSnapshotIntegrityError ? (
                 <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-900">Snapshot integrity error</span>
               ) : isStale ? (

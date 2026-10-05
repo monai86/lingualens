@@ -165,15 +165,15 @@ export function CaseDetail({ model }: { model: CaseDetailViewModel }) {
 
       <PipelineProgressBar currentStatus={localConsent === "granted" ? "ready_for_audio" : "awaiting_consent"} />
 
-      <section className="workspace-panel p-5">
+      <section className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] p-6 shadow-2xs">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
-            <div className="grid h-12 w-12 place-items-center rounded-[var(--radius-card)] bg-[color:var(--color-accent-soft)] text-lg font-semibold text-[color:var(--color-accent-strong)]">
+            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-[color:var(--color-pasa-teal-soft)] text-xl font-bold text-[color:var(--color-pasa-teal)] border border-[color:var(--color-pasa-teal-border)]/60 shadow-2xs">
               {childInitials(caseItem)}
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-[color:var(--color-text-strong)]">Case profile</h2>
-              <p className="mt-1 text-sm text-[color:var(--color-text-muted)]">
+              <h2 className="text-xl font-bold text-[color:var(--color-text-strong)]">Case profile</h2>
+              <p className="mt-0.5 text-xs text-[color:var(--color-text-muted)] font-mono">
                 {codeLabel(caseItem)} · {languageLabel(caseItem)}
               </p>
             </div>
@@ -191,26 +191,26 @@ export function CaseDetail({ model }: { model: CaseDetailViewModel }) {
         <div className="min-w-0 space-y-6">
           {!isConsentGranted ? (
             <div className="grid gap-4">
-              <section className="grid gap-3 rounded-[var(--radius-shell)] border border-amber-200 bg-amber-50 p-5">
+              <section className="grid gap-3 rounded-2xl border border-amber-200 bg-amber-50/80 p-5 shadow-2xs">
                 <div className="flex items-start gap-3">
                   <CircleDot className="mt-1 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
                   <div className="grid gap-1">
-                    <h2 className="text-lg font-semibold text-amber-900">
+                    <h2 className="text-base font-bold text-amber-900">
                       Caregiver Consent Verification Required
                     </h2>
-                    <p className="leading-6 text-amber-800">
+                    <p className="text-xs leading-relaxed text-amber-800">
                       This case requires verified caregiver consent. Session recording, audio processing, and clinical observation workflows are locked until consent is obtained and verified.
                     </p>
                   </div>
                 </div>
               </section>
 
-              <section className="workspace-panel grid gap-4 p-5">
-                <div className="grid gap-1">
-                  <h2 className="text-lg font-semibold text-[color:var(--color-text-strong)]">
+              <section className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] grid gap-4 p-6 shadow-2xs">
+                <div className="grid gap-1 pb-3 border-b border-[color:var(--color-border)]/60">
+                  <h2 className="text-base font-bold text-[color:var(--color-text-strong)]">
                     Consent Verification Form
                   </h2>
-                  <p className="text-sm text-[color:var(--color-text-muted)]">
+                  <p className="text-xs text-[color:var(--color-text-muted)]">
                     Please verify consent credentials below to unlock the clinical intake and session workflows.
                   </p>
                 </div>
@@ -234,14 +234,14 @@ export function CaseDetail({ model }: { model: CaseDetailViewModel }) {
               </section>
             </div>
           ) : (
-            <section className="grid gap-4 rounded-[var(--radius-shell)] border border-emerald-200 bg-emerald-50 p-5">
+            <section className="grid gap-4 rounded-2xl border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] p-5 shadow-2xs">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="inline-flex min-h-8 items-center gap-2 rounded-[var(--radius-card)] border border-emerald-300 bg-emerald-100 px-3 text-xs font-semibold text-emerald-800">
+                  <span className="inline-flex min-h-8 items-center gap-2 rounded-xl border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal)] px-3 text-xs font-bold text-white shadow-2xs">
                     <ShieldCheck size={14} aria-hidden="true" />
                     Consent Active
                   </span>
-                  <p className="font-medium text-emerald-900">
+                  <p className="text-xs font-bold text-[color:var(--color-pasa-teal)]">
                     Caregiver consent has been verified and clinical workflows are unlocked.
                   </p>
                 </div>
@@ -250,7 +250,7 @@ export function CaseDetail({ model }: { model: CaseDetailViewModel }) {
                   tone="secondary"
                   onClick={handleWithdrawConsent}
                   disabled={consentBusy}
-                  className="border-emerald-300 hover:border-rose-400 hover:bg-rose-50 hover:text-rose-700"
+                  className="hover:border-rose-400 hover:bg-rose-50 hover:text-rose-700"
                 >
                   Withdraw Consent
                 </ActionButton>
@@ -259,10 +259,10 @@ export function CaseDetail({ model }: { model: CaseDetailViewModel }) {
           )}
 
           {consentMsg && (
-            <p className={`rounded-[var(--radius-card)] border px-4 py-3 text-sm font-medium ${
+            <p className={`rounded-xl border px-4 py-3 text-xs font-semibold ${
               consentMsg.includes("Failed") || consentMsg.includes("Could not")
-                ? "border-rose-100 bg-rose-50 text-rose-950"
-                : "border-cyan-100 bg-cyan-50 text-cyan-950"
+                ? "border-rose-200 bg-rose-50 text-rose-950"
+                : "border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)]"
             }`}>
               {consentMsg}
             </p>
@@ -354,8 +354,8 @@ export function CaseDetail({ model }: { model: CaseDetailViewModel }) {
         </div>
 
         <aside className="space-y-4">
-          <section className="workspace-panel p-5">
-            <h2 className="text-lg font-semibold text-[color:var(--color-text-strong)]">Progress</h2>
+          <section className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] p-6 shadow-2xs">
+            <h2 className="text-base font-bold text-[color:var(--color-text-strong)] pb-3 border-b border-[color:var(--color-border)]/60">Progress</h2>
             <div className="mt-4 grid gap-3">
               {snapshot.map((item) => (
                 <StatCard key={item.label} label={item.label} value={item.value} helper={item.helper} icon={Gauge} />
@@ -424,12 +424,12 @@ function HeaderMeta({
   icon: typeof Activity;
 }) {
   return (
-    <div className="rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] px-4 py-3">
-      <div className="flex items-center gap-2 text-xs uppercase tracking-[0.1em] text-[color:var(--color-text-subtle)]">
-        <Icon size={14} aria-hidden="true" />
+    <div className="rounded-xl border border-[color:var(--color-border)]/70 bg-[color:var(--color-surface-muted)]/50 px-4 py-3 shadow-2xs">
+      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-subtle)]">
+        <Icon size={14} aria-hidden="true" className="text-[color:var(--color-pasa-teal)]" />
         <span>{label}</span>
       </div>
-      <p className="mt-2 text-sm font-medium text-[color:var(--color-text-strong)]">{value}</p>
+      <p className="mt-1.5 text-sm font-bold text-[color:var(--color-text-strong)]">{value}</p>
     </div>
   );
 }
@@ -442,8 +442,8 @@ function InfoCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-[var(--radius-shell)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] p-5">
-      <h2 className="text-lg font-semibold text-[color:var(--color-text-strong)]">{title}</h2>
+    <section className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] p-6 shadow-2xs">
+      <h2 className="text-base font-bold text-[color:var(--color-text-strong)] pb-3 border-b border-[color:var(--color-border)]/60">{title}</h2>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -451,9 +451,9 @@ function InfoCard({
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-b border-[color:var(--color-border)] py-3 last:border-b-0">
-      <p className="text-xs uppercase tracking-[0.1em] text-[color:var(--color-text-subtle)]">{label}</p>
-      <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-strong)]">{value}</p>
+    <div className="border-b border-[color:var(--color-border)]/60 py-3 last:border-b-0">
+      <p className="text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-subtle)]">{label}</p>
+      <p className="mt-1 text-sm font-medium leading-relaxed text-[color:var(--color-text-strong)]">{value}</p>
     </div>
   );
 }

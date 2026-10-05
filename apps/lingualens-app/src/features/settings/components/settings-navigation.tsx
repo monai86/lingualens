@@ -89,9 +89,9 @@ function SettingsNavGroup({
               <a
                 href={`/settings?section=${section}`}
                 aria-current={isSelected ? "page" : undefined}
-                className={`flex min-h-11 items-center rounded-md border-l-2 px-3 py-2 text-sm font-medium transition ${
+                className={`flex min-h-11 items-center rounded-xl border-l-3 px-3.5 py-2 text-sm font-semibold transition ${
                   isSelected
-                    ? "border-clinical bg-cyan-50 text-cyan-900"
+                    ? "border-[color:var(--color-pasa-teal)] bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)]"
                     : "border-transparent text-slate-700 hover:bg-slate-50 hover:text-ink"
                 }`}
                 onClick={(event) => {

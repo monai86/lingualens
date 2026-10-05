@@ -2,16 +2,20 @@ import Link from "next/link";
 import { isValidElement } from "react";
 import type { LucideIcon } from "lucide-react";
 
-type ActionButtonTone = "primary" | "secondary" | "ghost" | "destructive";
+type ActionButtonTone = "primary" | "secondary" | "ghost" | "destructive" | "coral" | "pine";
 type ActionButtonSize = "md" | "lg";
 
 const toneClasses: Record<ActionButtonTone, string> = {
   primary:
-    "border border-[color:var(--color-accent)] bg-[color:var(--color-accent)] text-white hover:bg-[color:var(--color-accent-strong)]",
+    "border border-transparent bg-[color:var(--color-pasa-teal)] text-white shadow-xs hover:bg-[color:var(--color-pasa-teal-hover)] active:scale-[0.99]",
+  coral:
+    "border border-transparent bg-[color:var(--color-scope-coral)] text-white shadow-xs hover:bg-[color:var(--color-scope-coral-hover)] active:scale-[0.99]",
+  pine:
+    "border border-transparent bg-[color:var(--color-pasa-teal)] text-white shadow-xs hover:bg-[color:var(--color-pasa-teal-hover)] active:scale-[0.99]",
   secondary:
-    "border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-strong)] text-[color:var(--color-text-strong)] hover:border-[color:var(--color-text-strong)] hover:bg-[color:var(--color-surface-muted)]",
+    "border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-surface-strong)] text-[color:var(--color-pasa-teal)] hover:bg-[color:var(--color-pasa-teal-soft)] shadow-xs active:scale-[0.99]",
   ghost:
-    "border border-transparent bg-transparent text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-surface-muted)]",
+    "border border-transparent bg-transparent text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-surface)]",
   destructive:
     "border border-[color:var(--color-danger-border)] bg-[color:var(--color-danger-bg)] text-[color:var(--color-danger-text)] hover:border-[color:var(--color-danger-text)] hover:bg-[#ffe6de]"
 };

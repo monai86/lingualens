@@ -4,25 +4,25 @@ import type { TodayWorkbenchViewState } from "@/features/work-queue/components/t
 
 export function TodayContextRail({ state, titleId }: { state: TodayWorkbenchViewState; titleId: string }) {
   return (
-    <section className="workspace-panel p-4" aria-labelledby={titleId}>
+    <section className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] p-5 shadow-xs" aria-labelledby={titleId}>
       <div>
-        <h2 id={titleId} className="text-base font-semibold text-[color:var(--color-text-strong)]">Today context</h2>
+        <h2 id={titleId} className="text-base font-bold text-[color:var(--color-text-strong)]">Today context</h2>
       </div>
       {state.status === "loading" ? <p className="mt-4 text-sm text-[color:var(--color-text-muted)]">Recent cases will appear in a moment.</p> : null}
-      {state.status === "error" ? <p className="mt-4 rounded-[var(--radius-card)] border border-[color:var(--color-warning-border)] bg-[color:var(--color-warning-bg)] p-3 text-sm text-[color:var(--color-warning-text)]">Connection unavailable — recent cases are not shown right now.</p> : null}
+      {state.status === "error" ? <p className="mt-4 rounded-xl border border-[color:var(--color-warning-border)] bg-[color:var(--color-warning-bg)] p-3 text-sm text-[color:var(--color-warning-text)]">Connection unavailable — recent cases are not shown right now.</p> : null}
       {state.status === "ready" ? (
         <div className="mt-5">
-          <h3 className="text-sm font-semibold text-[color:var(--color-text-strong)]">Recent cases</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-muted)]">Recent cases</h3>
           {state.model.recentCases.length ? (
             <ul className="mt-2 divide-y divide-[color:var(--color-border)]">
               {state.model.recentCases.map((caseItem) => (
                 <li key={caseItem.caseId}>
-                  <Link href={`/cases/${encodeURIComponent(caseItem.caseId)}`} className="flex min-h-11 items-center justify-between gap-3 py-3 text-sm">
+                  <Link href={`/cases/${encodeURIComponent(caseItem.caseId)}`} className="flex min-h-11 items-center justify-between gap-3 py-3 text-sm transition hover:text-[color:var(--color-pasa-teal)]">
                     <span className="min-w-0">
-                      <span className="block font-semibold text-[color:var(--color-text-strong)]">{caseItem.caseLabel}</span>
+                      <span className="block font-bold text-[color:var(--color-text-strong)]">{caseItem.caseLabel}</span>
                       <span className="block text-xs text-[color:var(--color-text-muted)]">{caseItem.workflowStatus}</span>
                     </span>
-                    <span aria-hidden="true" className="shrink-0 text-[color:var(--color-accent)]">→</span>
+                    <span aria-hidden="true" className="shrink-0 text-[color:var(--color-pasa-teal)] font-bold">→</span>
                   </Link>
                 </li>
               ))}

@@ -22,16 +22,16 @@ export function PasaScopeLogoMark({
   priority?: boolean;
 }) {
   const dimensions = {
-    xs: { w: 24, h: 24 },
-    sm: { w: 32, h: 32 },
-    md: { w: 42, h: 42 },
-    lg: { w: 56, h: 56 },
-    xl: { w: 72, h: 72 },
+    xs: { w: 37, h: 24 },
+    sm: { w: 50, h: 32 },
+    md: { w: 65, h: 42 },
+    lg: { w: 87, h: 56 },
+    xl: { w: 112, h: 72 },
   }[size];
 
   return (
     <span
-      className={`inline-flex items-center justify-center shrink-0 select-none overflow-hidden ${className}`}
+      className={`inline-flex items-center justify-center shrink-0 select-none ${className}`}
       style={{ width: dimensions.w, height: dimensions.h }}
       role="img"
       aria-label="PasaScope Logomark"

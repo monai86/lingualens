@@ -25,10 +25,10 @@ export function BottomNav({
               key={item.href}
               href={item.href}
               aria-current={isActive ? "page" : undefined}
-              className={`flex min-h-11 flex-col items-center justify-center gap-1 rounded-[var(--radius-card)] px-2 py-1 text-xs font-medium transition duration-200 ease-out motion-reduce:transition-none ${
+              className={`flex min-h-11 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1 text-xs transition duration-200 ease-out motion-reduce:transition-none ${
                 isActive
-                  ? "bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent-strong)]"
-                  : "text-[color:var(--color-text-subtle)] hover:text-[color:var(--color-text-strong)]"
+                  ? "bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)] font-bold shadow-2xs"
+                  : "text-[color:var(--color-text-subtle)] hover:text-[color:var(--color-text-strong)] font-medium"
               }`}
             >
               <Icon size={18} aria-hidden="true" />

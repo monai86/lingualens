@@ -419,7 +419,7 @@ function AdminSettings({ section, organizationId, initialCaseId }: { section: Ad
   return (
     <div className="grid gap-4">
       <BackendAvailabilityBanner unavailable={backendUnavailable} />
-      {message ? <p className="rounded-md border border-cyan-100 bg-cyan-50 px-3 py-2 text-sm font-medium text-cyan-900" role="status">{message}</p> : null}
+      {message ? <p className="rounded-xl border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] px-3.5 py-2.5 text-sm font-medium text-[color:var(--color-pasa-teal)]" role="status">{message}</p> : null}
       {content}
       {loading ? (
         <div className="rounded-[var(--radius-card)] border border-line bg-[color:var(--color-surface-reading)] p-5" role="status" aria-live="polite">
@@ -438,7 +438,7 @@ function AdminSettings({ section, organizationId, initialCaseId }: { section: Ad
 function AdminSectionHeader({ title, description }: { title: string; description: string }) {
   return (
     <section className="rounded-[var(--radius-card)] border border-line bg-[color:var(--color-surface-reading)] p-5">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-700">Organization administration</p>
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--color-pasa-teal)]">Organization administration</p>
       <h2 className="mt-2 text-xl font-semibold text-ink">{title}</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">{description}</p>
     </section>

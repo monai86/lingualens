@@ -146,7 +146,7 @@ function SessionViewNavigation({ context, compact = false }: { context: SessionC
   return (
     <nav
       aria-label="Session views"
-      className={`${compact ? "border-t px-1 py-2 sm:px-2" : "mt-4 border-t pt-4"} border-[color:var(--color-border)]`}
+      className={`${compact ? "border-t px-1 py-2 sm:px-2" : "mt-4 border-t pt-4"} border-[color:var(--color-border)]/60`}
     >
       <ol className="grid grid-cols-4 gap-1 sm:gap-2" role="list">
         {sessionViews.map((view, index) => {
@@ -157,26 +157,26 @@ function SessionViewNavigation({ context, compact = false }: { context: SessionC
               <Link
                 href={resolveSessionHref(view, context.sessionId)}
                 aria-current={active ? "page" : undefined}
-                className="group flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-[var(--radius-card)] px-1 text-center transition-colors motion-reduce:transition-none sm:flex-row sm:gap-2"
+                className="group flex min-h-11 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center transition-colors motion-reduce:transition-none sm:flex-row sm:gap-2"
               >
                 <span
                   aria-hidden="true"
                   className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold transition-colors motion-reduce:transition-none ${
                     completed
-                      ? "bg-[color:var(--color-accent-strong)] text-white"
+                      ? "bg-[color:var(--color-pasa-teal)] text-white shadow-2xs"
                       : active
-                        ? "border-2 border-[color:var(--color-accent-strong)] bg-[color:var(--color-accent-soft)] text-[color:var(--color-accent-strong)]"
-                        : "border border-[color:var(--color-border-strong)] bg-[color:var(--color-surface-muted)] text-[color:var(--color-text-muted)]"
+                        ? "border-2 border-[color:var(--color-pasa-teal)] bg-[color:var(--color-pasa-teal-soft)] text-[color:var(--color-pasa-teal)] shadow-2xs font-extrabold"
+                        : "border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] text-[color:var(--color-text-muted)]"
                   }`}
                 >
-                  {completed ? <Check size={14} strokeWidth={3} aria-hidden="true" /> : index + 1}
+                  {completed ? <Check size={13} strokeWidth={3} aria-hidden="true" /> : index + 1}
                 </span>
                 <span
-                  className={`min-w-0 truncate text-xs font-semibold sm:text-sm ${
+                  className={`min-w-0 truncate text-xs font-bold sm:text-sm ${
                     active
-                      ? "text-[color:var(--color-text-strong)]"
+                      ? "text-[color:var(--color-pasa-teal)]"
                       : completed
-                        ? "text-[color:var(--color-text-muted)]"
+                        ? "text-[color:var(--color-text-strong)]"
                         : "text-[color:var(--color-text-subtle)]"
                   }`}
                 >
@@ -186,7 +186,7 @@ function SessionViewNavigation({ context, compact = false }: { context: SessionC
               {index < sessionViews.length - 1 ? (
                 <span
                   aria-hidden="true"
-                  className={`hidden h-px w-4 shrink-0 sm:block ${completed ? "bg-[color:var(--color-accent-strong)]" : "bg-[color:var(--color-border)]"}`}
+                  className={`hidden h-0.5 w-4 shrink-0 sm:block rounded-full ${completed ? "bg-[color:var(--color-pasa-teal)]" : "bg-[color:var(--color-border)]/60"}`}
                 />
               ) : null}
             </li>

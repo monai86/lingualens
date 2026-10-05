@@ -32,7 +32,7 @@
 
 ### Changed
 - Complete visual redesign across all web application surfaces (`apps/lingualens-app/`) adhering to the official PasaScope flat 2D geometric visual brand identity (Pasa Teal `#265347`, Scope Coral `#F45B69`, clean neutral pine canvas `#F7FAF8`, and crisp hairline styling).
-- Redesigned and aligned Login page, Workspace Shell, Practice Dashboard, Work Queue (Today workbench), Reports Library, Findings Interactive Radar Chart, Clinician AI Assistant, Supabase Access Gate, and MFA panels.
+- Redesigned and aligned Login page, Workspace Shell, Practice Dashboard, Work Queue (Today workbench), Cases Workspace (Case list & Case detail), Session Assessment workflows (Intake, Stepper, Radar Chart, Reports), Settings administration, Supabase Access Gate, and MFA panels.
 - Extracted and integrated high-resolution PasaScope brand assets and logo components (`<PasaScopeLogo>`, `<PasaScopeLogoMark>`, `pasascope-logo.png`, `pasascope-mark-transparent.png`, `clinical-workflow.svg`).
 - Rebranded application surfaces and documentation from LinguaLens to **PasaScope (ภาษา-สโคป)**.
 - Added backward-compatible `PASASCOPE_` environment variable alias resolution in backend settings.

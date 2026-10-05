@@ -56,15 +56,15 @@ export function Sidebar({
         <Link
           href="/cases?intent=start-session"
           onClick={onClose}
-          className="flex min-h-11 w-full items-center gap-2 rounded-lg border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] px-3.5 py-2.5 text-sm font-semibold text-[color:var(--color-pasa-teal)] transition hover:bg-[color:var(--color-pasa-teal)] hover:text-white shadow-xs"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-transparent bg-[color:var(--color-scope-coral)] px-4 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-[color:var(--color-scope-coral-hover)] active:scale-[0.99]"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4 stroke-[2.5]" />
           <span>New Session</span>
         </Link>
       </div>
 
       {/* Navigation Sections */}
-      <nav aria-label="Primary navigation" className="flex-1 space-y-1 overflow-y-auto px-3 py-2 text-sm">
+      <nav aria-label="Primary navigation" className="flex-1 space-y-1.5 overflow-y-auto px-3 py-2 text-sm">
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
@@ -73,15 +73,15 @@ export function Sidebar({
               href={item.href}
               onClick={onClose}
               aria-current={item.active ? "page" : undefined}
-              className={`flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 transition font-medium ${
+              className={`flex min-h-11 items-center gap-3 rounded-xl px-3.5 py-2.5 transition ${
                 item.active
-                  ? "bg-[color:var(--color-pasa-teal-soft)] font-semibold text-[color:var(--color-pasa-teal)]"
-                  : "text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-text-strong)]"
+                  ? "bg-[color:var(--color-pasa-teal-soft)] font-bold text-[color:var(--color-pasa-teal)] border border-[color:var(--color-pasa-teal-border)] shadow-2xs"
+                  : "text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-text-strong)] font-medium"
               }`}
             >
               <Icon
                 className={`h-4 w-4 ${
-                  item.active ? "text-[color:var(--color-pasa-teal)]" : "text-[color:var(--color-text-subtle)]"
+                  item.active ? "text-[color:var(--color-pasa-teal)] stroke-[2.2]" : "text-[color:var(--color-text-subtle)]"
                 }`}
               />
               <span>{item.label}</span>
@@ -96,7 +96,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={() => void handleLogout()}
-            className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-[color:var(--color-text-muted)] transition hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-scope-coral)]"
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3.5 py-2 text-sm text-[color:var(--color-text-muted)] transition hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-scope-coral)] font-medium"
           >
             <LogOut className="h-4 w-4 text-[color:var(--color-text-subtle)]" />
             <span>Log out</span>
@@ -105,9 +105,9 @@ export function Sidebar({
       </div>
 
       <div className="hidden p-3 lg:block">
-        <div className="rounded-lg border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] p-3 text-xs text-[color:var(--color-pasa-teal)]">
-          <div className="flex items-center gap-1.5 font-semibold">
-            <span className="h-2 w-2 rounded-full bg-[color:var(--color-scope-coral)]" />
+        <div className="rounded-xl border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] p-3.5 text-xs text-[color:var(--color-pasa-teal)] shadow-2xs">
+          <div className="flex items-center gap-1.5 font-bold">
+            <span className="h-2 w-2 rounded-full bg-[color:var(--color-scope-coral)] animate-pulse" />
             <span>Clinical Safety</span>
           </div>
           <p className="mt-1 text-xs leading-relaxed text-[color:var(--color-text-muted)]">
