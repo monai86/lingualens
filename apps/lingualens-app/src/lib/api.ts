@@ -78,8 +78,8 @@ export const DEFAULT_PRODUCTION_RUNTIME_SETTINGS: RuntimeSettings = {
   guideline_mapping: "review-support-only",
   user_roles: ["therapist", "clinical_supervisor", "org_admin"],
   access_model: {
-    invitation_only: true,
-    required_app_aal: "aal2",
+    invitation_only: false,
+    required_app_aal: "aal1",
     active_organization_session: "explicit_selection_when_ambiguous",
     production_mock_mode: "forbidden",
   },

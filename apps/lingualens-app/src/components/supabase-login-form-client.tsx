@@ -63,7 +63,7 @@ export function SupabaseLoginFormClient({
     setStatusMessage("");
 
     if (!browserClient) {
-      setErrorMessage("Supabase browser configuration is missing for this runtime.");
+      setErrorMessage("ไม่พบการตั้งค่า Supabase บนระบบ (NEXT_PUBLIC_SUPABASE_URL หรือ NEXT_PUBLIC_SUPABASE_ANON_KEY ขาดหายไปใน Vercel Environment Variables)");
       return;
     }
 
@@ -83,7 +83,11 @@ export function SupabaseLoginFormClient({
       });
 
       if (error) {
-        setErrorMessage(error.message);
+        if (error.message.toLowerCase().includes("not enabled") || error.message.toLowerCase().includes("not be found")) {
+          setErrorMessage("Google Provider ยังไม่ได้เปิดใช้งานใน Supabase Dashboard (ไปที่ Authentication > Providers > Google แล้วเปิดใช้งานพร้อมกรอก Client ID/Secret)");
+        } else {
+          setErrorMessage(error.message);
+        }
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Google sign-in failed.");
@@ -506,7 +510,7 @@ export function SupabaseLoginFormClient({
         <button
           type="button"
           onClick={handleGoogleSignIn}
-          disabled={!browserClient || isGoogleSubmitting || isSubmitting}
+          disabled={isGoogleSubmitting || isSubmitting}
           className="inline-flex min-h-11 items-center justify-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50"
         >
           <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
@@ -528,7 +532,7 @@ export function SupabaseLoginFormClient({
             />
           </svg>
           <span>
-            {isGoogleSubmitting ? "Connecting Google..." : "Google Cloud Healthcare"}
+            {isGoogleSubmitting ? "Connecting Google..." : "Continue with Google • บัญชี Google"}
           </span>
         </button>
       </div>

@@ -41,13 +41,22 @@ export function AppShell({
   const supabaseSession = useSupabaseAccessSession();
 
   useEffect(() => {
+    // If returning from an OAuth callback (?code=... or #access_token=...), wait for Supabase to exchange token
+    if (typeof window !== "undefined") {
+      const search = window.location.search;
+      const hash = window.location.hash;
+      if (search.includes("code=") || hash.includes("access_token=")) {
+        return;
+      }
+    }
+
     // If user is completely unauthenticated on the client, redirect directly to /login
     const restored = loadOrRestoreSupabaseAccessSession();
     const mock = loadMockAccessSession();
     if (!mock && (!restored || restored.stage === "signed_out")) {
       router.replace("/login");
     }
-  }, [router]);
+  }, [router, supabaseSession]);
 
   const gateRequired = confirmedRuntimeSettings?.auth_mode === "mock" && session?.aal === "aal1";
   const mfaRequired = confirmedRuntimeSettings?.access_model?.required_app_aal === "aal2";

@@ -86,10 +86,43 @@ export function saveSupabaseBrowserAuthSnapshot(snapshot: SupabaseBrowserAuthSna
   window.dispatchEvent(new CustomEvent(SUPABASE_BROWSER_AUTH_EVENT, { detail: snapshot }));
 }
 
+export function decodeAalFromJwt(token: string): "aal1" | "aal2" | null {
+  try {
+    const [, payloadSegment] = token.split(".");
+    if (!payloadSegment) {
+      return null;
+    }
+    const normalized = payloadSegment
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
+    const decodedStr =
+      typeof window !== "undefined" && typeof window.atob === "function"
+        ? window.atob(normalized)
+        : Buffer.from(normalized, "base64").toString("utf-8");
+    const payload = JSON.parse(decodedStr) as { aal?: unknown };
+    return payload.aal === "aal1" || payload.aal === "aal2" ? payload.aal : null;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveAalFromSession(session: SupabaseSessionLike): "aal1" | "aal2" | null {
+  if (session?.aal === "aal1" || session?.aal === "aal2") {
+    return session.aal;
+  }
+  if (session?.access_token) {
+    const decoded = decodeAalFromJwt(session.access_token);
+    if (decoded) return decoded;
+  }
+  return null;
+}
+
 export function buildSupabaseBrowserAuthSnapshotFromSession(
   session: SupabaseSessionLike,
 ): SupabaseBrowserAuthSnapshot | null {
-  if (!session?.user?.id || !session.user.email || (session.aal !== "aal1" && session.aal !== "aal2")) {
+  const resolvedAal = resolveAalFromSession(session);
+  if (!session?.user?.id || !session.user.email || !resolvedAal) {
     return null;
   }
 
@@ -135,7 +168,7 @@ export function buildSupabaseBrowserAuthSnapshotFromSession(
     userId: session.user.id,
     email: session.user.email,
     displayName,
-    aal: session.aal,
+    aal: resolvedAal,
     appMetadata: {
       role,
       membership_active: membershipActive,
