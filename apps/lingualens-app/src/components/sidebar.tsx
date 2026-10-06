@@ -11,6 +11,15 @@ import { getWorkbenchNavigation } from "@/services/navigation/workbench-navigati
 
 export type ShellActive = "Today" | "Dashboard" | "Cases" | "Session" | "Reports" | "Settings";
 
+const NAV_SUBTITLES: Record<string, string> = {
+  Today: "งานวันนี้",
+  Dashboard: "ภาพรวมคลินิก",
+  Cases: "จัดการเคส",
+  Session: "ห้องวิเคราะห์",
+  Reports: "รายงาน & PDF",
+  Settings: "ตั้งค่า",
+};
+
 export function Sidebar({
   active,
   activeSessionId,
@@ -35,10 +44,18 @@ export function Sidebar({
     window.location.assign("/");
   }
 
-  const navItems = getWorkbenchNavigation(activeSessionId, activeCaseId).map((item) => ({
+  const allNavItems = getWorkbenchNavigation(activeSessionId, activeCaseId).map((item) => ({
     ...item,
     active: item.active === active,
   }));
+
+  // Group into Core Workflow and Workspace Management
+  const coreWorkflowItems = allNavItems.filter((i) =>
+    ["Dashboard", "Cases", "Session", "Reports"].includes(i.label)
+  );
+  const workspaceItems = allNavItems.filter((i) =>
+    ["Today", "Settings"].includes(i.label)
+  );
 
   return (
     <aside
@@ -47,8 +64,11 @@ export function Sidebar({
       }`}
     >
       {/* Brand */}
-      <div className="px-5 pb-3 pt-5">
+      <div className="px-5 pb-2 pt-5">
         <PasaScopeLogo size="md" href="/dashboard" />
+        <p className="mt-1.5 text-[11px] font-medium text-[color:var(--color-text-subtle)]">
+          ระบบประเมินพัฒนาการทางภาษาเด็ก
+        </p>
       </div>
 
       {/* New Session Action */}
@@ -64,30 +84,96 @@ export function Sidebar({
       </div>
 
       {/* Navigation Sections */}
-      <nav aria-label="Primary navigation" className="flex-1 space-y-1.5 overflow-y-auto px-3 py-2 text-sm">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onClose}
-              aria-current={item.active ? "page" : undefined}
-              className={`flex min-h-11 items-center gap-3 rounded-xl px-3.5 py-2.5 transition ${
-                item.active
-                  ? "bg-[color:var(--color-pasa-teal-soft)] font-bold text-[color:var(--color-pasa-teal)] border border-[color:var(--color-pasa-teal-border)] shadow-2xs"
-                  : "text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-text-strong)] font-medium"
-              }`}
-            >
-              <Icon
-                className={`h-4 w-4 ${
-                  item.active ? "text-[color:var(--color-pasa-teal)] stroke-[2.2]" : "text-[color:var(--color-text-subtle)]"
-                }`}
-              />
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
+      <nav aria-label="Primary navigation" className="flex-1 space-y-4 overflow-y-auto px-3 py-2 text-sm">
+        {/* Core Workflow Section */}
+        <div>
+          <p className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-[color:var(--color-text-subtle)]">
+            ขั้นตอนหลัก (Workflow)
+          </p>
+          <div className="space-y-1">
+            {coreWorkflowItems.map((item) => {
+              const Icon = item.icon;
+              const sub = NAV_SUBTITLES[item.label] ?? "";
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onClose}
+                  aria-current={item.active ? "page" : undefined}
+                  className={`flex min-h-11 items-center gap-3 rounded-xl px-3.5 py-2.5 transition ${
+                    item.active
+                      ? "bg-[color:var(--color-pasa-teal-soft)] font-bold text-[color:var(--color-pasa-teal)] border border-[color:var(--color-pasa-teal-border)] shadow-2xs"
+                      : "text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-text-strong)] font-medium"
+                  }`}
+                >
+                  <Icon
+                    className={`h-4 w-4 shrink-0 ${
+                      item.active ? "text-[color:var(--color-pasa-teal)] stroke-[2.2]" : "text-[color:var(--color-text-subtle)]"
+                    }`}
+                  />
+                  <span className="flex-1">{item.label}</span>
+                  {sub ? (
+                    <span
+                      aria-hidden="true"
+                      className={`text-[11px] font-normal transition ${
+                        item.active
+                          ? "text-[color:var(--color-pasa-teal)] opacity-80"
+                          : "text-[color:var(--color-text-subtle)] opacity-60"
+                      }`}
+                    >
+                      {sub}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Workspace Management Section */}
+        <div>
+          <p className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-[color:var(--color-text-subtle)]">
+            การจัดการ (Management)
+          </p>
+          <div className="space-y-1">
+            {workspaceItems.map((item) => {
+              const Icon = item.icon;
+              const sub = NAV_SUBTITLES[item.label] ?? "";
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={onClose}
+                  aria-current={item.active ? "page" : undefined}
+                  className={`flex min-h-11 items-center gap-3 rounded-xl px-3.5 py-2.5 transition ${
+                    item.active
+                      ? "bg-[color:var(--color-pasa-teal-soft)] font-bold text-[color:var(--color-pasa-teal)] border border-[color:var(--color-pasa-teal-border)] shadow-2xs"
+                      : "text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-surface)] hover:text-[color:var(--color-text-strong)] font-medium"
+                  }`}
+                >
+                  <Icon
+                    className={`h-4 w-4 shrink-0 ${
+                      item.active ? "text-[color:var(--color-pasa-teal)] stroke-[2.2]" : "text-[color:var(--color-text-subtle)]"
+                    }`}
+                  />
+                  <span className="flex-1">{item.label}</span>
+                  {sub ? (
+                    <span
+                      aria-hidden="true"
+                      className={`text-[11px] font-normal transition ${
+                        item.active
+                          ? "text-[color:var(--color-pasa-teal)] opacity-80"
+                          : "text-[color:var(--color-text-subtle)] opacity-60"
+                      }`}
+                    >
+                      {sub}
+                    </span>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       </nav>
 
       {/* User / Settings / Logout Footer */}
@@ -102,17 +188,9 @@ export function Sidebar({
             <span>Log out</span>
           </button>
         ) : null}
-      </div>
 
-      <div className="hidden p-3 lg:block">
-        <div className="rounded-xl border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] p-3.5 text-xs text-[color:var(--color-pasa-teal)] shadow-2xs">
-          <div className="flex items-center gap-1.5 font-bold">
-            <span className="h-2 w-2 rounded-full bg-[color:var(--color-scope-coral)] animate-pulse" />
-            <span>Clinical Safety</span>
-          </div>
-          <p className="mt-1 text-xs leading-relaxed text-[color:var(--color-text-muted)]">
-            Decision-support research prototype. Therapist review required.
-          </p>
+        <div className="px-3.5 py-1 text-[11px] text-[color:var(--color-text-subtle)]">
+          <span>PasaScope v1.7.0</span>
         </div>
       </div>
     </aside>

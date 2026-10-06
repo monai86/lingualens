@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.7.1] - 2026-10-07
+
+### Changed
+- **Workflow & Dashboard Streamlining** (`apps/lingualens-app/`):
+  - Streamlined therapist interface around 4 core workflow pillars: Executive Dashboard, Cases Management, Assessment Studio, and Reports / Clinical PDF Export.
+  - Reorganized sidebar navigation into clean, logical sections (Core Workflow vs Workspace Management) with bilingual indicators.
+  - Added robust demo fallback handling for Dashboard and Assessment V2 workspaces, preventing blank error screens when backend services are offline.
+  - Added Quick Demo transcript templates ("ตัวอย่างภาษาไทย" / "English Sample") in Session Intake for immediate demonstration.
+  - Enabled active Print / Export PDF Clinical button in Session Report view and added direct A4 PDF preview access from the Reports workspace.
+
 ## [v1.7.0] - 2026-10-04
 
 ### Added

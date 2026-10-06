@@ -1,7 +1,7 @@
 "use client";
 import { useMemo } from "react";
 import Link from "next/link";
-import { Clipboard, Download, Send, ShieldCheck } from "lucide-react";
+import { Clipboard, Download, Printer, Send, ShieldCheck } from "lucide-react";
 import { PrimaryActionButton, SafetyNote, WorkspacePanel } from "@/components/workbench-ui";
 import { BackendAvailabilityBanner } from "@/components/backend-availability-banner";
 import { SessionContextHeader } from "@/features/sessions/components/session-context-header";
@@ -513,7 +513,24 @@ function ReportSummaryIdentityScope({ caseId, sessionId, transcriptId, reportId 
           <div className="mt-2 flex flex-wrap gap-2">
             <button className="inline-flex items-center gap-2 rounded-[var(--radius-card)] border border-line bg-[color:var(--color-surface-reading)] px-4 py-3 text-sm font-bold text-clinical disabled:opacity-50" disabled={!isFinalized || signedActionsBlocked} onClick={() => void handleExport("markdown")}><Download size={18} aria-hidden="true" />Export Markdown</button>
             <button className="inline-flex items-center gap-2 rounded-[var(--radius-card)] border border-line bg-[color:var(--color-surface-reading)] px-4 py-3 text-sm font-bold text-clinical disabled:opacity-50" disabled={!isFinalized || signedActionsBlocked} onClick={() => void handleExport("html")}><Download size={18} aria-hidden="true" />Export HTML</button>
-            <button className="inline-flex items-center gap-2 rounded-[var(--radius-card)] border border-line bg-[color:var(--color-surface-reading)] px-4 py-3 text-sm font-bold text-slate-500 disabled:opacity-60" disabled>Export PDF later</button>
+            {isFinalized ? (
+              <Link
+                href={`/reports/preview${state.backendReportId ? `?report_id=${encodeURIComponent(state.backendReportId)}` : ""}`}
+                target="_blank"
+                className="inline-flex items-center gap-2 rounded-[var(--radius-card)] border border-emerald-600 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 hover:bg-emerald-100 transition shadow-sm"
+                title="Print or Save as PDF with Thai Clinical Layout"
+              >
+                <Printer size={18} aria-hidden="true" />
+                Print / Export PDF (Clinical)
+              </Link>
+            ) : (
+              <button
+                className="inline-flex items-center gap-2 rounded-[var(--radius-card)] border border-line bg-[color:var(--color-surface-reading)] px-4 py-3 text-sm font-bold text-slate-500 disabled:opacity-60"
+                disabled
+              >
+                Export PDF later
+              </button>
+            )}
             <button className="inline-flex items-center gap-2 rounded-[var(--radius-card)] border border-line bg-[color:var(--color-surface-reading)] px-4 py-3 text-sm font-bold text-clinical disabled:opacity-50" onClick={handleExportCha} disabled={!state.transcriptAttested || state.transcriptReviewStatus !== "reviewed"}><Download size={18} aria-hidden="true" />Export reviewed .cha</button>
           </div>
         </div>

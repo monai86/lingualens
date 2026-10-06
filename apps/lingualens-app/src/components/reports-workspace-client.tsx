@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Printer } from "lucide-react";
 
 import { BackendAvailabilityBanner, useBackendAvailability } from "@/components/backend-availability-banner";
 import { Skeleton } from "@/components/skeleton";
@@ -42,13 +42,25 @@ export function ReportsWorkspaceClient() {
         <div>
           <h1 className="text-3xl font-bold text-ink">Reports</h1>
           <p className="mt-2 max-w-[70ch] text-[color:var(--color-text-muted)]">
-            Find persisted drafts and signed snapshots, then continue work in the canonical Session Report workspace.
+            รายการร่างรายงานผลการประเมินทางคลินิก และประวัติรายงานที่ได้รับการรับรองแล้ว
           </p>
         </div>
-        <Link href="/cases?intent=start-session" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[var(--radius-card)] border border-line bg-[color:var(--color-surface-reading)] px-4 text-sm font-semibold text-clinical">
-          Start session
-          <ExternalLink size={16} aria-hidden="true" />
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/reports/preview"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[color:var(--color-pasa-teal)] px-4 text-sm font-semibold text-white shadow-xs hover:bg-[color:var(--color-pasa-teal-hover)] transition"
+          >
+            <Printer size={16} aria-hidden="true" />
+            <span>พิมพ์รายงาน A4 / PDF</span>
+          </Link>
+          <Link
+            href="/cases?intent=start-session"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] px-4 text-sm font-semibold text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-surface-muted)] transition"
+          >
+            <span>Start session</span>
+            <ExternalLink size={16} aria-hidden="true" />
+          </Link>
+        </div>
       </header>
 
       {loading && !backendUnavailable ? (
@@ -65,13 +77,24 @@ export function ReportsWorkspaceClient() {
       ) : null}
 
       {!loading && !backendUnavailable && reports.length === 0 ? (
-        <WorkspacePanel className="p-5">
-          <p className="font-semibold text-ink">No persisted reports yet.</p>
-          <p className="mt-2 text-sm text-slate-600">Create or open a session, review the transcript, and generate a draft report from Session Workspace.</p>
-          <Link href="/cases?intent=start-session" className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-clinical">
-            Choose a case
-            <ExternalLink size={16} aria-hidden="true" />
-          </Link>
+        <WorkspacePanel className="p-6">
+          <p className="font-semibold text-ink text-base">ยังไม่มีประวัติรายงานที่บันทึกไว้ (No persisted reports yet)</p>
+          <p className="mt-1 text-sm text-slate-600">
+            ท่านสามารถสร้างรายงานใหม่จากการตรวจประเมิน หรือเปิดดูตัวอย่างใบคะแนนและพิมพ์ออก PDF ได้ทันที
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Link
+              href="/reports/preview"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[color:var(--color-pasa-teal)] px-4 text-sm font-semibold text-white shadow-xs hover:bg-[color:var(--color-pasa-teal-hover)] transition"
+            >
+              <Printer size={16} />
+              <span>เปิดดูตัวอย่างใบคะแนน (Preview Clinical Report)</span>
+            </Link>
+            <Link href="/cases?intent=start-session" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--color-border)] bg-white px-4 text-sm font-semibold text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-surface-muted)] transition">
+              <span>Choose a case</span>
+              <ExternalLink size={16} aria-hidden="true" />
+            </Link>
+          </div>
         </WorkspacePanel>
       ) : null}
 

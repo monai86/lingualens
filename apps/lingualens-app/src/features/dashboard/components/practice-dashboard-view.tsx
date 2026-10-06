@@ -1,7 +1,18 @@
-"use client";
-
 import Link from "next/link";
-import { Activity, FileCheck2, FileCode, FolderOpen, ListChecks, MessagesSquare, Sparkles } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  AudioLines,
+  CheckCircle2,
+  FileCheck2,
+  FileCode,
+  FolderOpen,
+  LayoutDashboard,
+  ListChecks,
+  MessagesSquare,
+  Printer,
+  Sparkles,
+} from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
@@ -28,48 +39,168 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
   return (
     <div className="min-w-0 space-y-6">
       <PageHeader
-        eyebrow="Clinical Decision Support Workbench"
+        eyebrow="Clinical Overview"
         title="Dashboard"
-        description="A unified clinical overview across child caseloads, TalkBank transcript review, 15+ speech-language features, Spider Diagram norm comparisons, and SHA-256 attested reports."
+        description="ภาพรวมเคสที่กำลังดูแล การวิเคราะห์ตัวอย่างภาษา (LSA) และความก้าวหน้าตามเกณฑ์พัฒนาการ"
         meta={[
-          `Organization ${summary.organization_id}`,
-          summary.generated_at ? `Updated ${new Date(summary.generated_at).toLocaleDateString()}` : "",
+          summary.organization_id ? `Organization: ${summary.organization_id}` : "",
+          summary.generated_at ? `อัปเดต ${new Date(summary.generated_at).toLocaleDateString("th-TH")}` : "",
         ].filter(Boolean)}
       />
 
-      {/* Quick Launchpad Hero */}
-      <div className="rounded-[var(--radius-panel)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] p-6 shadow-xs">
-        <div className="flex flex-wrap items-center justify-between gap-5">
-          <div className="max-w-2xl">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--color-pasa-teal-soft)] border border-[color:var(--color-pasa-teal-border)] px-3 py-1 text-xs font-semibold text-[color:var(--color-pasa-teal)]">
-              <span className="h-2 w-2 rounded-full bg-[color:var(--color-scope-coral)]" />
-              PasaScope Clinical Suite (ภาษา-สโคป) v1.7.0
-            </span>
-            <h2 className="mt-3 text-xl font-bold tracking-tight text-[color:var(--color-text-strong)] sm:text-2xl">
-              Speech-Language Assessment &amp; Decision Support
+      {/* 4 Core Pillars Architecture & Quick Action Cards */}
+      <section aria-label="Core workflow pillars" className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] p-6 shadow-2xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[color:var(--color-border)]/60">
+          <div>
+            <h2 className="text-xl font-bold tracking-tight text-[color:var(--color-text-strong)]">
+              ขั้นตอนการทำงาน
             </h2>
-            <p className="mt-2 text-sm text-[color:var(--color-text-muted)] leading-relaxed">
-              รองรับการนำเข้าไฟล์เสียง (.wav/.mp3), ไฟล์ TalkBank (.cha), สตูดิโอตรวจคำพูด Dual-Mode, กราฟใยแมงมุม (Spider Diagram) เทียบเกณฑ์สมวัย 100%, และร่างรายงานคลินิกอ้างอิงข้อมูลจริง
+            <p className="text-xs text-[color:var(--color-text-muted)] mt-0.5">
+              เข้าถึง 4 ขั้นตอนหลักของระบบเพื่อเริ่มการประเมินหรือดูผลสรุป
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href="/sessions/session_demo_001?view=transcript"
-              className="flex min-h-11 items-center gap-2 rounded-[var(--radius-card)] bg-[color:var(--color-pasa-teal)] px-4 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-[color:var(--color-pasa-teal-hover)] transition-all"
-            >
-              <FileCode className="h-4 w-4" />
-              <span>Open TalkBank Studio</span>
-            </Link>
+          <div className="flex items-center gap-2">
             <Link
               href="/sessions/session_demo_001?view=findings"
-              className="flex min-h-11 items-center gap-2 rounded-[var(--radius-card)] border border-[color:var(--color-border)] bg-[color:var(--color-surface-strong)] px-4 py-2.5 text-sm font-semibold text-[color:var(--color-text-strong)] shadow-xs hover:border-[color:var(--color-pasa-teal)] hover:bg-[color:var(--color-pasa-teal-soft)] transition-all"
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[color:var(--color-pasa-teal)] px-4 text-xs font-bold text-white shadow-xs hover:bg-[color:var(--color-pasa-teal-hover)] transition"
             >
-              <Activity className="h-4 w-4 text-[color:var(--color-pasa-teal)]" />
-              <span>View Spider Diagram</span>
+              <Activity className="h-3.5 w-3.5" />
+              <span>ทดลองดูผลวิเคราะห์ตัวอย่าง (Demo Case)</span>
             </Link>
           </div>
         </div>
-      </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Pillar 1: Dashboard */}
+          <div className="flex flex-col justify-between rounded-xl border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)]/50 p-4 transition hover:shadow-xs">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--color-pasa-teal)] text-white shadow-2xs">
+                  <LayoutDashboard className="h-4 w-4" />
+                </span>
+                <span className="text-[11px] font-bold text-[color:var(--color-pasa-teal)] bg-white px-2 py-0.5 rounded-full border border-[color:var(--color-pasa-teal-border)]">
+                  หน้าปัจจุบัน
+                </span>
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-[color:var(--color-text-strong)]">
+                1. แดชบอร์ดภาพรวม
+              </h3>
+              <p className="mt-1 text-xs text-[color:var(--color-text-muted)] leading-relaxed">
+                ดูสถิติเคสที่กำลังดูแล และวิเคราะห์กราฟแนวโน้มพัฒนาการทางภาษา (MLU, TTR)
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t border-[color:var(--color-border)]/50">
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--color-pasa-teal)]">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>กำลังแสดงผลอยู่ด้านล่าง</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Pillar 2: Cases */}
+          <div className="flex flex-col justify-between rounded-xl border border-[color:var(--color-border)] bg-white p-4 transition hover:border-[color:var(--color-pasa-teal-border)] hover:shadow-xs">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--color-surface-muted)] text-[color:var(--color-pasa-teal)]">
+                  <FolderOpen className="h-4 w-4" />
+                </span>
+                <span className="text-[11px] font-bold text-[color:var(--color-text-subtle)] bg-[color:var(--color-surface-muted)] px-2 py-0.5 rounded-full">
+                  จัดการเด็ก
+                </span>
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-[color:var(--color-text-strong)]">
+                2. จัดการข้อมูลเคส
+              </h3>
+              <p className="mt-1 text-xs text-[color:var(--color-text-muted)] leading-relaxed">
+                ค้นหาเคส ตรวจสอบอายุ เพศ ข้อมูลพัฒนาการ และหนังสือยินยอมของผู้ปกครอง
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t border-[color:var(--color-border)]/50">
+              <Link
+                href="/cases"
+                className="inline-flex min-h-9 items-center justify-between w-full rounded-lg bg-[color:var(--color-surface-muted)]/70 px-3 text-xs font-bold text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-pasa-teal-soft)] hover:text-[color:var(--color-pasa-teal)] transition"
+              >
+                <span>ไปที่หน้าเคสทั้งหมด</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+
+          {/* Pillar 3: Studio */}
+          <div className="flex flex-col justify-between rounded-xl border border-[color:var(--color-border)] bg-white p-4 transition hover:border-[color:var(--color-pasa-teal-border)] hover:shadow-xs">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--color-scope-coral-soft)] text-[color:var(--color-scope-coral)]">
+                  <AudioLines className="h-4 w-4" />
+                </span>
+                <span className="text-[11px] font-bold text-[color:var(--color-scope-coral)] bg-[color:var(--color-scope-coral-soft)] px-2 py-0.5 rounded-full border border-[color:var(--color-scope-coral-border)]">
+                  วิเคราะห์ LSA
+                </span>
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-[color:var(--color-text-strong)]">
+                3. สตูดิโอวิเคราะห์ภาษา
+              </h3>
+              <p className="mt-1 text-xs text-[color:var(--color-text-muted)] leading-relaxed">
+                นำเข้าไฟล์เสียง/TalkBank (.cha) คำนวณ 15 ดัชนีภาษา และสร้าง Spider Diagram
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t border-[color:var(--color-border)]/50 flex flex-col gap-1.5">
+              <Link
+                href="/sessions/session_demo_001?view=findings"
+                className="inline-flex min-h-9 items-center justify-between w-full rounded-lg bg-[color:var(--color-surface-muted)]/70 px-3 text-xs font-bold text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-pasa-teal-soft)] hover:text-[color:var(--color-pasa-teal)] transition"
+              >
+                <span>ดูกราฟใยแมงมุม (Spider)</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+              <Link
+                href="/sessions/session_demo_001?view=transcript"
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--color-text-muted)] hover:text-[color:var(--color-pasa-teal)] px-1"
+              >
+                <FileCode className="h-3 w-3" />
+                <span>เปิดห้องตรวจ TalkBank (.cha)</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Pillar 4: Reports */}
+          <div className="flex flex-col justify-between rounded-xl border border-[color:var(--color-border)] bg-white p-4 transition hover:border-[color:var(--color-pasa-teal-border)] hover:shadow-xs">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--color-warm-butter-soft)] text-[color:var(--color-pasa-teal)]">
+                  <FileCheck2 className="h-4 w-4" />
+                </span>
+                <span className="text-[11px] font-bold text-[color:var(--color-pasa-teal)] bg-[color:var(--color-warm-butter-soft)] px-2 py-0.5 rounded-full border border-[color:var(--color-warm-butter-border)]">
+                  รายงานคลินิก
+                </span>
+              </div>
+              <h3 className="mt-3 text-sm font-bold text-[color:var(--color-text-strong)]">
+                4. รายงานผล &amp; พิมพ์ PDF
+              </h3>
+              <p className="mt-1 text-xs text-[color:var(--color-text-muted)] leading-relaxed">
+                สรุปข้อค้นพบทางภาษา ตรวจสอบผล และพิมพ์รายงานแบบมาตรฐานสำหรับอาจารย์
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t border-[color:var(--color-border)]/50 flex flex-col gap-1.5">
+              <Link
+                href="/reports/preview"
+                className="inline-flex min-h-9 items-center justify-between w-full rounded-lg bg-[color:var(--color-surface-muted)]/70 px-3 text-xs font-bold text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-pasa-teal-soft)] hover:text-[color:var(--color-pasa-teal)] transition"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>พิมพ์ใบคะแนน / PDF</span>
+                </span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+              <Link
+                href="/reports"
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--color-text-muted)] hover:text-[color:var(--color-pasa-teal)] px-1"
+              >
+                <span>ดูประวัติรายงานทั้งหมด</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section aria-labelledby="dashboard-stats" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <h2 id="dashboard-stats" className="sr-only">

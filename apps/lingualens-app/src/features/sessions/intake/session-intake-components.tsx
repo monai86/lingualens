@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { CheckCircle2, ClipboardPaste, FileText, ShieldCheck, UploadCloud } from "lucide-react";
+import { CheckCircle2, ClipboardPaste, FileText, ShieldCheck, Sparkles, UploadCloud } from "lucide-react";
 
 import { PrimaryActionButton, WorkspacePanel } from "@/components/workbench-ui";
 import { resolveSessionHref } from "@/features/sessions/state/session-view";
@@ -91,6 +91,34 @@ export function ReviewSummaryCard({
 }
 
 
+const SAMPLE_THAI_TRANSCRIPT = [
+  "@Begin",
+  "@Languages:\ttha",
+  "@Participants:\tCHI น้องมิน Target_Child, THER นักบำบัด Investigator",
+  "*THER:\tวันนี้หนูเล่นอะไรมาบ้างครับ?",
+  "*CHI:\tหนู เล่น รถ ไฟ คัน ใหญ่ สี แดง ครับ.",
+  "*THER:\tรถไฟวิ่งเร็วไหมนะ?",
+  "*CHI:\tวิ่ง เร็ว มาก เลย ครับ.",
+  "*THER:\tในรถไฟมีใครนั่งอยู่บ้าง?",
+  "*CHI:\tมี คุณ พ่อ คุณ แม่ แล้ว ก็ น้อง มิน ครับ.",
+  "*THER:\tเก่งมากครับ แล้วจะไปเที่ยวที่ไหนกันต่อ?",
+  "*CHI:\tไป เที่ยว สวน สัตว์ ดู ช้าง ครับ.",
+  "@End"
+].join("\n");
+
+const SAMPLE_ENG_TRANSCRIPT = [
+  "@Begin",
+  "@Languages:\teng",
+  "@Participants:\tCHI Target_Child, THER Investigator",
+  "*THER:\tWhat do you see?",
+  "*CHI:\tI see a big blue block.",
+  "*THER:\tWhat color is it?",
+  "*CHI:\tIt is blue.",
+  "*THER:\tCan you ask me a question?",
+  "*CHI:\tWhat color do you like?",
+  "@End"
+].join("\n");
+
 export function SourceInputPanel({
   mode,
   draftTranscript,
@@ -130,9 +158,33 @@ export function SourceInputPanel({
     const source = mode === "cha" ? "cha-upload" : "paste-transcript";
     return (
       <WorkspacePanel className="p-5">
-        <div className="mb-3 flex items-center gap-2">
-          {mode === "cha" ? <FileText size={22} aria-hidden="true" className="text-blossom" /> : <ClipboardPaste size={22} aria-hidden="true" className="text-aqua" />}
-          <h2 className="font-bold text-ink">{mode === "cha" ? "Upload .cha" : "Paste transcript"}</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {mode === "cha" ? <FileText size={22} aria-hidden="true" className="text-blossom" /> : <ClipboardPaste size={22} aria-hidden="true" className="text-aqua" />}
+            <h2 className="font-bold text-ink">{mode === "cha" ? "Upload .cha" : "Paste transcript"}</h2>
+          </div>
+          {mode === "paste" && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-500 font-medium">Quick Demo:</span>
+              <button
+                type="button"
+                onClick={() => onDraftChange(SAMPLE_THAI_TRANSCRIPT)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 font-semibold hover:bg-emerald-100 transition shadow-sm"
+                title="Load sample Thai conversation for demonstration"
+              >
+                <Sparkles size={13} aria-hidden="true" />
+                ตัวอย่างภาษาไทย
+              </button>
+              <button
+                type="button"
+                onClick={() => onDraftChange(SAMPLE_ENG_TRANSCRIPT)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-slate-300 bg-slate-50 text-slate-700 font-semibold hover:bg-slate-100 transition"
+                title="Load sample English conversation"
+              >
+                English Sample
+              </button>
+            </div>
+          )}
         </div>
         {mode === "cha" ? (
           <>

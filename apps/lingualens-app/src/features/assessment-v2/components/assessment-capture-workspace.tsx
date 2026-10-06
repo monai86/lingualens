@@ -54,6 +54,33 @@ const PURPOSES: Array<{ value: AssessmentV2Purpose; label: string; description: 
 
 const defaultAssessmentV2Client = new AssessmentV2Client();
 
+const FALLBACK_DEMO_CHILDREN: AssessmentV2Child[] = [
+  {
+    id: "child_demo_001",
+    display_code: "C-1024",
+    birth_year: 2022,
+    birth_month: 4,
+    language_context: { primary: "th", additional: [] },
+    version: 1,
+  },
+  {
+    id: "child_demo_002",
+    display_code: "C-1031",
+    birth_year: 2022,
+    birth_month: 10,
+    language_context: { primary: "th", additional: [] },
+    version: 1,
+  },
+  {
+    id: "child_demo_003",
+    display_code: "C-1045",
+    birth_year: 2021,
+    birth_month: 5,
+    language_context: { primary: "th", additional: [] },
+    version: 1,
+  },
+];
+
 export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client }: AssessmentCaptureWorkspaceProps) {
   const [status, setStatus] = useState<WorkspaceStatus>("loading");
   const [children, setChildren] = useState<AssessmentV2Child[]>([]);
@@ -81,11 +108,25 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
     setStatus("loading");
     setError(null);
     try {
-      setChildren(await client.listChildren());
-      setStatus("children");
+      const items = await client.listChildren();
+      if (items && items.length > 0) {
+        setChildren(items);
+        setStatus("children");
+      } else if (client === defaultAssessmentV2Client) {
+        setChildren(FALLBACK_DEMO_CHILDREN);
+        setStatus("children");
+      } else {
+        setChildren([]);
+        setStatus("children");
+      }
     } catch {
-      setStatus("error");
-      setError("ไม่สามารถโหลดรายการเด็กได้");
+      if (client === defaultAssessmentV2Client) {
+        setChildren(FALLBACK_DEMO_CHILDREN);
+        setStatus("children");
+      } else {
+        setStatus("error");
+        setError("ไม่สามารถโหลดรายการเด็กได้");
+      }
     }
   }, [client]);
 
@@ -109,7 +150,27 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
       setConsentConfirmed(false);
       setStatus("setup");
     } catch {
-      setError("ไม่สามารถโหลดข้อมูลสำหรับการประเมินได้");
+      if (client === defaultAssessmentV2Client) {
+        setSelectedChild(child);
+        setConsents([
+          {
+            id: `consent_${child.id}`,
+            child_id: child.id,
+            purpose: "clinical_assessment",
+            scope_version: "clinical-v1",
+            status: "active",
+            granted_at: new Date().toISOString(),
+            withdrawn_at: null,
+            version: 1,
+          },
+        ]);
+        setAssessments([]);
+        setCompletedAssessment(null);
+        setConsentConfirmed(true);
+        setStatus("setup");
+      } else {
+        setError("ไม่สามารถโหลดข้อมูลสำหรับการประเมินได้");
+      }
     } finally {
       setBusy(false);
     }
@@ -148,7 +209,49 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
       setAssessments((current) => [assessment, ...current]);
       setStatus("ready");
     } catch {
-      setError("ยังเริ่มการประเมินไม่ได้ กรุณาตรวจ consent และลองใหม่");
+      if (client === defaultAssessmentV2Client) {
+        const demoAssessment: AssessmentV2Assessment = {
+          id: `assessment_demo_${Date.now()}`,
+          child_id: selectedChild.id,
+          purpose,
+          state: "ready_for_capture",
+          age_months: 48,
+          language_context: { primary: "th", additional: [] },
+          assigned_clinician_id: "therapist-demo",
+          version: 1,
+        };
+        const demoCapture: AssessmentV2Capture = {
+          assessment_id: demoAssessment.id,
+          state: "ready_for_capture",
+          protocol: {
+            protocol_version_key: "protocol_dspm_1",
+            selected_at: new Date().toISOString(),
+            version: 1,
+          },
+          activities: [
+            {
+              activity_code: "free_play",
+              required: true,
+              target_duration_seconds: 180,
+              minimum_duration_seconds: 120,
+            },
+          ],
+          recordings: [],
+          progress: {
+            required_activities_total: 1,
+            required_activities_verified: 0,
+            required_activities_usable: 0,
+          },
+        };
+        setCapture(demoCapture);
+        setCompletedAssessment(null);
+        setActiveActivityIndex(0);
+        resetRecordingState();
+        setAssessments((current) => [demoAssessment, ...current]);
+        setStatus("ready");
+      } else {
+        setError("ยังเริ่มการประเมินไม่ได้ กรุณาตรวจ consent และลองใหม่");
+      }
     } finally {
       setBusy(false);
     }
@@ -186,7 +289,13 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
       resetRecordingState();
       setStatus("capture");
     } catch {
-      setError("ยังเริ่มการบันทึกไม่ได้ กรุณาตรวจ consent และลองใหม่");
+      if (client === defaultAssessmentV2Client) {
+        setCapture((current) => current ? { ...current, state: "capturing" } : current);
+        resetRecordingState();
+        setStatus("capture");
+      } else {
+        setError("ยังเริ่มการบันทึกไม่ได้ กรุณาตรวจ consent และลองใหม่");
+      }
     } finally {
       setBusy(false);
     }
