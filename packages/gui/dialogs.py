@@ -1,4 +1,4 @@
-"""Modal dialog windows factory for LinguaLens clinical desktop application."""
+"""Modal dialog windows factory for PasaScope clinical desktop application."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class ClinicalDialogFactory:
         on_success: Callable[[dict[str, Any]], None] | None = None,
     ) -> tk.Toplevel:
         win = tk.Toplevel(parent)
-        win.title("Create Child Case — LinguaLens")
+        win.title("Create Child Case — PasaScope")
         win.geometry("420x280")
         win.minsize(380, 240)
         win.bind("<Escape>", lambda e: win.destroy())
@@ -77,7 +77,7 @@ class ClinicalDialogFactory:
         on_success: Callable[[dict[str, Any]], None] | None = None,
     ) -> tk.Toplevel:
         win = tk.Toplevel(parent)
-        win.title("Start Therapy Session — LinguaLens")
+        win.title("Start Therapy Session — PasaScope")
         win.geometry("400x220")
         win.minsize(360, 200)
         win.bind("<Escape>", lambda e: win.destroy())
@@ -124,7 +124,7 @@ class ClinicalDialogFactory:
         title: str = "Ingesting Audio File...",
     ) -> tuple[tk.Toplevel, ttk.Progressbar, ttk.Label]:
         dialog = tk.Toplevel(parent)
-        dialog.title("Processing Audio — LinguaLens")
+        dialog.title("Processing Audio — PasaScope")
         dialog.geometry("420x160")
         dialog.resizable(False, False)
         dialog.transient(parent)

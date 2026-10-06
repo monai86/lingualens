@@ -1,4 +1,4 @@
-"""Audio playback, waveform DSP computation, and scrubber timeline controller for LinguaLens."""
+"""Audio playback, waveform DSP computation, and scrubber timeline controller for PasaScope."""
 
 from __future__ import annotations
 
@@ -298,7 +298,7 @@ class AudioRecorder:
                 audio_data = np.zeros((int(self.sample_rate * dur), 1), dtype=np.float32)
 
             if not output_path:
-                fd, output_path = tempfile.mkstemp(prefix="lingualens_rec_", suffix=".wav")
+                fd, output_path = tempfile.mkstemp(prefix="pasascope_rec_", suffix=".wav")
                 os.close(fd)
 
             sf.write(output_path, audio_data, self.sample_rate)

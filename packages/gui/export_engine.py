@@ -343,7 +343,7 @@ class ClinicalExportEngine:
         )
 
         story = []
-        story.append(Paragraph("<b>✦ LinguaLens</b> — Clinical Speech-Language Assessment Report", style_title))
+        story.append(Paragraph("<b>✦ PasaScope</b> — Clinical Speech-Language Assessment Report", style_title))
         story.append(Paragraph("รายงานผลการประเมินพัฒนาการภาษาและการพูดทางคลินิก (Clinical Prototype)", style_sub))
         story.append(Spacer(1, 8))
 
@@ -422,7 +422,7 @@ class ClinicalExportEngine:
         sig_data = [
             [
                 Paragraph(f"<b>Clinician Sign-off:</b><br/>{signer}<br/>Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M')}", style_meta),
-                Paragraph(f"<b>Digital Integrity Hash (SHA-256):</b><br/>{sha}<br/><i>Sealed & Verified via LinguaLens Export Engine</i>", style_meta),
+                Paragraph(f"<b>Digital Integrity Hash (SHA-256):</b><br/>{sha}<br/><i>Sealed & Verified via PasaScope Export Engine</i>", style_meta),
             ]
         ]
         sig_tab = Table(sig_data, colWidths=[260, 260])

@@ -68,11 +68,13 @@ For standalone clinical workstation speech analysis:
 
 - **Desktop GUI Tool:**
   ```bash
-  python scripts/lingualens_gui.py
+  python scripts/pasascope_gui.py
+  # หรือ alias: python scripts/lingualens_gui.py
   ```
 - **Desktop TUI (Terminal UI):**
   ```bash
-  python scripts/lingualens_tui.py
+  python scripts/pasascope_tui.py
+  # หรือ alias: python scripts/lingualens_tui.py
   ```
   Supports live API mode and offline mock mode, V2 child profiles, multi-tier consent registration, and audio playback grant handling.
 

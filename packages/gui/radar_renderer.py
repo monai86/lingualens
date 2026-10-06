@@ -1,4 +1,4 @@
-"""Radar / Spider chart renderer for LinguaLens clinical developmental comparisons."""
+"""Radar / Spider chart renderer for PasaScope clinical developmental comparisons."""
 
 from __future__ import annotations
 

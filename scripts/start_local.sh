@@ -9,7 +9,7 @@ BLUE='\033[0;34m'
 YELLOW='\033[0;33m'
 NC='\033[0m'
 
-echo -e "${BLUE}=== Starting Local Speech Assessment App (Frontend + Backend) ===${NC}"
+echo -e "${BLUE}=== Starting Local PasaScope App (Frontend + Backend) ===${NC}"
 
 # 1. Setup local environment file for React App
 FRONTEND_DIR="apps/lingualens-app"

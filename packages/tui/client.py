@@ -33,11 +33,13 @@ from packages.tui.validation import (
     validate_consent_input,
 )
 
-DEFAULT_API_URL = os.environ.get("LINGUALENS_API_URL", "http://localhost:8000/api/v1")
+DEFAULT_API_URL = os.environ.get("PASASCOPE_API_URL") or os.environ.get(
+    "LINGUALENS_API_URL", "http://localhost:8000/api/v1"
+)
 
 
 class LinguaLensApiError(RuntimeError):
-    """Base error for LinguaLens API communication failures."""
+    """Base error for LinguaLens / PasaScope API communication failures."""
 
     def __init__(self, message: str, status_code: int | None = None):
         super().__init__(message)
@@ -57,6 +59,13 @@ class LinguaLensPermissionError(LinguaLensApiError):
 class LinguaLensConflictError(LinguaLensApiError):
     """Resource state conflict (HTTP 409)."""
     pass
+
+
+# PasaScope canonical aliases
+PasaScopeApiError = LinguaLensApiError
+PasaScopeAuthError = LinguaLensAuthError
+PasaScopePermissionError = LinguaLensPermissionError
+PasaScopeConflictError = LinguaLensConflictError
 
 
 class LinguaLensRateLimitError(LinguaLensApiError):
@@ -571,4 +580,8 @@ class LinguaLensClient:
     def get_playback_grant(self, session_id: str) -> dict[str, Any]:
         """Request time-limited consent-gated audio playback grant."""
         return self._adapter.get_playback_grant(session_id)
+
+
+# Canonical PasaScope alias
+PasaScopeClient = LinguaLensClient
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# LinguaLens Pilot Launch Orchestrator
+# PasaScope Pilot Launch Orchestrator
 # Automates preflight checks, backend API, Next.js frontend, and health probing.
 # ==============================================================================
 
@@ -30,12 +30,13 @@ if [[ "${1:-}" == "--check-only" ]]; then
 fi
 
 echo -e "${CYAN}${BOLD}"
-echo "  _     _                          _                     "
-echo " | |   (_)_ __   __ _ _   _  __ _| |    ___ _ __  ___   "
-echo " | |   | | '_ \ / _\` | | | |/ _\` | |   / _ \ '_ \/ __|  "
-echo " | |___| | | | | (_| | |_| | (_| | |__|  __/ | | \__ \  "
-echo " |_____|_|_| |_|\__, |\__,_|\__,_|_____\___|_| |_|___/  "
-echo "                |___/  Clinical Pilot Launcher v1.6.3   "
+echo "  ____                 ____                      "
+echo " |  _ \ __ _ ___  __ _/ ___|  ___ ___  _ __   ___ "
+echo " | |_) / _\` / __|/ _\` \___ \ / __/ _ \| '_ \ / _ \\"
+echo " |  __/ (_| \__ \ (_| |___) | (_| (_) | |_) |  __/"
+echo " |_|   \__,_|___/\__,_|____/ \___\___/| .__/ \___|"
+echo "                                      |_|        "
+echo "       PasaScope (ภาษา-สโคป) — Clinical Pilot v1.7.0"
 echo -e "${NC}"
 
 echo -e "${BLUE}▶ [1/4] Running Pilot Pre-flight Verification...${NC}"

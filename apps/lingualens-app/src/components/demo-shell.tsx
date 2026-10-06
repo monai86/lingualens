@@ -44,7 +44,7 @@ export function DemoShell({ children }: { children: ReactNode }) {
               <Image src="/logo-mark.png" alt="" width={48} height={48} className="h-12 w-12 object-cover" />
             </span>
             <span className="hidden lg:block">
-              <span className="block text-lg font-normal tracking-[-0.03em] text-[color:var(--color-text-strong)]">lingualens</span>
+              <span className="block text-lg font-normal tracking-[-0.03em] text-[color:var(--color-text-strong)]">PasaScope</span>
               <span className="block text-sm text-[color:var(--color-text-muted)]">Therapist Workspace</span>
             </span>
           </Link>
@@ -115,7 +115,7 @@ export function DemoShell({ children }: { children: ReactNode }) {
               <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-[color:var(--color-border)] bg-white">
                 <Image src="/logo-mark.png" alt="" width={36} height={36} className="h-9 w-9 object-cover" />
               </span>
-              <span className="text-sm font-semibold">lingualens</span>
+              <span className="text-sm font-semibold">PasaScope</span>
             </div>
             <div className="hidden md:block" />
             <div className="flex items-center gap-3">

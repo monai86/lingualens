@@ -1,7 +1,7 @@
-"""LinguaLens Desktop GUI Application (Tkinter / TTK).
+"""PasaScope (ภาษา-สโคป) Desktop GUI Application (Tkinter / TTK).
 
 Provides an interactive graphical desktop interface for clinicians replicating
-the 5-step LinguaLens decision-support workflow with local audio/video file selection,
+the 5-step clinical decision-support workflow with local audio/video file selection,
 acoustic prosody feature extraction, transcript QA review, and report sign-off.
 """
 
@@ -31,17 +31,18 @@ from packages.tui.client import (
     LinguaLensClient,
     LinguaLensPermissionError,
     LinguaLensServerError,
+    PasaScopeClient,
 )
 
 
-class LinguaLensGUIApp:
+class PasaScopeGUIApp:
     """Main Desktop GUI Application window."""
 
     def __init__(self, root: tk.Tk, client: LinguaLensClient | None = None):
         self.root = root
-        self.root.title("LinguaLens — Speech-Language Decision Support Desktop")
-        self.root.geometry("1140x780")
-        self.root.minsize(960, 620)
+        self.root.title("PasaScope — Thai Pediatric Speech & Language Assessment Desktop")
+        self.root.geometry("1180x800")
+        self.root.minsize(980, 640)
 
         self.client = client or LinguaLensClient()
         self.active_case_id: str | None = None
@@ -127,30 +128,39 @@ class LinguaLensGUIApp:
         except Exception:
             pass
 
-        # Detect optimal typography hierarchy
+        # Detect optimal modern 2026 typography hierarchy with native Thai support
         try:
             from tkinter import font as tkfont
             avail_families = set(tkfont.families(self.root))
         except Exception:
             avail_families = set()
 
-        if "Poppins" in avail_families:
-            sys_font = "Poppins"
-        elif "Helvetica Neue" in avail_families:
-            sys_font = "Helvetica Neue"
-        elif "Helvetica" in avail_families:
-            sys_font = "Helvetica"
-        elif "Arial" in avail_families:
-            sys_font = "Arial"
-        else:
-            sys_font = "TkDefaultFont"
+        font_candidates = [
+            "Sukhumvit Set",
+            "SF Pro Text",
+            "SF Pro Display",
+            "-apple-system",
+            "Inter",
+            "Sarabun",
+            "Thonburi",
+            "Prompt",
+            "Poppins",
+            "Helvetica Neue",
+            "Helvetica",
+            "Segoe UI",
+            "Arial",
+        ]
+        sys_font = next((f for f in font_candidates if f in avail_families), "TkDefaultFont")
 
-        if "Menlo" in avail_families:
-            mono_font = "Menlo"
-        elif "Monaco" in avail_families:
-            mono_font = "Monaco"
-        else:
-            mono_font = "Courier"
+        mono_candidates = [
+            "SF Mono",
+            "JetBrains Mono",
+            "Menlo",
+            "Monaco",
+            "Consolas",
+            "Courier New",
+        ]
+        mono_font = next((f for f in mono_candidates if f in avail_families), "Courier")
 
         self.font_sys = sys_font
         self.font_family = sys_font
@@ -165,24 +175,24 @@ class LinguaLensGUIApp:
         self.font_caption_bold = (sys_font, 9, "bold")
         self.font_badge = (sys_font, 8, "bold")
 
-        # Modern Flat Design System Tokens (from flat-design-ui-ux-landing-page reference)
-        self.bg_color = "#f8faff"         # Soft Periwinkle White canvas
+        # Modern 2026 Clinical Workstation Design Tokens
+        self.bg_color = "#f8fafc"         # Crisp Slate 50 canvas
         self.surface_color = "#ffffff"    # Pure crisp white for cards/panels
-        self.surface_alt = "#f1f4fd"      # Soft lilac-gray for toolbars & headers
-        self.brand_indigo = "#1e1e62"     # Deep Indigo for bold headings & readable ink
-        self.primary_color = "#4f46e5"    # Vibrant Royal Iris / Indigo
-        self.primary_strong = "#4338ca"   # Indigo hover
-        self.primary_light = "#818cf8"    # Soft Iris
-        self.accent_coral = "#e8607e"     # Vibrant Rose/Coral CTA (from reference REGISTER button & logo squircle)
-        self.accent_coral_hover = "#d9486c"
-        self.accent_soft = "#eef2ff"      # Soft Lavender tint for active states
+        self.surface_alt = "#f1f5f9"      # Soft Slate 100 for toolbars & headers
+        self.brand_indigo = "#0f172a"     # Slate 900 for bold headings & readable ink
+        self.primary_color = "#2563eb"    # Modern Royal Blue / Indigo
+        self.primary_strong = "#1d4ed8"   # Blue hover
+        self.primary_light = "#60a5fa"    # Soft Iris / Sky accent
+        self.accent_coral = "#0d9488"     # Crisp Clinical Teal CTA
+        self.accent_coral_hover = "#0f766e"
+        self.accent_soft = "#eff6ff"      # Soft Lavender / Blue tint for active states
         self.accent_cyan = "#0284c7"      # Sky blue for acoustic/audio indicators
         self.border_color = "#cbd5e1"     # Slate 300
         self.border_light = "#e2e8f0"     # Slate 200
-        self.border_soft = "#e0e7ff"      # Soft Lavender border matching illustration card frames
-        self.text_color = "#1e1e62"       # Deep Indigo readable ink
-        self.text_secondary = "#475569"   # Muted Slate
-        self.text_muted = "#64748b"       # Soft Slate
+        self.border_soft = "#e2e8f0"      # Slate 200 border matching modern cards
+        self.text_color = "#0f172a"       # Slate 900 readable ink
+        self.text_secondary = "#475569"   # Muted Slate 600
+        self.text_muted = "#64748b"       # Soft Slate 500
         self.success_color = "#059669"    # Emerald 600
         self.warning_color = "#d97706"    # Amber 600
         self.error_color = "#dc2626"      # Red 600
@@ -340,7 +350,7 @@ class LinguaLensGUIApp:
         # Brand Mark & Version Badge
         tk.Label(
             title_frame,
-            text="LinguaLens",
+            text="PasaScope (ภาษา-สโคป)",
             font=(self.font_sys, 13, "bold"),
             fg=self.brand_indigo,
             bg="#ffffff",
@@ -351,7 +361,7 @@ class LinguaLensGUIApp:
             text="v1.7.0",
             font=(self.font_sys, 8, "bold"),
             fg=self.primary_color,
-            bg="#ede9fe",
+            bg="#eff6ff",
             padx=6,
             pady=1,
             relief=tk.FLAT,
@@ -359,7 +369,7 @@ class LinguaLensGUIApp:
 
         tk.Label(
             title_frame,
-            text="Clinical Speech-Language Decision Support",
+            text="Pediatric Speech-Language Decision Support",
             font=(self.font_sys, 10),
             fg=self.text_muted,
             bg="#ffffff",
@@ -2408,7 +2418,7 @@ class LinguaLensGUIApp:
         else:
             # Build TalkBank CHAT content from utterances
             self.txt_chat_view.insert(tk.END, "@UTF8\n@Begin\n@Languages:\ttha, eng\n@Participants:\tCHI Child, INV Clinician\n", "header")
-            self.txt_chat_view.insert(tk.END, f"@ID:\ttha|LinguaLens|CHI|4;00.|male|ASD||Child||\n@Media:\t{self.active_session_id}, audio\n\n", "header")
+            self.txt_chat_view.insert(tk.END, f"@ID:\ttha|PasaScope|CHI|4;00.|male|ASD||Child||\n@Media:\t{self.active_session_id}, audio\n\n", "header")
 
             for u in self.active_transcript["utterances"]:
                 spk = u.get("speaker", "CHI")
@@ -2881,7 +2891,7 @@ class LinguaLensGUIApp:
     def _build_ingest_progress_dialog(self, audio_filename: str) -> tk.Toplevel:
         """Construct a real-time progress dialog with smooth progress bar and stage feedback."""
         win = tk.Toplevel(self.root)
-        win.title("Processing Audio — LinguaLens")
+        win.title("Processing Audio — PasaScope")
         win.geometry("480x210")
         win.minsize(440, 190)
         win.resizable(False, False)
@@ -3216,7 +3226,7 @@ class LinguaLensGUIApp:
             return
 
         batch_win = tk.Toplevel(self.root)
-        batch_win.title("Batch Audio Ingestion Queue — LinguaLens")
+        batch_win.title("Batch Audio Ingestion Queue — PasaScope")
         batch_win.geometry("540x380")
         batch_win.transient(self.root)
         batch_win.grab_set()
@@ -3862,7 +3872,7 @@ class LinguaLensGUIApp:
             return
         findings = self.client.get_findings(self.active_session_id)
         with open(out_file, "w", encoding="utf-8") as f:
-            f.write(f"# LinguaLens Progress Report\n\n")
+            f.write(f"# PasaScope Progress Report\n\n")
             f.write(f"- Case: {self.active_case_id}\n- Session: {self.active_session_id}\n\n")
             f.write(f"## Metrics\n\n")
             for k, v in findings.get("metrics", {}).items():
@@ -6558,3 +6568,8 @@ class LinguaLensGUIApp:
             "Assessment Created (Refresh Failed)",
             f"Assessment was created successfully on server ({created_asmt.get('id')}), but failed to refresh assessments list: {error}. Please refresh manually.",
         )
+
+
+# Backwards compatibility alias
+LinguaLensGUIApp = PasaScopeGUIApp
+

@@ -115,7 +115,7 @@ export default function AssistantPage() {
 
   function pushToDraft(text: string) {
     if (typeof window !== "undefined") {
-      sessionStorage.setItem("lingualens_ai_draft", text);
+      sessionStorage.setItem("pasascope_ai_draft", text);
     }
     setDraftPushSuccess(true);
     setTimeout(() => setDraftPushSuccess(false), 3000);
