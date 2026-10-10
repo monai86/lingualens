@@ -70,6 +70,7 @@ def mock_server() -> Generator[tuple[str, type[MockServerHandler]], None, None]:
     finally:
         server.shutdown()
         server.server_close()
+        server_thread.join(timeout=1.0)
 
 
 def test_transport_200_success(mock_server):
@@ -243,14 +244,16 @@ def test_transport_cross_origin_redirect_strips_credentials():
         s.bind(("127.0.0.1", 0))
         port_b = s.getsockname()[1]
     server_b = http.server.HTTPServer(("127.0.0.1", port_b), HandlerB)
-    threading.Thread(target=server_b.serve_forever, daemon=True).start()
+    t_b = threading.Thread(target=server_b.serve_forever, daemon=True)
+    t_b.start()
 
     # Start Server A
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         port_a = s.getsockname()[1]
     server_a = http.server.HTTPServer(("127.0.0.1", port_a), RedirectHandlerA)
-    threading.Thread(target=server_a.serve_forever, daemon=True).start()
+    t_a = threading.Thread(target=server_a.serve_forever, daemon=True)
+    t_a.start()
 
     try:
         client = LinguaLensClient(base_url=f"http://127.0.0.1:{port_a}", mock_mode=False)
@@ -263,8 +266,10 @@ def test_transport_cross_origin_redirect_strips_credentials():
     finally:
         server_a.shutdown()
         server_a.server_close()
+        t_a.join(timeout=1.0)
         server_b.shutdown()
         server_b.server_close()
+        t_b.join(timeout=1.0)
 
 
 def test_transport_401_invalidates_session_and_prevents_replay(mock_server):

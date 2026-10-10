@@ -138,6 +138,47 @@ def test_client_create_case_sends_actual_legacy_api_schema(case_create_server) -
     ChildCaseCreate.model_validate(handler.request_log[0]["body"])
 
 
+def test_client_create_case_legacy_birth_year_month_converts_to_age_months_on_live_api(case_create_server) -> None:
+    from app.schemas.clinical import ChildCaseCreate
+
+    base_url, handler = case_create_server
+    client = LinguaLensClient(base_url=base_url, mock_mode=False)
+
+    # Call with positional legacy shape (child_code, birth_year_month, language, notes)
+    response = client.create_case(
+        "C-LEGACY-01",
+        "2021-05",
+        "th",
+        "synthesized from GUI dialog",
+    )
+
+    assert response["case_id"] == "case-b4-api"
+    sent_body = handler.request_log[-1]["body"]
+    assert sent_body["child_code"] == "C-LEGACY-01"
+    assert isinstance(sent_body["age_months"], int)
+    assert 0 <= sent_body["age_months"] <= 240
+    assert sent_body["language"] == "th"
+    assert sent_body["notes"] == "synthesized from GUI dialog"
+    ChildCaseCreate.model_validate(sent_body)
+
+
+def test_client_set_mock_mode_toggles_adapter() -> None:
+    client = LinguaLensClient(mock_mode=False)
+    assert not client.mock_mode
+    from packages.tui.adapters.http_adapter import HttpClinicalAdapter
+    assert isinstance(client._adapter, HttpClinicalAdapter)
+
+    client.set_mock_mode(True, seed_demo=True)
+    assert client.mock_mode
+    from packages.tui.adapters.memory_adapter import InMemoryClinicalAdapter
+    assert isinstance(client._adapter, InMemoryClinicalAdapter)
+    assert len(client.list_cases()) > 0
+
+    client.set_mock_mode(False)
+    assert not client.mock_mode
+    assert isinstance(client._adapter, HttpClinicalAdapter)
+
+
 def test_invalid_birth_year_month_fails_closed_without_local_mutation() -> None:
     client = LinguaLensClient(mock_mode=True)
     before = copy.deepcopy(client._mock_data)

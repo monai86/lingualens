@@ -1,5 +1,6 @@
 #!/bin/bash
 set -eo pipefail
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 
 select_python_runtime() {
     local candidate
@@ -79,7 +80,9 @@ done
 # 2. Pytest Core Tests
 echo -e "${BLUE}[4/7] Running core Python unit tests (excluding heavy audio)...${NC}"
 if "$PYTHON_BIN" -c "import pytest" >/dev/null 2>&1; then
-    PYTHONPATH=apps/api:src "$PYTHON_BIN" -m pytest -m "not audio"
+    PYTHONPATH=apps/api:src "$PYTHON_BIN" -m pytest apps/api/tests -m "not audio" -q
+    PYTHONPATH=apps/api:src "$PYTHON_BIN" -m pytest tests/test_gui*.py -q
+    PYTHONPATH=apps/api:src "$PYTHON_BIN" -m pytest tests --ignore-glob="tests/test_gui*.py" -m "not audio" -q
     echo -e "${GREEN}✓ All core Python unit tests passed successfully.${NC}"
 else
     echo -e "${RED}Error: pytest is not installed in the current Python environment.${NC}"

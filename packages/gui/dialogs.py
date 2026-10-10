@@ -49,10 +49,12 @@ class ClinicalDialogFactory:
         e_notes.grid(row=3, column=1, sticky=tk.EW, pady=6, padx=(8, 0))
 
         def _do_create() -> None:
+            dob_val = e_dob.get().strip()
+            age_or_dob: int | str = int(dob_val) if dob_val.isdigit() else dob_val
             try:
                 new_c = client.create_case(
                     e_cid.get().strip(),
-                    e_dob.get().strip(),
+                    age_or_dob,
                     e_lang.get().strip(),
                     e_notes.get().strip(),
                 )

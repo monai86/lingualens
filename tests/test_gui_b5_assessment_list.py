@@ -134,6 +134,8 @@ def tk_root() -> tk.Tk:
         root.destroy()
     except Exception:
         pass
+    import gc
+    gc.collect()
 
 
 def _drain_async_queue(app: LinguaLensGUIApp) -> None:

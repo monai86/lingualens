@@ -3732,3 +3732,79 @@ def test_gui_waveform_drag_and_longitudinal_chart_and_pdf_export(monkeypatch):
     root.destroy()
 
 
+def test_gui_create_case_dialog_with_birth_year_month():
+    """Verify create case dialog creates a case from YYYY-MM without raising UnsupportedOperationError."""
+    try:
+        root = tk.Tk()
+    except tk.TclError:
+        pytest.skip("Headless environment without display server")
+
+    from tkinter import ttk
+    root.withdraw()
+    client = LinguaLensClient(mock_mode=True)
+    app = LinguaLensGUIApp(root, client=client)
+
+    win = app._build_create_case_window()
+
+    # Find Create Case button
+    btn_create = None
+    for child in win.winfo_children():
+        for sub in child.winfo_children():
+            if isinstance(sub, ttk.Frame):
+                for b in sub.winfo_children():
+                    if isinstance(b, ttk.Button) and b.cget("text") == "Create Case":
+                        btn_create = b
+                        break
+
+    assert btn_create is not None
+    # Trigger create case
+    btn_create.invoke()
+
+    # Verify case was added to tree_cases
+    cases = client.list_cases()
+    assert len(cases) > 0
+    created_case = cases[-1]
+    assert created_case.get("child_id") == "C-001" or created_case.get("child_code") == "C-001"
+
+    root.destroy()
+
+
+def test_gui_toggle_backend_mode(monkeypatch):
+    """Verify GUI toggles between mock mode and live mode gracefully."""
+    try:
+        root = tk.Tk()
+    except tk.TclError:
+        pytest.skip("Headless environment without display server")
+
+    root.withdraw()
+    client = LinguaLensClient(mock_mode=True)
+    app = LinguaLensGUIApp(root, client=client)
+
+    assert app.client.mock_mode
+    assert "[RESEARCH MOCK]" in app.lbl_mode.cget("text")
+
+    # When switching to Live mode without backend, warning should be shown and client reverts to mock
+    warnings_shown = []
+    monkeypatch.setattr("tkinter.messagebox.showwarning", lambda t, m: warnings_shown.append((t, m)))
+    app._toggle_backend_mode()
+
+    # Still mock because backend was unreachable
+    assert app.client.mock_mode
+    assert len(warnings_shown) == 1
+
+    # Now simulate backend reachable
+    monkeypatch.setattr(client, "check_health", lambda: True)
+    app._toggle_backend_mode()
+
+    assert not app.client.mock_mode
+    assert "[CLINICAL LIVE - FASTAPI]" in app.lbl_mode.cget("text")
+
+    # Toggle back to mock
+    app._toggle_backend_mode()
+    assert app.client.mock_mode
+    assert "[RESEARCH MOCK]" in app.lbl_mode.cget("text")
+
+    root.destroy()
+
+
+

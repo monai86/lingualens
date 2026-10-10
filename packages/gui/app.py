@@ -22,10 +22,12 @@ import urllib.error
 import uuid
 
 from packages.gui.audio_controller import AudioPlaybackController, AudioRecorder
+from packages.gui.backend_manager import BackendServerManager
 from packages.gui.dialogs import ClinicalDialogFactory
 from packages.gui.export_engine import ClinicalExportEngine
 from packages.gui.radar_renderer import RadarChartRenderer
 from packages.tui.client import (
+    DEFAULT_API_URL,
     LinguaLensApiError,
     LinguaLensAuthError,
     LinguaLensClient,
@@ -38,13 +40,19 @@ from packages.tui.client import (
 class PasaScopeGUIApp:
     """Main Desktop GUI Application window."""
 
-    def __init__(self, root: tk.Tk, client: LinguaLensClient | None = None):
+    def __init__(
+        self,
+        root: tk.Tk,
+        client: LinguaLensClient | None = None,
+        backend_manager: BackendServerManager | None = None,
+    ):
         self.root = root
         self.root.title("PasaScope — Thai Pediatric Speech & Language Assessment Desktop")
         self.root.geometry("1180x800")
         self.root.minsize(980, 640)
 
         self.client = client or LinguaLensClient()
+        self.backend_manager = backend_manager
         self.active_case_id: str | None = None
         self.active_session_id: str | None = None
         self.active_transcript: dict[str, Any] | None = None
@@ -108,6 +116,7 @@ class PasaScopeGUIApp:
         self.step_frames: list[tk.Frame] = []
         self.step_labels: list[tk.Label] = []
         self.step_badges: list[tk.Label] = []
+        self._is_destroyed: bool = False
 
         self.root.bind("<Destroy>", lambda e: self._cleanup_timers() if e.widget == self.root else None, add="+")
 
@@ -381,7 +390,7 @@ class PasaScopeGUIApp:
         status_bg = "#ecfdf5" if is_online else "#fef9c3"
         status_fg = "#047857" if is_online else "#854d0e"
 
-        status_lbl = tk.Label(
+        self.status_lbl = tk.Label(
             header_frame,
             text=status_text,
             font=(self.font_sys, 9, "bold"),
@@ -391,7 +400,7 @@ class PasaScopeGUIApp:
             pady=3,
             relief=tk.FLAT,
         )
-        status_lbl.pack(side=tk.RIGHT)
+        self.status_lbl.pack(side=tk.RIGHT)
 
         # Mode indicator badge (MOCK vs LIVE)
         mode_text = "[RESEARCH MOCK]" if self.client.mock_mode else "[CLINICAL LIVE - FASTAPI]"
@@ -408,6 +417,15 @@ class PasaScopeGUIApp:
             relief=tk.FLAT,
         )
         self.lbl_mode.pack(side=tk.RIGHT, padx=(0, 8))
+
+        # Mode toggle button
+        btn_toggle_text = "Switch to Live API" if self.client.mock_mode else "Switch to Mock Mode"
+        self.btn_mode_toggle = ttk.Button(
+            header_frame,
+            text=btn_toggle_text,
+            command=self._toggle_backend_mode,
+        )
+        self.btn_mode_toggle.pack(side=tk.RIGHT, padx=(0, 8))
 
         # Calm Clinical Safety Notice Ribbon
         safety_banner = tk.Frame(self.root, bg="#fffbeb", padx=16, pady=4, highlightthickness=1, highlightbackground="#fef3c7")
@@ -968,6 +986,7 @@ class PasaScopeGUIApp:
 
     def _cleanup_timers(self) -> None:
         """Cancel pending Tk after callbacks when the application window is destroyed."""
+        self._is_destroyed = True
         if getattr(self, "_poll_job", None):
             try:
                 self.root.after_cancel(self._poll_job)
@@ -991,9 +1010,27 @@ class PasaScopeGUIApp:
                 self.audio_recorder.stop_recording()
             except Exception:
                 pass
+        while not self._async_queue.empty():
+            try:
+                self._async_queue.get_nowait()
+            except Exception:
+                break
+        if getattr(self, "backend_manager", None) and self.backend_manager.is_managed:
+            try:
+                self.backend_manager.stop()
+            except Exception:
+                pass
+
+    def _queue_callback(self, cb: Any, exc: Exception | None = None) -> None:
+        """Post a callback to the async queue if the app is still active."""
+        if getattr(self, "_is_destroyed", False):
+            return
+        self._async_queue.put((cb, exc))
 
     def _poll_async_queue(self) -> None:
         """Process completed background worker callbacks on the Tkinter main thread."""
+        if getattr(self, "_is_destroyed", False):
+            return
         try:
             while not self._async_queue.empty():
                 cb, error = self._async_queue.get_nowait()
@@ -1001,6 +1038,9 @@ class PasaScopeGUIApp:
                     cb()
         except Exception:
             pass
+
+        if getattr(self, "_is_destroyed", False):
+            return
 
         try:
             if not self.root.winfo_exists():
@@ -1032,19 +1072,19 @@ class PasaScopeGUIApp:
         def worker() -> None:
             try:
                 res = target()
-                self._async_queue.put((
+                self._queue_callback(
                     lambda r=res: self._on_task_done(
                         r, on_success, None, task_mode=task_mode, expected_gen=expected_gen, request_id=request_id, session_gen=session_gen
                     ),
                     None,
-                ))
+                )
             except Exception as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._on_task_done(
                         None, on_error, e, task_mode=task_mode, expected_gen=expected_gen, request_id=request_id, session_gen=session_gen
                     ),
                     exc,
-                ))
+                )
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
@@ -2101,14 +2141,16 @@ class PasaScopeGUIApp:
                 iid=c_id,
                 values=(
                     c_id,
-                    c.get("child_id"),
+                    c.get("child_id") or c.get("child_code") or "-",
                     c.get("age_months", "-"),
-                    c.get("primary_language", "th").upper(),
+                    (c.get("primary_language") or c.get("language") or "th").upper(),
                     c.get("session_count", 0),
-                    c.get("clinical_notes", ""),
+                    c.get("clinical_notes") or c.get("notes") or "",
                 ),
             )
-            case_options.append(f"{c_id} | {c.get('child_id')} ({c.get('age_months', '-')}m, {c.get('primary_language', 'th').upper()})")
+            c_name = c.get("child_id") or c.get("child_code") or "-"
+            c_lang = (c.get("primary_language") or c.get("language") or "th").upper()
+            case_options.append(f"{c_id} | {c_name} ({c.get('age_months', '-')}m, {c_lang})")
 
         if case_options:
             self.combo_global_case["values"] = case_options
@@ -2126,6 +2168,105 @@ class PasaScopeGUIApp:
             self._refresh_transcript_and_findings()
 
         return True
+
+    def _toggle_backend_mode(self) -> None:
+        """Toggle between Live FastAPI backend and Offline Research Mock mode."""
+        if self.client.mock_mode:
+            # Attempt switching to Live mode: check health first
+            self.client.set_mock_mode(False)
+            probe_ok = False
+            try:
+                probe_ok = self.client.check_health()
+            except Exception:
+                probe_ok = False
+
+            if not probe_ok:
+                start_backend = False
+                if getattr(self, "backend_manager", None):
+                    start_backend = messagebox.askyesno(
+                        "Live Backend Offline",
+                        f"Cannot reach PasaScope Backend API at:\n{self.client.base_url}\n\n"
+                        "Would you like to start the Backend server now in the background?",
+                        parent=self.root,
+                    )
+                    if start_backend:
+                        if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                            self.lbl_status.config(text="⏳ Starting PasaScope Backend server...")
+                        self.root.config(cursor="watch")
+                        self.root.update_idletasks()
+                        try:
+                            started = self.backend_manager.start(timeout=12.0)
+                        finally:
+                            try:
+                                self.root.config(cursor="")
+                            except Exception:
+                                pass
+                        if started:
+                            self._update_connection_badges()
+                            self._load_initial_data()
+                            if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                                self.lbl_status.config(
+                                    text=f"● Live FastAPI Backend started (PID {self.backend_manager.pid}). Connected."
+                                )
+                            messagebox.showinfo(
+                                "Backend Connected",
+                                f"Live FastAPI Backend is now running on port {self.backend_manager.port}!\nSwitched to Live API mode.",
+                                parent=self.root,
+                            )
+                            return
+                        else:
+                            messagebox.showerror(
+                                "Startup Failed",
+                                f"Failed to start backend server.\nPlease check the log file:\n{self.backend_manager.log_file_path}",
+                                parent=self.root,
+                            )
+
+                # Revert to mock mode
+                self.client.set_mock_mode(True)
+                self._update_connection_badges()
+                if not start_backend:
+                    messagebox.showwarning(
+                        "Live Backend Unavailable",
+                        f"Cannot reach PasaScope Backend API at:\n{self.client.base_url}\n\n"
+                        "To start the live backend manually, run:\n"
+                        "cd apps/api && PYTHONPATH=.:../..:../../src uvicorn app.main:app --port 8000",
+                    )
+                return
+
+            self._update_connection_badges()
+            self._load_initial_data()
+            if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                self.lbl_status.config(text="● Connected to Clinical Live FastAPI backend.")
+        else:
+            # Switch to Offline mock mode
+            self.client.set_mock_mode(True, seed_demo=True)
+            self._update_connection_badges()
+            self._load_initial_data()
+            if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                self.lbl_status.config(text="○ Switched to Offline Research Mock Mode.")
+
+    def _update_connection_badges(self) -> None:
+        """Update header connection badges and toggle button text."""
+        if not hasattr(self, "lbl_mode") or not self.lbl_mode.winfo_exists():
+            return
+        is_mock = self.client.mock_mode
+        is_online = not is_mock and self.client.check_health()
+
+        mode_text = "[RESEARCH MOCK]" if is_mock else "[CLINICAL LIVE - FASTAPI]"
+        mode_bg = "#eef2ff" if is_mock else "#e0f2fe"
+        mode_fg = self.primary_color if is_mock else self.accent_cyan
+        self.lbl_mode.config(text=mode_text, bg=mode_bg, fg=mode_fg)
+
+        status_text = "○ Mock Mode" if is_mock else ("● API Connected" if is_online else "○ Offline Mode")
+        status_bg = "#fef9c3" if (is_mock or not is_online) else "#ecfdf5"
+        status_fg = "#854d0e" if (is_mock or not is_online) else "#047857"
+        if hasattr(self, "status_lbl") and self.status_lbl.winfo_exists():
+            self.status_lbl.config(text=status_text, bg=status_bg, fg=status_fg)
+
+        if hasattr(self, "btn_mode_toggle") and self.btn_mode_toggle.winfo_exists():
+            self.btn_mode_toggle.config(
+                text="Switch to Live API" if is_mock else "Switch to Mock Mode"
+            )
 
     def _prompt_clear_mock_data(self) -> None:
         """Prompt confirmation and purge mock test data from memory and local repositories."""
@@ -3182,7 +3323,7 @@ class PasaScopeGUIApp:
 
         def _do_ingest_audio():
             def _on_prog(p: float, msg: str) -> None:
-                self._async_queue.put((lambda pct=p, m=msg: self._update_ingest_progress(pct, m), None))
+                self._queue_callback(lambda pct=p, m=msg: self._update_ingest_progress(pct, m), None)
             return self.client.ingest_audio_file(self.active_session_id, f_path, progress_callback=_on_prog)
 
         def _on_audio_success(transcript: dict[str, Any]) -> None:
@@ -4653,7 +4794,7 @@ class PasaScopeGUIApp:
         def worker() -> None:
             try:
                 consents = self.client.list_consents(child_id)
-                self._async_queue.put((
+                self._queue_callback(
                     lambda: self._on_consent_refreshed(
                         child_id=child_id,
                         consents=consents,
@@ -4662,9 +4803,9 @@ class PasaScopeGUIApp:
                         child_sel_gen=child_sel_gen,
                     ),
                     None,
-                ))
+                )
             except Exception as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._on_consent_refresh_error(
                         child_id=child_id,
                         error=e,
@@ -4673,7 +4814,7 @@ class PasaScopeGUIApp:
                         child_sel_gen=child_sel_gen,
                     ),
                     exc,
-                ))
+                )
 
         t = threading.Thread(target=worker, daemon=True)
         self._current_consent_thread = t
@@ -4943,7 +5084,7 @@ class PasaScopeGUIApp:
         def worker() -> None:
             try:
                 new_consent = self.client.record_consent(target_child_id, purpose, scope_clean, status)
-                self._async_queue.put((
+                self._queue_callback(
                     lambda: self._on_record_consent_success(
                         win=win,
                         dlg_token=dlg_token,
@@ -4954,9 +5095,9 @@ class PasaScopeGUIApp:
                         child_sel_gen=target_child_sel_gen,
                     ),
                     None,
-                ))
+                )
             except Exception as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._on_record_consent_error(
                         win=win,
                         dlg_token=dlg_token,
@@ -4967,7 +5108,7 @@ class PasaScopeGUIApp:
                         child_sel_gen=target_child_sel_gen,
                     ),
                     exc,
-                ))
+                )
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
@@ -5031,7 +5172,7 @@ class PasaScopeGUIApp:
         def worker() -> None:
             try:
                 consents = self.client.list_consents(child_id)
-                self._async_queue.put((
+                self._queue_callback(
                     lambda: self._on_post_mutation_refresh_success(
                         child_id=child_id,
                         consents=consents,
@@ -5040,9 +5181,9 @@ class PasaScopeGUIApp:
                         child_sel_gen=child_sel_gen,
                     ),
                     None,
-                ))
+                )
             except Exception as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._on_post_mutation_refresh_error(
                         child_id=child_id,
                         error=e,
@@ -5052,7 +5193,7 @@ class PasaScopeGUIApp:
                         new_consent=new_consent,
                     ),
                     exc,
-                ))
+                )
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
@@ -5240,25 +5381,25 @@ class PasaScopeGUIApp:
         def worker() -> None:
             try:
                 child_data = self.client.get_child(child_id)
-                self._async_queue.put((
+                self._queue_callback(
                     lambda: self._on_async_child_selected(req_id, child_data, session_gen),
                     None,
-                ))
+                )
             except LinguaLensAuthError as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._handle_auth_error(e, session_generation=session_gen),
                     exc,
-                ))
+                )
             except LinguaLensPermissionError as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._handle_permission_error(e, request_id=req_id, session_generation=session_gen),
                     exc,
-                ))
+                )
             except Exception as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._on_child_load_error(req_id, e),
                     exc,
-                ))
+                )
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
@@ -5278,27 +5419,27 @@ class PasaScopeGUIApp:
         def worker() -> None:
             try:
                 children = self.client.list_children()
-                self._async_queue.put((
+                self._queue_callback(
                     lambda: self._on_children_refreshed(refresh_id, children, session_gen, on_success),
                     None,
-                ))
+                )
             except LinguaLensAuthError as exc:
                 def _auth_cb(e=exc):
                     self._handle_auth_error(e, session_generation=session_gen)
                     if on_error:
                         on_error(e)
-                self._async_queue.put((_auth_cb, exc))
+                self._queue_callback(_auth_cb, exc)
             except LinguaLensPermissionError as exc:
                 def _perm_cb(e=exc):
                     self._handle_permission_error(e, session_generation=session_gen)
                     if on_error:
                         on_error(e)
-                self._async_queue.put((_perm_cb, exc))
+                self._queue_callback(_perm_cb, exc)
             except Exception as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._on_children_refresh_error(refresh_id, e, session_gen, on_error),
                     exc,
-                ))
+                )
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
@@ -5494,25 +5635,25 @@ class PasaScopeGUIApp:
         def worker() -> None:
             try:
                 new_child = self.client.create_child(display_code.strip(), by, bm, lang_ctx)
-                self._async_queue.put((
+                self._queue_callback(
                     lambda: self._on_create_child_success(win, dlg_token, new_child, session_gen, child_sel_gen),
                     None,
-                ))
+                )
             except LinguaLensAuthError as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._handle_auth_error(e, session_generation=session_gen),
                     exc,
-                ))
+                )
             except LinguaLensPermissionError as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._handle_create_child_permission_error(win, dlg_token, e, session_gen),
                     exc,
-                ))
+                )
             except Exception as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._on_create_child_error(win, dlg_token, e, session_gen),
                     exc,
-                ))
+                )
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
@@ -5733,7 +5874,7 @@ class PasaScopeGUIApp:
         def worker() -> None:
             try:
                 detail = self.client.get_assessment(asmt_id)
-                self._async_queue.put((
+                self._queue_callback(
                     lambda: self._on_assessment_detail_loaded(
                         asmt_id=asmt_id,
                         detail=detail,
@@ -5744,9 +5885,9 @@ class PasaScopeGUIApp:
                         request_id=req_id,
                     ),
                     None,
-                ))
+                )
             except Exception as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._on_assessment_detail_error(
                         asmt_id=asmt_id,
                         error=e,
@@ -5757,7 +5898,7 @@ class PasaScopeGUIApp:
                         request_id=req_id,
                     ),
                     exc,
-                ))
+                )
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
@@ -6098,15 +6239,15 @@ class PasaScopeGUIApp:
                     or getattr(self, "_current_asmt_dialog_token", None) != dlg_token
                 ):
                     # Cancelled before mutation dispatch: ZERO POST
-                    self._async_queue.put((
+                    self._queue_callback(
                         lambda r=req_id: self._set_busy_state(False, "Ready", request_id=r),
                         None,
-                    ))
+                    )
                     return
 
                 fresh_status, latest_rec = self._resolve_consent_state(consents, purpose="clinical_assessment")
                 if fresh_status != "active" or not latest_rec or latest_rec.get("status") != "active":
-                    self._async_queue.put((
+                    self._queue_callback(
                         lambda st=fresh_status, rec=latest_rec: self._on_create_assessment_preflight_failed(
                             win=win,
                             dlg_token=dlg_token,
@@ -6118,7 +6259,7 @@ class PasaScopeGUIApp:
                             child_sel_gen=target_child_sel_gen,
                         ),
                         None,
-                    ))
+                    )
                     return
 
                 # Re-verify context drift and dialog lifetime/token after preflight before POST
@@ -6133,10 +6274,10 @@ class PasaScopeGUIApp:
                     or cancel_event.is_set()
                 ):
                     # Context changed or cancelled: ZERO POST
-                    self._async_queue.put((
+                    self._queue_callback(
                         lambda r=req_id: self._set_busy_state(False, "Ready", request_id=r),
                         None,
-                    ))
+                    )
                     return
 
                 # Canonical contract: POST /api/v2/children/{child_id}/assessments
@@ -6146,7 +6287,7 @@ class PasaScopeGUIApp:
                     purpose=clean_purpose,
                     assigned_clinician_id=clean_clinician,
                 )
-                self._async_queue.put((
+                self._queue_callback(
                     lambda: self._on_create_assessment_success(
                         win=win,
                         dlg_token=dlg_token,
@@ -6158,9 +6299,9 @@ class PasaScopeGUIApp:
                         cancel_event=cancel_event,
                     ),
                     None,
-                ))
+                )
             except Exception as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._on_create_assessment_error(
                         win=win,
                         dlg_token=dlg_token,
@@ -6172,7 +6313,7 @@ class PasaScopeGUIApp:
                         cancel_event=cancel_event,
                     ),
                     exc,
-                ))
+                )
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
@@ -6351,7 +6492,7 @@ class PasaScopeGUIApp:
         def worker() -> None:
             try:
                 asmts = self.client.list_assessments(child_id)
-                self._async_queue.put((
+                self._queue_callback(
                     lambda: self._on_assessments_refreshed(
                         child_id=child_id,
                         assessments=asmts,
@@ -6360,9 +6501,9 @@ class PasaScopeGUIApp:
                         child_sel_gen=child_sel_gen,
                     ),
                     None,
-                ))
+                )
             except Exception as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._on_assessments_refresh_error(
                         child_id=child_id,
                         error=e,
@@ -6371,7 +6512,7 @@ class PasaScopeGUIApp:
                         child_sel_gen=child_sel_gen,
                     ),
                     exc,
-                ))
+                )
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()
@@ -6477,7 +6618,7 @@ class PasaScopeGUIApp:
         def worker() -> None:
             try:
                 asmts = self.client.list_assessments(child_id)
-                self._async_queue.put((
+                self._queue_callback(
                     lambda: self._on_post_creation_refresh_success(
                         child_id=child_id,
                         assessments=asmts,
@@ -6486,9 +6627,9 @@ class PasaScopeGUIApp:
                         child_sel_gen=child_sel_gen,
                     ),
                     None,
-                ))
+                )
             except Exception as exc:
-                self._async_queue.put((
+                self._queue_callback(
                     lambda e=exc: self._on_post_creation_refresh_error(
                         child_id=child_id,
                         error=e,
@@ -6498,7 +6639,7 @@ class PasaScopeGUIApp:
                         created_asmt=created_asmt,
                     ),
                     exc,
-                ))
+                )
 
         t = threading.Thread(target=worker, daemon=True)
         t.start()

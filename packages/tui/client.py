@@ -198,6 +198,18 @@ class LinguaLensClient:
         else:
             self._adapter = HttpClinicalAdapter(client=self)
 
+    def set_mock_mode(self, enabled: bool, seed_demo: bool = True) -> None:
+        """Switch client between live HTTP adapter and in-memory mock adapter."""
+        self.mock_mode = enabled
+        if enabled:
+            self._adapter = InMemoryClinicalAdapter(
+                seed_demo=seed_demo,
+                clock=self._get_now,
+            )
+            self.__mock_data = self._adapter.mock_data
+        else:
+            self._adapter = HttpClinicalAdapter(client=self)
+
     @property
     def _mock_data(self) -> dict[str, Any]:
         if hasattr(self, "_adapter") and hasattr(self._adapter, "mock_data"):

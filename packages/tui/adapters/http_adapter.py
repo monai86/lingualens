@@ -53,13 +53,30 @@ class HttpClinicalAdapter:
                 raise LinguaLensApiError(
                     "Legacy case creation requires child_id and birth_year_month; no age conversion was performed."
                 )
-            if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", legacy_birth_month):
+            legacy_child_id = legacy_child_id.strip()
+            legacy_birth_month = legacy_birth_month.strip()
+            if not legacy_child_id:
+                raise LinguaLensApiError("Case creation requires a non-empty child_code.")
+
+            calc_age: int
+            if re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", legacy_birth_month):
+                from packages.tui.validation import calculate_age_in_months
+                by_str, bm_str = legacy_birth_month.split("-")
+                calc_age = calculate_age_in_months(int(by_str), int(bm_str), current_date=self._client._get_now())
+            elif legacy_birth_month.isdigit():
+                calc_age = int(legacy_birth_month)
+                if not 0 <= calc_age <= 240:
+                    raise LinguaLensApiError("Case creation requires age_months as an integer from 0 through 240.")
+            else:
                 raise LinguaLensApiError(
                     "Invalid birth_year_month; expected YYYY-MM with a month from 01 through 12."
                 )
-            raise LinguaLensUnsupportedOperationError(
-                "The live /cases API requires child_code, age_months, language and notes; "
-                "birth_year_month cannot be converted without an explicit age."
+
+            return self.create_case(
+                child_code=legacy_child_id,
+                age_months=calc_age,
+                language=legacy_language or "th",
+                notes=notes,
             )
 
         if not isinstance(child_code, str) or not child_code.strip():

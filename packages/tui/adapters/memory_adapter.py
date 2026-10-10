@@ -326,16 +326,28 @@ class InMemoryClinicalAdapter:
         notes: str,
     ) -> dict[str, Any]:
         from packages.tui.client import LinguaLensApiError
-        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", birth_year_month):
+        from packages.tui.validation import calculate_age_in_months
+
+        calc_age: int | None = None
+        if re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", birth_year_month):
+            by, bm = [int(p) for p in birth_year_month.split("-")]
+            calc_age = calculate_age_in_months(by, bm, current_date=self._clock())
+        elif birth_year_month.isdigit():
+            calc_age = int(birth_year_month)
+        else:
             raise LinguaLensApiError(
                 "Invalid birth_year_month; expected YYYY-MM with a month from 01 through 12."
             )
         new_case = {
             "case_id": f"case-local-{len(self._mock_data['cases']) + 1:03d}",
             "child_id": child_id,
+            "child_code": child_id,
             "birth_year_month": birth_year_month,
+            "age_months": calc_age if calc_age is not None else 48,
             "primary_language": primary_language,
+            "language": primary_language,
             "clinical_notes": notes,
+            "notes": notes,
             "status": "active",
             "session_count": 0,
         }

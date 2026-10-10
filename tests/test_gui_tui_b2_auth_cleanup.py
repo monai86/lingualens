@@ -56,6 +56,8 @@ def tk_root() -> tk.Tk:
         root.destroy()
     except Exception:
         pass
+    import gc
+    gc.collect()
 
 
 class FakeB2ApiClient:
