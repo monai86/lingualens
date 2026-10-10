@@ -1,3 +1,4 @@
+import { FEATURE_EXTRACTION_NOUN } from "@/lib/workflow-glossary";
 import type { MlReadiness, TranscriptQaStatus, WorkflowState } from "@/lib/workflow";
 
 /**
@@ -82,7 +83,7 @@ export function extractFeaturesBlockedReason(state: WorkflowState): string | und
     return "Save a transcript and review it before extracting features.";
   }
   if (!state.transcriptAttested || state.transcriptReviewStatus !== "reviewed") {
-    return "Feature extraction requires a saved, reviewed, and attested transcript.";
+    return `${FEATURE_EXTRACTION_NOUN} requires a saved, reviewed, and attested transcript.`;
   }
   if (!state.backendTranscriptId) {
     return "Save the transcript to the session before extracting features.";

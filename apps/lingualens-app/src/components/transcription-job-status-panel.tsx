@@ -1,6 +1,11 @@
 "use client";
 import { AlertTriangle, CheckCircle2, Clock, Loader2, RefreshCw, XCircle } from "lucide-react";
 
+import {
+  DRAFT_TRANSCRIPT_READY_LABEL,
+  THERAPIST_REVIEW_REQUIRED_CLAUSE,
+} from "@/lib/clinical-safety-copy";
+
 export type TranscriptionJobDisplayStatus =
   "queued" | "processing" | "completed" | "needs_review" | "failed" | "cancelled" | "unavailable";
 
@@ -19,7 +24,7 @@ const CFG: Record<TranscriptionJobDisplayStatus, { icon: React.ReactNode; label:
   queued:       { icon: <Clock size={18} />, label: "Queued", color: "text-slate-600" },
   processing:   { icon: <Loader2 size={18} className="animate-spin" />, label: "Processing", color: "text-blue-600" },
   completed:    { icon: <CheckCircle2 size={18} />, label: "Draft transcript ready", color: "text-green-700" },
-  needs_review: { icon: <CheckCircle2 size={18} />, label: "Draft transcript ready — review required", color: "text-green-700" },
+  needs_review: { icon: <CheckCircle2 size={18} />, label: DRAFT_TRANSCRIPT_READY_LABEL, color: "text-green-700" },
   failed:       { icon: <XCircle size={18} />, label: "Transcription failed", color: "text-red-700" },
   cancelled:    { icon: <XCircle size={18} />, label: "Cancelled", color: "text-slate-500" },
   unavailable:  { icon: <AlertTriangle size={18} />, label: "Provider unavailable", color: "text-amber-700" },
@@ -50,7 +55,7 @@ export function TranscriptionJobStatusPanel({
       )}
       {isSuccess && (
         <div className="rounded-[var(--radius-card)] border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          <strong>Draft ASR transcript.</strong> Therapist review required before feature extraction.
+          <strong>Draft ASR transcript.</strong> {THERAPIST_REVIEW_REQUIRED_CLAUSE} before feature extraction.
         </div>
       )}
       <div className="flex flex-wrap gap-2">

@@ -10,6 +10,8 @@ import {
   positionTitle,
   profileStatusTitle,
 } from "@/features/sessions/findings/session-findings-support";
+import { EVIDENCE_REVIEW_NOUN } from "@/lib/workflow-glossary";
+import { NOT_DIAGNOSTIC_BADGE } from "@/lib/clinical-safety-copy";
 
 export function EvidenceReviewSection({
   mlDecisionSupport,
@@ -50,8 +52,8 @@ export function EvidenceReviewSection({
       {mlDecisionSupport ? (
         <div className="mt-5 space-y-3" data-testid="evidence-review-panel">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-muted)]">Evidence review</h3>
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">Not diagnostic</span>
+            <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-muted)]">{EVIDENCE_REVIEW_NOUN}</h3>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">{NOT_DIAGNOSTIC_BADGE}</span>
           </div>
           <p className="text-sm text-[color:var(--color-text-muted)]">
             {mlDecisionSupport.providerName} v{mlDecisionSupport.providerVersion} · schema {mlDecisionSupport.featureSchemaVersion}

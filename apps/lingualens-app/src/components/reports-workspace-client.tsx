@@ -8,6 +8,7 @@ import { BackendAvailabilityBanner, useBackendAvailability } from "@/components/
 import { Skeleton } from "@/components/skeleton";
 import { SafetyNote, WorkspacePanel } from "@/components/workbench-ui";
 import { ReportsLibrary } from "@/features/reports/components/reports-library";
+import { EXPORT_ELIGIBILITY_NOTE } from "@/lib/clinical-safety-copy";
 import { listBackendReports, type BackendReport } from "@/lib/workflow";
 
 export function ReportsWorkspaceClient() {
@@ -100,7 +101,7 @@ export function ReportsWorkspaceClient() {
 
       {!loading && !backendUnavailable && reports.length > 0 ? <ReportsLibrary reports={reports} /> : null}
 
-      <SafetyNote>Reports remain export-eligible only after therapist review and sign-off. Stale drafts require regeneration.</SafetyNote>
+      <SafetyNote>{EXPORT_ELIGIBILITY_NOTE}</SafetyNote>
     </div>
   );
 }

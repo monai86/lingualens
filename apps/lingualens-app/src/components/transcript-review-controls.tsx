@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { QaBadge } from "@/components/transcript-editor-support";
+import { QA_INTERPRETATION_NOTE } from "@/lib/clinical-safety-copy";
 import { attestTranscriptBlockedReason, exportTranscriptBlockedReason } from "@/lib/workflow-gates";
 import type { PersistenceStatus, TranscriptQaStatus } from "@/lib/workflow";
 
@@ -64,7 +65,7 @@ export function TranscriptQaDetails({
             {qaStatus === "not_run" ? "Run QA after saving your edits." : "No QA issues were found."}
           </p>
         )}
-        <p className="mt-3 text-xs text-slate-500">QA supports transcript review and requires therapist interpretation.</p>
+        <p className="mt-3 text-xs text-slate-500">{QA_INTERPRETATION_NOTE}</p>
         {qaBlockedReason ? (
           <p id="transcript-qa-blocked-reason" className="mt-3 rounded-[var(--radius-card)] border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900" role="status">
             {qaBlockedReason}

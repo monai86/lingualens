@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import type { SharedSettingsSection } from "@/features/settings/services/settings-access";
+import { DECISION_SUPPORT_ONLY_LABEL } from "@/lib/clinical-safety-copy";
 
 export function TherapistSettings({ section }: { section: SharedSettingsSection }) {
   switch (section) {
@@ -80,7 +81,7 @@ export function TherapistSettings({ section }: { section: SharedSettingsSection 
         <SettingsCard icon={HelpCircle} title="Help" description="How the clinical workflow is meant to be used.">
           <SettingLine label="Transcript gate" value="Quality attestation required" />
           <SettingLine label="Report export" value="Sign-off required" />
-          <SettingLine label="Clinical boundary" value="Decision-support only" />
+          <SettingLine label="Clinical boundary" value={DECISION_SUPPORT_ONLY_LABEL} />
           <SettingLine label="Pilot workspace" value="Anonymized demo data; no production accounts" />
         </SettingsCard>
       );

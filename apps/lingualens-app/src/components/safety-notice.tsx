@@ -1,7 +1,9 @@
 import { ShieldCheck } from "lucide-react";
 
+import { SAFETY_NOTICE_DEFAULT } from "@/lib/clinical-safety-copy";
+
 export function SafetyNotice({
-  children = "Decision-support only. Not diagnostic. Therapist review required before clinical use.",
+  children = SAFETY_NOTICE_DEFAULT,
   className = ""
 }: {
   children?: React.ReactNode;

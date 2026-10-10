@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, apiBlob, apiRequest, apiGet } from "@/lib/api";
+import {
+  DRAFT_ASR_TRANSCRIPT_LABEL,
+  DRAFT_TRANSCRIPT_LABEL,
+  THERAPIST_INTERPRETATION_IS_REQUIRED_CLAUSE,
+} from "@/lib/clinical-safety-copy";
+import { FEATURE_EXTRACTION_NOUN } from "@/lib/workflow-glossary";
 
 import type { RecordingMetadata } from "@/components/browser-audio-recorder";
 import { useBackendAvailability } from "@/components/backend-availability-banner";
@@ -273,7 +279,7 @@ export function useSessionWorkspace({ sessionId, caseId, transcriptId, reportId,
           transcriptReady: Boolean(transcript),
           transcriptAttested: Boolean(transcript?.therapist_attested),
           transcriptDraftLabel: transcript?.source?.includes("asr_draft")
-            ? "Draft ASR transcript — therapist review required."
+            ? DRAFT_ASR_TRANSCRIPT_LABEL
             : undefined,
           transcriptReviewStatus: transcript?.therapist_attested ? "reviewed" : transcript ? "in_review" : "not_started",
           qaStatus: normalizeBackendQaStatus(transcript?.qa_status),
@@ -524,7 +530,7 @@ export function useSessionWorkspace({ sessionId, caseId, transcriptId, reportId,
                   transcriptionJobMessage: poll.message,
                   transcriptReviewStatus: "in_review",
                   transcriptDraftLabel: (transcript.source?.includes("asr_draft") || poll.status === "needs_review" || poll.status === "completed")
-                    ? "Draft ASR transcript — therapist review required."
+                    ? DRAFT_ASR_TRANSCRIPT_LABEL
                     : undefined,
                   statusMessage: "Transcript ready for review.",
                   error: undefined
@@ -621,7 +627,7 @@ export function useSessionWorkspace({ sessionId, caseId, transcriptId, reportId,
           transcriptionJobId: processJob.job_id,
           transcriptionJobStatus: processJob.status as any,
           transcriptionJobMessage: processJob.message,
-          transcriptDraftLabel: "Draft transcript — therapist review required.",
+          transcriptDraftLabel: DRAFT_TRANSCRIPT_LABEL,
           transcriptReady: false,
           transcriptAttested: false,
           transcriptReviewStatus: "not_started",
@@ -946,7 +952,7 @@ export function useSessionWorkspace({ sessionId, caseId, transcriptId, reportId,
     if (!isTranscriptUnlocked(state)) {
       persist({
         ...state,
-        statusMessage: "Feature extraction is locked until the transcript is reviewed and attested.",
+        statusMessage: `${FEATURE_EXTRACTION_NOUN} is locked until the transcript is reviewed and attested.`,
         error: "Review the transcript, run QA, and attest it before extracting features."
       });
       return;
@@ -1063,7 +1069,7 @@ export function useSessionWorkspace({ sessionId, caseId, transcriptId, reportId,
       persist({
         ...aiState,
         aiReview,
-        statusMessage: "AI-assisted review generated. Therapist interpretation is required.",
+        statusMessage: `AI-assisted review generated. ${THERAPIST_INTERPRETATION_IS_REQUIRED_CLAUSE}.`,
         error: undefined
       });
     } catch {
@@ -1106,7 +1112,7 @@ export function useSessionWorkspace({ sessionId, caseId, transcriptId, reportId,
       persist({
         ...mlState,
         mlDecisionSupport,
-        statusMessage: "Evidence review generated. Therapist interpretation is required.",
+        statusMessage: `Evidence review generated. ${THERAPIST_INTERPRETATION_IS_REQUIRED_CLAUSE}.`,
         error: undefined
       });
     } catch {

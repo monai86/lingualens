@@ -1,6 +1,8 @@
 "use client";
 import { AlertTriangle, Upload, X } from "lucide-react";
 
+import { EXPERIMENTAL_ASR_CAUTION } from "@/lib/clinical-safety-copy";
+
 type AudioUploadConfirmPanelProps = {
   blob: Blob;
   durationSeconds: number;
@@ -35,7 +37,7 @@ export function AudioUploadConfirmPanel({
         </p>
         <p>Audio bytes are not stored in your browser. They are uploaded once and processed server-side.</p>
         <p className="font-semibold">
-          ASR transcription is experimental and not clinically validated. Therapist review required.
+          {EXPERIMENTAL_ASR_CAUTION}
         </p>
       </div>
       {!backendAvailable && (

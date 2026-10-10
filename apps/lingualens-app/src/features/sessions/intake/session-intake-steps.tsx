@@ -5,6 +5,7 @@ import { CaregiverConsentForm } from "@/components/caregiver-consent-form";
 import { AudioUploadConfirmPanel } from "@/components/audio-upload-confirm-panel";
 import { BrowserAudioRecorder } from "@/components/browser-audio-recorder";
 import { PrimaryActionButton, WorkspacePanel } from "@/components/workbench-ui";
+import { DECISION_SUPPORT_ONLY } from "@/lib/clinical-safety-copy";
 import { SafetyNotice } from "@/components/safety-notice";
 import { TranscriptionJobStatusPanel, type TranscriptionJobDisplayStatus } from "@/components/transcription-job-status-panel";
 import {
@@ -174,7 +175,7 @@ export function SessionIntakeSteps({ model }: { model: SessionIntakeViewModel })
                 />
               </Field>
               <SafetyNotice>
-                Decision-support only. Do not use this intake to imply diagnosis, automated conclusions, or secure sharing beyond the implemented local workflow.
+                {DECISION_SUPPORT_ONLY} Do not use this intake to imply diagnosis, automated conclusions, or secure sharing beyond the implemented local workflow.
               </SafetyNotice>
               <div className="flex flex-wrap justify-end gap-3">
                 <ActionButton
@@ -457,7 +458,7 @@ export function SessionIntakeSteps({ model }: { model: SessionIntakeViewModel })
                 ]} />
               </div>
               <SafetyNotice>
-                Decision-support only. Audio bytes are not stored in browser persistent storage. Experimental ASR output must be reviewed by a therapist before transcript attestation, feature extraction, or report use.
+                {DECISION_SUPPORT_ONLY} Audio bytes are not stored in browser persistent storage. Experimental ASR output must be reviewed by a therapist before transcript attestation, feature extraction, or report use.
               </SafetyNotice>
               {selectedSource === "audio" || selectedSource === "recording" ? (
                 <div className="rounded-[var(--radius-panel)] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">

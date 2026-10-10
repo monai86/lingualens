@@ -1,4 +1,9 @@
 import type { BackendReport, WorkflowState } from "@/lib/workflow";
+import {
+  DECISION_SUPPORT_ONLY,
+  NOT_DIAGNOSTIC_STATEMENT,
+  THERAPIST_REVIEW_REQUIRED,
+} from "@/lib/clinical-safety-copy";
 
 export type SnapshotIntegrityState =
   | { status: "not_applicable" }
@@ -204,7 +209,7 @@ export function createDraftText(state: WorkflowState) {
     "", "## Therapist Notes", state.therapistNotes || "- No therapist notes recorded.", "", "## Therapy Goals",
     ...(state.therapyGoals.length ? state.therapyGoals.map((goal) => `- ${goal}`) : ["- No therapy goals recorded."]),
     "", "## Needs Support", "- Review transcript wording before caregiver sharing", "", "## Next Steps",
-    "- Therapist edits and finalizes this report", "", "Decision-support only.", "Not diagnostic.", "Therapist review required.",
+    "- Therapist edits and finalizes this report", "", DECISION_SUPPORT_ONLY, NOT_DIAGNOSTIC_STATEMENT, THERAPIST_REVIEW_REQUIRED,
   ].join("\n");
 }
 

@@ -1,3 +1,4 @@
+import { FEATURE_EXTRACTION_NOUN } from "@/lib/workflow-glossary";
 import type { TranscriptLine, TranscriptQaStatus, WorkflowState } from "@/lib/workflow";
 
 type FindingsResult = Pick<
@@ -165,7 +166,7 @@ export function sessionWorkflowReducer(
         ...state,
         analysisStatus: state.featureSetId ? "stale" : "failed",
         featuresExtracted: false,
-        statusMessage: "Feature extraction failed.",
+        statusMessage: `${FEATURE_EXTRACTION_NOUN} failed.`,
         error: action.error,
       };
     case "report-started":

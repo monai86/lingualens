@@ -15,6 +15,7 @@ import {
 } from "@/features/sessions/intake/session-intake-components";
 import { SessionIntakeSteps } from "@/features/sessions/intake/session-intake-steps";
 import { EXTRACT_FEATURES_ACTION } from "@/lib/workflow-glossary";
+import { NON_DIAGNOSTIC_CLAIM } from "@/lib/clinical-safety-copy";
 import type { WorkflowSource, WorkflowState } from "@/lib/workflow";
 import { extractFeaturesBlockedReason } from "@/lib/workflow-gates";
 
@@ -161,7 +162,7 @@ export function SessionIntakeView({ model }: { model: SessionIntakeViewModel }) 
         ) : null}
 
           <WorkflowStatus state={state} backendUnavailable={backendUnavailable} />
-          <SafetyNote>Decision-support only. Not diagnostic. Transcript must be reviewed before report use.</SafetyNote>
+          <SafetyNote>{NON_DIAGNOSTIC_CLAIM} Transcript must be reviewed before report use.</SafetyNote>
       </div>
       <div className="space-y-6">
         <ReviewSummaryCard title="Current intake" rows={[

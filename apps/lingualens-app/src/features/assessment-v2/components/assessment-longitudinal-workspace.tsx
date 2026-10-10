@@ -7,6 +7,7 @@ import {
   type AssessmentV2Comparison,
   type AssessmentV2FeatureComparison,
 } from "@/services/assessment-v2-client";
+import { LONGITUDINAL_DELTA_CAUTION } from "@/lib/clinical-safety-copy";
 
 export type AssessmentLongitudinalClient = Pick<
   AssessmentV2Client,
@@ -146,7 +147,7 @@ export function AssessmentLongitudinalWorkspace({
             </h2>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Descriptive numerical delta only; indeterminate clinical interpretation. Not a diagnostic tool.
+            {LONGITUDINAL_DELTA_CAUTION}
           </p>
         </div>
 

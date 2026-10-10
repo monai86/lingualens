@@ -3,6 +3,8 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { FileCode, ListFilter, Plus, Table } from "lucide-react";
 
+import { REVIEW_REQUIRED_LABEL, TRANSCRIPT_REVIEW_REQUIRED_LABEL } from "@/lib/clinical-safety-copy";
+
 import {
   buildWaveformHeights,
   createLineId,
@@ -232,9 +234,9 @@ export function TranscriptEditorPanel({
           <span
             className={`inline-flex min-h-8 items-center rounded-[var(--radius-card)] border px-2.5 text-xs font-semibold ${attested ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}
             data-testid="transcript-attestation-badge"
-            aria-label={attested ? "Transcript attested" : "Transcript review required"}
+            aria-label={attested ? "Transcript attested" : TRANSCRIPT_REVIEW_REQUIRED_LABEL}
           >
-            {attested ? "Attested" : "Review required"}
+            {attested ? "Attested" : REVIEW_REQUIRED_LABEL}
           </span>
           <button
             type="button"

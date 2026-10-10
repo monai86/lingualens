@@ -1,4 +1,11 @@
 import { apiGet, apiRequest, apiText, apiUploadBlob, ApiError, getMockAccessHeaders } from "@/lib/api";
+import {
+  INTERPRETATION_HINT,
+  THERAPIST_INTERPRETATION_REQUIRED,
+  THERAPIST_REVIEW_REMAINS_REQUIRED_CLAUSE,
+  THERAPIST_REVIEW_REQUIRED,
+  TRANSCRIPT_REVIEW_REQUIRED_LABEL,
+} from "@/lib/clinical-safety-copy";
 // Model-informed decision-support and evidence-review transport lives behind
 // the analysis adapter boundary (DESIGN.md); these re-exports keep the existing
 // import sites and tests working while feature controllers migrate to the
@@ -682,7 +689,7 @@ export function createInitialWorkflowState(): WorkflowState {
     featureSignals: [],
     reviewNeededCount: 0,
     insights: [
-      { title: "Transcript review required", text: "Review speaker labels and transcript quality before report use.", tone: "orange" }
+      { title: TRANSCRIPT_REVIEW_REQUIRED_LABEL, text: "Review speaker labels and transcript quality before report use.", tone: "orange" }
     ],
     therapistNotes: "",
     therapyGoals: [],
@@ -1459,8 +1466,8 @@ export function buildFeatureSignals(
         calculationMethod: definition?.calculationMethod ?? "Backend-derived feature value.",
         requiredInputs: definition?.requiredInputs ?? [],
         limitations: definition?.limitations ?? [],
-        clinicalInterpretationCaution: definition?.clinicalInterpretationCaution ?? "Therapist interpretation required.",
-        interpretationHint: "Therapist-editable descriptive draft. Do not treat as a diagnosis or final conclusion.",
+        clinicalInterpretationCaution: definition?.clinicalInterpretationCaution ?? THERAPIST_INTERPRETATION_REQUIRED,
+        interpretationHint: INTERPRETATION_HINT,
         referenceText: hasReferenceThresholds(definition)
           ? "Reference details available in the backend definition catalog."
           : "Reference comparison unavailable"
@@ -1490,7 +1497,7 @@ export function summarizeAnalysis(qa: BackendQa, backendFeatures?: BackendFeatur
   const reviewNeededCount = Math.max(issues.length, score < 0.9 ? 1 : 0);
   return {
     qaStatus: normalizeQaStatus(qa.status ?? qa.qa_status),
-    qaSummary: qa.summary ?? "Transcript QA completed. Therapist review remains required before final report use.",
+    qaSummary: qa.summary ?? `Transcript QA completed. ${THERAPIST_REVIEW_REMAINS_REQUIRED_CLAUSE} before final report use.`,
     transcriptAttested: true,
     transcriptCompleteness: Math.round(Math.max(0, Math.min(1, score)) * 100),
     featuresExtracted: Boolean(backendFeatures),
@@ -1564,7 +1571,7 @@ export function createMockAnalysisSummary(): Pick<WorkflowState, "qaStatus" | "q
     reviewNeededCount: 1,
     insights: [
       { title: "Experimental audio workflow", text: "Recording and ASR are simulated until real processing is enabled.", tone: "orange" },
-      { title: "Therapist review required", text: "Use this preview only to continue the therapist review workflow.", tone: "orange" }
+      { title: THERAPIST_REVIEW_REQUIRED, text: "Use this preview only to continue the therapist review workflow.", tone: "orange" }
     ]
   };
 }

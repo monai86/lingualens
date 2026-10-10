@@ -4,6 +4,8 @@ import {
   ShieldCheck
 } from "lucide-react";
 
+import { SAFETY_NOTICE_DEFAULT } from "@/lib/clinical-safety-copy";
+
 type IconTone = "purple" | "teal" | "green" | "orange" | "pink" | "blue";
 
 const toneClasses: Record<IconTone, string> = {
@@ -60,7 +62,7 @@ export function PrimaryActionButton({
   );
 }
 
-export function SafetyNote({ children = "For clinician use only. Not a diagnostic tool." }: { children?: React.ReactNode }) {
+export function SafetyNote({ children = SAFETY_NOTICE_DEFAULT }: { children?: React.ReactNode }) {
   return (
     <p className="flex items-center justify-center gap-2 px-2 py-3 text-center text-xs font-medium text-slate-500">
       <ShieldCheck size={16} aria-hidden="true" className="text-clinical" />

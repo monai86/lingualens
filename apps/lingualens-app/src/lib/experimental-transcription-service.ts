@@ -1,3 +1,5 @@
+import { DRAFT_TRANSCRIPT_LABEL } from "@/lib/clinical-safety-copy";
+
 export type ExperimentalTranscriptionStatus = "queued" | "processing" | "completed" | "failed";
 
 export type ExperimentalTranscriptionJob = {
@@ -5,7 +7,7 @@ export type ExperimentalTranscriptionJob = {
   uploadId: string;
   status: ExperimentalTranscriptionStatus;
   message: string;
-  label: "Draft transcript — therapist review required.";
+  label: typeof DRAFT_TRANSCRIPT_LABEL;
   draftTranscript?: string;
   error?: string;
 };
@@ -49,7 +51,7 @@ export async function createExperimentalTranscriptionJob(uploadId: string): Prom
     uploadId,
     status: "queued",
     message: "Experimental transcription job queued.",
-    label: "Draft transcript — therapist review required.",
+    label: DRAFT_TRANSCRIPT_LABEL,
     pollCount: 0
   };
   jobs.set(job.jobId, job);

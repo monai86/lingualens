@@ -7,6 +7,7 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { ActionButton } from "@/components/action-button";
 import { PageHeader } from "@/components/page-header";
 import { SafetyNotice } from "@/components/safety-notice";
+import { THERAPIST_REVIEW_AND_CONSENT_REQUIRED } from "@/lib/clinical-safety-copy";
 import { createBackendSessionForCase, type BackendCase } from "@/lib/workflow";
 
 function caseLabel(caseItem: BackendCase) {
@@ -129,7 +130,7 @@ export function StartSessionSelector({ cases, preselectedCaseId }: { cases: Back
       </form>
 
       <SafetyNotice>
-        Starting a session does not generate findings or a report. Therapist review and consent gates remain required.
+        Starting a session does not generate findings or a report. {THERAPIST_REVIEW_AND_CONSENT_REQUIRED}
       </SafetyNotice>
     </div>
   );

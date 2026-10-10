@@ -14,6 +14,11 @@ import { SafetyNotice } from "@/components/safety-notice";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import type { CaseDetailViewModel } from "@/features/cases/hooks/use-cases-workspace";
+import {
+  DECISION_SUPPORT_ONLY,
+  THERAPIST_REVIEW_SIGNOFF_REQUIRED,
+  THERAPIST_SIGNOFF_CLAUSE,
+} from "@/lib/clinical-safety-copy";
 import { grantConsentBlockedReason } from "@/lib/workflow-gates";
 import type { BackendCase, BackendGoal, BackendTimelineEvent } from "@/lib/workflow";
 
@@ -106,7 +111,7 @@ function getProgressSnapshot(caseItem: BackendCase, localWorkflowStage: string) 
     {
       label: "Report status",
       value: caseItem.latest_report_status ?? "Draft",
-      helper: "Therapist review and sign-off remain required."
+      helper: THERAPIST_REVIEW_SIGNOFF_REQUIRED
     }
   ];
 }
@@ -322,7 +327,7 @@ export function CaseDetail({ model }: { model: CaseDetailViewModel }) {
               <div>
                 <StatusBadge status={caseItem.latest_report_status ?? "Not started"} />
                 <p className="mt-3 text-sm leading-6 text-[color:var(--color-text-muted)]">
-                  Report status reflects backend workflow state. Therapist review and sign-off remain required before export.
+                  Report status reflects backend workflow state. {THERAPIST_SIGNOFF_CLAUSE} before export.
                 </p>
               </div>
               <ActionButton href="/reports" tone="secondary">Open Reports</ActionButton>
@@ -349,7 +354,7 @@ export function CaseDetail({ model }: { model: CaseDetailViewModel }) {
           </section>
 
           <SafetyNotice>
-            Decision-support only. Case detail is a workflow summary and referral/context record. It does not display diagnostic conclusions.
+            {DECISION_SUPPORT_ONLY} Case detail is a workflow summary and referral/context record. It does not display diagnostic conclusions.
           </SafetyNotice>
         </div>
 

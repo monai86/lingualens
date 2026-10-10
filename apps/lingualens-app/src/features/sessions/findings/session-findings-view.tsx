@@ -29,7 +29,11 @@ import {
   workflowSessionHref,
 } from "@/features/sessions/findings/session-findings-support";
 import { approveReviewedCuesBlockedReason, generateEvidenceReviewBlockedReason, regenerateFindingsBlockedReason } from "@/lib/workflow-gates";
-import { EXTRACT_FEATURES_ACTION, GENERATE_EVIDENCE_REVIEW_ACTION, GENERATE_REPORT_ACTION } from "@/lib/workflow-glossary";
+import {
+  THERAPIST_INTERPRETATION_IS_REQUIRED_CLAUSE,
+  THERAPIST_REVIEW_REMAINS_REQUIRED,
+} from "@/lib/clinical-safety-copy";
+import { EXTRACT_FEATURES_ACTION, FEATURE_EXTRACTION_NOUN, GENERATE_EVIDENCE_REVIEW_ACTION, GENERATE_REPORT_ACTION } from "@/lib/workflow-glossary";
 import type { WorkflowState } from "@/lib/workflow";
 
 export function SessionFindingsView({
@@ -177,7 +181,7 @@ export function SessionFindingsView({
               <p className="mt-2 text-sm leading-6 text-[color:var(--color-text-muted)]">
                 {findingsStale
                   ? "Prior derived values are hidden until findings are regenerated from the current transcript."
-                  : "Backend feature values are shown as descriptive cues only. Therapist interpretation is required for any clinical use."}
+                  : `Backend feature values are shown as descriptive cues only. ${THERAPIST_INTERPRETATION_IS_REQUIRED_CLAUSE} for any clinical use.`}
               </p>
             </div>
             {currentFindingsState.featuresExtracted && !currentFindingsState.mlDecisionSupport ? (
@@ -215,7 +219,7 @@ export function SessionFindingsView({
             <div className="bg-[color:var(--color-surface-strong)] px-4 py-3">
               <dt className="text-xs font-medium uppercase tracking-[0.08em] text-[color:var(--color-text-subtle)]">Transcript quality</dt>
               <dd className="mt-1 font-semibold text-[color:var(--color-text-strong)]">{transcriptQualityLabel(state)}</dd>
-              <p className="mt-1 text-xs leading-5 text-[color:var(--color-text-muted)]">{state.qaSummary ?? "Therapist review remains required."}</p>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--color-text-muted)]">{state.qaSummary ?? THERAPIST_REVIEW_REMAINS_REQUIRED}</p>
             </div>
             <div className="bg-[color:var(--color-surface-strong)] px-4 py-3">
               <dt className="text-xs font-medium uppercase tracking-[0.08em] text-[color:var(--color-text-subtle)]">Features extracted</dt>
@@ -345,7 +349,7 @@ export function SessionFindingsView({
           <h3 className="text-sm font-semibold text-[color:var(--color-text-strong)]">Review readiness</h3>
           <ul className="mt-3 space-y-2 text-sm text-[color:var(--color-text-muted)]">
             <li>{state.transcriptAttested ? "Transcript attested" : "Transcript attestation required"}</li>
-            <li>{currentFindingsState.featuresExtracted ? "Feature extraction complete" : "Feature extraction pending"}</li>
+            <li>{currentFindingsState.featuresExtracted ? `${FEATURE_EXTRACTION_NOUN} complete` : `${FEATURE_EXTRACTION_NOUN} pending`}</li>
             <li>{currentFindingsState.mlReadiness?.ready === false ? "Evidence readiness check still blocked" : "Evidence readiness check can proceed"}</li>
           </ul>
         </div>

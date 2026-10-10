@@ -22,6 +22,7 @@ import {
   versionLabel,
 } from "@/features/sessions/report/session-report-model";
 import { GENERATE_REPORT_ACTION } from "@/lib/workflow-glossary";
+import { NON_DIAGNOSTIC_CLAIM } from "@/lib/clinical-safety-copy";
 export function SessionReportView(props: SessionReportViewProps) {
   const identityKey = JSON.stringify([
     props.sessionId ?? "",
@@ -380,7 +381,7 @@ function ReportSummaryIdentityScope({ caseId, sessionId, transcriptId, reportId 
         ) : null}
         {state.finalizeStatus ? <p className="demo-note rounded-[var(--radius-panel)] p-3 text-sm">{state.finalizeStatus}</p> : null}
         <WorkflowStatus state={state} backendUnavailable={backendUnavailable} />
-        <SafetyNote>Decision-support only. Not diagnostic. Final report text must be reviewed by the therapist.</SafetyNote>
+        <SafetyNote>{NON_DIAGNOSTIC_CLAIM} Final report text must be reviewed by the therapist.</SafetyNote>
       </div>
 
       <WorkspacePanel className="min-w-0 p-6">

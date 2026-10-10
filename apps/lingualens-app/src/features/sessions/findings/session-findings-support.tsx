@@ -1,4 +1,9 @@
 import { resolveSessionHref } from "@/features/sessions/state/session-view";
+import {
+  DECISION_SUPPORT_ONLY,
+  INTERPRETATION_HINT,
+  THERAPIST_INTERPRETATION_REQUIRED,
+} from "@/lib/clinical-safety-copy";
 import type { WorkflowState } from "@/lib/workflow";
 
 export function buildLinguisticSignalCards(state: WorkflowState) {
@@ -14,8 +19,8 @@ export function buildLinguisticSignalCards(state: WorkflowState) {
     calculationMethod: "Derived from the reviewed transcript workflow.",
     requiredInputs: ["reviewed transcript"],
     limitations: [],
-    clinicalInterpretationCaution: "Therapist interpretation required.",
-    interpretationHint: "Therapist-editable descriptive draft. Do not treat as a diagnosis or final conclusion.",
+    clinicalInterpretationCaution: THERAPIST_INTERPRETATION_REQUIRED,
+    interpretationHint: INTERPRETATION_HINT,
     referenceText: "Reference comparison unavailable"
   }));
 }
@@ -69,7 +74,7 @@ export function createInterpretationDraft(
     "Therapist-editable draft text:",
     signalSummary ? `Observed cues: ${signalSummary}.` : "Observed cues: feature review pending.",
     cueSummary ? `Review focus: ${cueSummary}.` : "Review focus: confirm transcript context and therapist notes.",
-    "Edit this draft before using it in any report. Decision-support only."
+    `Edit this draft before using it in any report. ${DECISION_SUPPORT_ONLY}`
   ].join("\n\n");
 }
 
