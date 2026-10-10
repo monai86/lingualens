@@ -88,7 +88,7 @@ export function LongitudinalTrendCard({
                   {mluDelta.text}
                 </span>
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">From {firstSession.mluWords?.toFixed(2)} in initial session</div>
+              <div className="text-xs text-slate-400 mt-1">From {firstSession.mluWords?.toFixed(2)} in initial session</div>
             </div>
           )}
 
@@ -109,7 +109,7 @@ export function LongitudinalTrendCard({
                   {turnDelta.text}
                 </span>
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">From {firstSession.turnTakingCount} in initial session</div>
+              <div className="text-xs text-slate-400 mt-1">From {firstSession.turnTakingCount} in initial session</div>
             </div>
           )}
 
@@ -133,7 +133,7 @@ export function LongitudinalTrendCard({
                   {echoDelta.text}
                 </span>
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">From {firstSession.echolaliaCount} in initial session</div>
+              <div className="text-xs text-slate-400 mt-1">From {firstSession.echolaliaCount} in initial session</div>
             </div>
           )}
         </div>
@@ -161,7 +161,7 @@ export function LongitudinalTrendCard({
                   <Calendar className="w-3.5 h-3.5 text-slate-400" />
                   {s.date}
                   {idx === sessions.length - 1 && (
-                    <span className="ml-1 text-[10px] font-bold text-teal-700 bg-teal-100/70 px-1.5 py-0.2 rounded">
+                    <span className="ml-1 text-xs font-bold text-teal-700 bg-teal-100/70 px-1.5 py-0.5 rounded">
                       Current
                     </span>
                   )}
@@ -191,7 +191,7 @@ export function LongitudinalTrendCard({
         </table>
       </div>
 
-      <div className="rounded border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900">
+      <div className="rounded border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
         <strong>⚠️ Clinical Note:</strong> Longitudinal trajectories illustrate observed descriptive speech patterns across clinical sessions. They are not automated prognostic predictions and must be interpreted by a certified speech-language pathologist in holistic context.
       </div>
     </div>

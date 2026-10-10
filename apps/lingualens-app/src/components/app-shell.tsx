@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
 import { Sidebar, type ShellActive } from "@/components/sidebar";
+import { Topbar } from "@/components/topbar";
 import { BottomNav } from "@/components/bottom-nav";
 import { RightRail } from "@/components/right-rail";
 import { PasaScopeLogo } from "@/components/pasascope-logo";
@@ -156,6 +157,9 @@ export function AppShell({
             <PasaScopeLogo size="sm" showSubtitle={false} href="/dashboard" />
             <div className="w-11" />
           </header>
+
+          {/* Desktop Top Bar */}
+          <Topbar />
 
           <main id="main-content" className="min-w-0 flex-1 overflow-y-auto bg-[color:var(--color-page-bg)] p-4 max-md:pb-44 md:p-6">
             <div className="flex items-start gap-6">

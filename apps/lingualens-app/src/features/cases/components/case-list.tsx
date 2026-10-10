@@ -333,31 +333,35 @@ export function CaseList({
                           : "border-[color:var(--color-border)] bg-[color:var(--color-surface-reading)] shadow-2xs"
                       }`}
                     >
-                      <div className="flex items-center gap-3 p-4">
-                        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--color-pasa-teal-soft)] text-xs font-bold text-[color:var(--color-pasa-teal)] border border-[color:var(--color-pasa-teal-border)]/60">
-                          {childInitials(caseItem)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <Link
-                              href={`/cases/${caseItem.case_id}`}
-                              className="truncate font-bold text-[color:var(--color-text-strong)] hover:text-[color:var(--color-pasa-teal)]"
-                            >
-                              {caseLabel(caseItem)}
-                            </Link>
-                            <StatusBadge status={caseItem.latest_session_status ?? "Draft"} />
+                      <div className="p-4 space-y-3">
+                        <div className="flex items-start gap-3">
+                          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color:var(--color-pasa-teal-soft)] text-xs font-bold text-[color:var(--color-pasa-teal)] border border-[color:var(--color-pasa-teal-border)]/60">
+                            {childInitials(caseItem)}
                           </div>
-                          <p className="mt-0.5 truncate text-xs text-[color:var(--color-text-muted)]">
-                            {workflowStage(caseItem)} · {caseItem.latest_session_date ?? "No session activity yet"}
-                          </p>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <Link
+                                href={`/cases/${caseItem.case_id}`}
+                                className="inline-flex min-h-10 items-center font-bold text-[color:var(--color-text-strong)] hover:text-[color:var(--color-pasa-teal)]"
+                              >
+                                {caseLabel(caseItem)}
+                              </Link>
+                              <StatusBadge status={caseItem.latest_session_status ?? "Draft"} />
+                            </div>
+                            <p className="text-xs text-[color:var(--color-text-muted)]">
+                              {workflowStage(caseItem)} · {caseItem.latest_session_date ?? "No session activity yet"}
+                            </p>
+                          </div>
                         </div>
-                        <Link
-                          href={action.href}
-                          className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[color:var(--color-border)] bg-white px-3 text-xs font-semibold text-[color:var(--color-pasa-teal)] transition hover:border-[color:var(--color-pasa-teal-border)] hover:bg-[color:var(--color-pasa-teal-soft)] shadow-2xs"
-                        >
-                          {action.label}
-                          <ArrowRight size={13} aria-hidden="true" />
-                        </Link>
+                        <div className="pt-2 border-t border-[color:var(--color-border)]/50">
+                          <Link
+                            href={action.href}
+                            className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-[color:var(--color-border)] bg-white px-4 text-xs font-bold text-[color:var(--color-pasa-teal)] transition hover:border-[color:var(--color-pasa-teal-border)] hover:bg-[color:var(--color-pasa-teal-soft)] shadow-2xs"
+                          >
+                            <span>{action.label}</span>
+                            <ArrowRight size={14} aria-hidden="true" />
+                          </Link>
+                        </div>
                       </div>
                     </li>
                   );

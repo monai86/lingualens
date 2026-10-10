@@ -81,6 +81,44 @@ const FALLBACK_DEMO_CHILDREN: AssessmentV2Child[] = [
   },
 ];
 
+function createDemoAssessmentFallback(childId: string, purpose: AssessmentV2Purpose): { demoAssessment: AssessmentV2Assessment; demoCapture: AssessmentV2Capture } {
+  const timestamp = Date.now();
+  const demoAssessment: AssessmentV2Assessment = {
+    id: `assessment_demo_${timestamp}`,
+    child_id: childId,
+    purpose,
+    state: "ready_for_capture",
+    age_months: 48,
+    language_context: { primary: "th", additional: [] },
+    assigned_clinician_id: "therapist-demo",
+    version: 1,
+  };
+  const demoCapture: AssessmentV2Capture = {
+    assessment_id: demoAssessment.id,
+    state: "ready_for_capture",
+    protocol: {
+      protocol_version_key: "protocol_dspm_1",
+      selected_at: new Date(timestamp).toISOString(),
+      version: 1,
+    },
+    activities: [
+      {
+        activity_code: "free_play",
+        required: true,
+        target_duration_seconds: 180,
+        minimum_duration_seconds: 120,
+      },
+    ],
+    recordings: [],
+    progress: {
+      required_activities_total: 1,
+      required_activities_verified: 0,
+      required_activities_usable: 0,
+    },
+  };
+  return { demoAssessment, demoCapture };
+}
+
 export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client }: AssessmentCaptureWorkspaceProps) {
   const [status, setStatus] = useState<WorkspaceStatus>("loading");
   const [children, setChildren] = useState<AssessmentV2Child[]>([]);
@@ -210,39 +248,7 @@ export function AssessmentCaptureWorkspace({ client = defaultAssessmentV2Client 
       setStatus("ready");
     } catch {
       if (client === defaultAssessmentV2Client) {
-        const demoAssessment: AssessmentV2Assessment = {
-          id: `assessment_demo_${Date.now()}`,
-          child_id: selectedChild.id,
-          purpose,
-          state: "ready_for_capture",
-          age_months: 48,
-          language_context: { primary: "th", additional: [] },
-          assigned_clinician_id: "therapist-demo",
-          version: 1,
-        };
-        const demoCapture: AssessmentV2Capture = {
-          assessment_id: demoAssessment.id,
-          state: "ready_for_capture",
-          protocol: {
-            protocol_version_key: "protocol_dspm_1",
-            selected_at: new Date().toISOString(),
-            version: 1,
-          },
-          activities: [
-            {
-              activity_code: "free_play",
-              required: true,
-              target_duration_seconds: 180,
-              minimum_duration_seconds: 120,
-            },
-          ],
-          recordings: [],
-          progress: {
-            required_activities_total: 1,
-            required_activities_verified: 0,
-            required_activities_usable: 0,
-          },
-        };
+        const { demoAssessment, demoCapture } = createDemoAssessmentFallback(selectedChild.id, purpose);
         setCapture(demoCapture);
         setCompletedAssessment(null);
         setActiveActivityIndex(0);

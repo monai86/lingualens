@@ -61,7 +61,7 @@ export function PasaScopeLogo({
     sm: {
       markSize: "sm" as const,
       titleClass: "text-base tracking-tight font-bold",
-      subClass: "text-[11px] leading-tight font-medium",
+      subClass: "text-xs leading-tight font-medium",
       gapClass: "gap-2.5",
     },
     md: {
@@ -106,7 +106,7 @@ export function PasaScopeLogo({
 
   if (href) {
     return (
-      <Link href={href} className="inline-flex transition opacity-95 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--color-focus-ring)] rounded-lg">
+      <Link href={href} className="inline-flex min-h-10 items-center transition opacity-95 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--color-focus-ring)] rounded-lg">
         {content}
       </Link>
     );

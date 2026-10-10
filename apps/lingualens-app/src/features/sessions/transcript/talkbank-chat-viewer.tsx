@@ -76,7 +76,7 @@ export function TalkbankChatViewer({
           <span className="text-xs font-bold text-slate-800">
             TalkBank / CHAT Standard Syntax View
           </span>
-          <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+          <span className="rounded bg-sky-100 px-1.5 py-0.5 text-xs font-semibold text-sky-700">
             @UTF8
           </span>
         </div>
@@ -84,7 +84,7 @@ export function TalkbankChatViewer({
         <button
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 active:scale-98 transition-all"
+          className="flex min-h-10 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 active:scale-98 transition-all"
         >
           {copied ? (
             <>

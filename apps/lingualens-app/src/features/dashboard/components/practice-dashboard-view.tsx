@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { StatusBadge } from "@/components/status-badge";
 import { LanguageProgressChart } from "@/features/dashboard/components/language-progress-chart";
+import { EVIDENCE_REVIEW_NOUN } from "@/lib/workflow-glossary";
 import type { DashboardSummary } from "@/lib/workflow";
 
 function consentLabel(value: string) {
@@ -26,7 +27,7 @@ function consentLabel(value: string) {
 
 function sessionStage(session: DashboardSummary["recent_sessions"][number]) {
   if (session.has_report) return "Report drafted";
-  if (session.has_ml_review) return "Evidence review";
+  if (session.has_ml_review) return EVIDENCE_REVIEW_NOUN;
   if (session.has_features) return "Findings extracted";
   if (session.has_transcript) return "Transcript ready";
   return "Intake only";
@@ -78,7 +79,7 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--color-pasa-teal)] text-white shadow-2xs">
                   <LayoutDashboard className="h-4 w-4" />
                 </span>
-                <span className="text-[11px] font-bold text-[color:var(--color-pasa-teal)] bg-white px-2 py-0.5 rounded-full border border-[color:var(--color-pasa-teal-border)]">
+                <span className="text-xs font-bold text-[color:var(--color-pasa-teal)] bg-white px-2 py-0.5 rounded-full border border-[color:var(--color-pasa-teal-border)]">
                   หน้าปัจจุบัน
                 </span>
               </div>
@@ -104,7 +105,7 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--color-surface-muted)] text-[color:var(--color-pasa-teal)]">
                   <FolderOpen className="h-4 w-4" />
                 </span>
-                <span className="text-[11px] font-bold text-[color:var(--color-text-subtle)] bg-[color:var(--color-surface-muted)] px-2 py-0.5 rounded-full">
+                <span className="text-xs font-bold text-[color:var(--color-text-subtle)] bg-[color:var(--color-surface-muted)] px-2 py-0.5 rounded-full">
                   จัดการเด็ก
                 </span>
               </div>
@@ -118,7 +119,7 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
             <div className="mt-4 pt-3 border-t border-[color:var(--color-border)]/50">
               <Link
                 href="/cases"
-                className="inline-flex min-h-9 items-center justify-between w-full rounded-lg bg-[color:var(--color-surface-muted)]/70 px-3 text-xs font-bold text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-pasa-teal-soft)] hover:text-[color:var(--color-pasa-teal)] transition"
+                className="inline-flex min-h-10 items-center justify-between w-full rounded-lg bg-[color:var(--color-surface-muted)]/70 px-3 text-xs font-bold text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-pasa-teal-soft)] hover:text-[color:var(--color-pasa-teal)] transition"
               >
                 <span>ไปที่หน้าเคสทั้งหมด</span>
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -133,7 +134,7 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--color-scope-coral-soft)] text-[color:var(--color-scope-coral)]">
                   <AudioLines className="h-4 w-4" />
                 </span>
-                <span className="text-[11px] font-bold text-[color:var(--color-scope-coral)] bg-[color:var(--color-scope-coral-soft)] px-2 py-0.5 rounded-full border border-[color:var(--color-scope-coral-border)]">
+                <span className="text-xs font-bold text-[color:var(--color-scope-coral)] bg-[color:var(--color-scope-coral-soft)] px-2 py-0.5 rounded-full border border-[color:var(--color-scope-coral-border)]">
                   วิเคราะห์ LSA
                 </span>
               </div>
@@ -147,14 +148,14 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
             <div className="mt-4 pt-3 border-t border-[color:var(--color-border)]/50 flex flex-col gap-1.5">
               <Link
                 href="/sessions/session_demo_001?view=findings"
-                className="inline-flex min-h-9 items-center justify-between w-full rounded-lg bg-[color:var(--color-surface-muted)]/70 px-3 text-xs font-bold text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-pasa-teal-soft)] hover:text-[color:var(--color-pasa-teal)] transition"
+                className="inline-flex min-h-10 items-center justify-between w-full rounded-lg bg-[color:var(--color-surface-muted)]/70 px-3 text-xs font-bold text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-pasa-teal-soft)] hover:text-[color:var(--color-pasa-teal)] transition"
               >
                 <span>ดูกราฟใยแมงมุม (Spider)</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
               <Link
                 href="/sessions/session_demo_001?view=transcript"
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--color-text-muted)] hover:text-[color:var(--color-pasa-teal)] px-1"
+                className="inline-flex min-h-10 items-center gap-1.5 text-xs font-medium text-[color:var(--color-text-muted)] hover:text-[color:var(--color-pasa-teal)] px-1"
               >
                 <FileCode className="h-3 w-3" />
                 <span>เปิดห้องตรวจ TalkBank (.cha)</span>
@@ -169,7 +170,7 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color:var(--color-warm-butter-soft)] text-[color:var(--color-pasa-teal)]">
                   <FileCheck2 className="h-4 w-4" />
                 </span>
-                <span className="text-[11px] font-bold text-[color:var(--color-pasa-teal)] bg-[color:var(--color-warm-butter-soft)] px-2 py-0.5 rounded-full border border-[color:var(--color-warm-butter-border)]">
+                <span className="text-xs font-bold text-[color:var(--color-pasa-teal)] bg-[color:var(--color-warm-butter-soft)] px-2 py-0.5 rounded-full border border-[color:var(--color-warm-butter-border)]">
                   รายงานคลินิก
                 </span>
               </div>
@@ -183,7 +184,7 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
             <div className="mt-4 pt-3 border-t border-[color:var(--color-border)]/50 flex flex-col gap-1.5">
               <Link
                 href="/reports/preview"
-                className="inline-flex min-h-9 items-center justify-between w-full rounded-lg bg-[color:var(--color-surface-muted)]/70 px-3 text-xs font-bold text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-pasa-teal-soft)] hover:text-[color:var(--color-pasa-teal)] transition"
+                className="inline-flex min-h-10 items-center justify-between w-full rounded-lg bg-[color:var(--color-surface-muted)]/70 px-3 text-xs font-bold text-[color:var(--color-text-strong)] hover:bg-[color:var(--color-pasa-teal-soft)] hover:text-[color:var(--color-pasa-teal)] transition"
               >
                 <span className="flex items-center gap-1.5">
                   <Printer className="h-3.5 w-3.5" />
@@ -193,7 +194,7 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
               </Link>
               <Link
                 href="/reports"
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--color-text-muted)] hover:text-[color:var(--color-pasa-teal)] px-1"
+                className="inline-flex min-h-10 items-center gap-1.5 text-xs font-medium text-[color:var(--color-text-muted)] hover:text-[color:var(--color-pasa-teal)] px-1"
               >
                 <span>ดูประวัติรายงานทั้งหมด</span>
               </Link>
@@ -221,7 +222,7 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
           tone="neutral"
         />
         <StatCard
-          label="Evidence review"
+          label={EVIDENCE_REVIEW_NOUN}
           value={String(summary.sessions.with_ml_review)}
           helper="Sessions with an ML decision-support review"
           icon={ListChecks}
@@ -369,23 +370,23 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
                 <tbody className="divide-y divide-[color:var(--color-border)]/60">
                   {summary.recent_sessions.map((session) => (
                     <tr key={session.session_id} className="transition-colors hover:bg-[color:var(--color-pasa-teal-soft)]/30">
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-2">
                         <Link
                           href={`/sessions/${encodeURIComponent(session.session_id)}?case_id=${encodeURIComponent(session.case_id)}`}
-                          className="font-bold text-[color:var(--color-pasa-teal)] hover:underline"
+                          className="inline-flex min-h-10 min-w-10 items-center font-bold text-[color:var(--color-pasa-teal)] hover:underline"
                         >
                           {session.case_label}
                         </Link>
                       </td>
-                      <td className="px-5 py-4 text-xs text-[color:var(--color-text-muted)] font-mono">{session.session_date}</td>
-                      <td className="px-5 py-4 text-xs font-medium text-[color:var(--color-text-strong)]">{sessionStage(session)}</td>
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-2 text-xs text-[color:var(--color-text-muted)] font-mono">{session.session_date}</td>
+                      <td className="px-5 py-2 text-xs font-medium text-[color:var(--color-text-strong)]">{sessionStage(session)}</td>
+                      <td className="px-5 py-2">
                         <StatusBadge status={session.status} />
                       </td>
-                      <td className="px-5 py-4 text-right">
+                      <td className="px-5 py-2 text-right">
                         <Link
                           href={`/sessions/${encodeURIComponent(session.session_id)}?case_id=${encodeURIComponent(session.case_id)}`}
-                          className="inline-flex min-h-8 items-center rounded-lg border border-[color:var(--color-border)] bg-white px-3 text-xs font-bold text-[color:var(--color-pasa-teal)] shadow-2xs hover:bg-[color:var(--color-pasa-teal-soft)] hover:border-[color:var(--color-pasa-teal-border)] transition"
+                          className="inline-flex min-h-10 items-center rounded-xl border border-[color:var(--color-border)] bg-white px-3.5 text-xs font-bold text-[color:var(--color-pasa-teal)] shadow-2xs hover:bg-[color:var(--color-pasa-teal-soft)] hover:border-[color:var(--color-pasa-teal-border)] transition"
                         >
                           Open
                         </Link>
@@ -401,7 +402,7 @@ export function PracticeDashboardView({ summary }: { summary: DashboardSummary }
                   <div className="flex items-center justify-between gap-3">
                     <Link
                       href={`/sessions/${encodeURIComponent(session.session_id)}?case_id=${encodeURIComponent(session.case_id)}`}
-                      className="font-bold text-[color:var(--color-pasa-teal)] hover:underline"
+                      className="inline-flex min-h-10 min-w-10 items-center font-bold text-[color:var(--color-pasa-teal)] hover:underline"
                     >
                       {session.case_label}
                     </Link>

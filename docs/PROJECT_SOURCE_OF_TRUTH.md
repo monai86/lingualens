@@ -36,9 +36,13 @@ validated `?view=intake|transcript|findings|report`; ค่า query ที่�
 `/cases?intent=start-session`. Report library ต้องเปิด editor ผ่าน Session
 Workspace ไม่สร้าง report editor route แยกอีกชุด.
 
-Shell navigation ใช้ canonical routes ชุดเดียวคือ Today, Cases, Session,
-Reports และ Settings; `/` redirect ไป `/today`. ถ้ายังไม่มี safe active session
-identifier, Session navigation ต้องไป `/cases?intent=start-session`.
+Shell navigation ใช้ canonical routes ชุดเดียวคือ Today, Dashboard, Cases,
+Session, Reports และ Settings; `/` redirect ไป `/today`. Dashboard เป็น clinic
+overview ของ desktop sidebar เท่านั้น และต้องไม่ปรากฏใน mobile bottom nav ซึ่งคง
+5 รายการ; ถ้าจะเพิ่ม ถอด หรือสลับลำดับ destination ต้องแก้ canonical route-set
+assertion ใน `apps/lingualens-app/src/__tests__/navigation-routes.test.tsx`
+พร้อมกันเสมอ. ถ้ายังไม่มี safe active session identifier, Session navigation
+ต้องไป `/cases?intent=start-session`.
 Presentation-only `/demo/*` routes ต้อง fail closed เว้นแต่ build/runtime ตั้ง
 `NEXT_PUBLIC_DEMO_MODE=true` อย่างชัดเจน และเมื่อเปิดต้องแสดง sample-data notice
 ตลอด demo layout.

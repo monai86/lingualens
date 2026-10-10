@@ -292,7 +292,7 @@ export function SupabaseLoginFormClient({
             • Clinical Workstation Auth
           </span>
         </div>
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100/80 px-2.5 py-0.5 rounded-full border border-slate-200/60">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-100/80 px-2.5 py-0.5 rounded-full border border-slate-200/60">
           <ShieldCheck size={13} className="text-emerald-600 shrink-0" />
           <span>TLS 1.3 Strict</span>
         </span>
@@ -382,7 +382,7 @@ export function SupabaseLoginFormClient({
             สร้างบัญชีใหม่ (Create Account)
           </button>
         </div>
-        <span className="text-[11px] text-slate-400 font-medium">Invitation-only</span>
+        <span className="text-xs text-slate-400 font-medium">Invitation-only</span>
       </div>
 
       {/* Form */}
@@ -413,7 +413,7 @@ export function SupabaseLoginFormClient({
             <label htmlFor="clinical-email-input" className="block text-xs font-bold uppercase tracking-wider text-slate-700">
               Email
             </label>
-            <span className="text-[11px] font-normal text-slate-400 normal-case">
+            <span className="text-xs font-normal text-slate-400 normal-case">
               Clinic Email or SLP License ID / อีเมลหรือเลขที่ใบอนุญาต
             </span>
           </div>
@@ -442,7 +442,7 @@ export function SupabaseLoginFormClient({
               type="button"
               onClick={handlePasswordRecovery}
               disabled={!browserClient || isSendingRecovery}
-              className="text-[11px] font-medium text-emerald-700 hover:text-emerald-900 hover:underline transition disabled:opacity-50"
+              className="text-xs font-medium text-emerald-700 hover:text-emerald-900 hover:underline transition disabled:opacity-50"
             >
               {isSendingRecovery ? "Sending recovery email..." : "Send recovery email"}
             </button>
@@ -541,7 +541,7 @@ export function SupabaseLoginFormClient({
           <div className="w-full border-t border-slate-200/80" />
         </div>
         <div className="relative flex justify-center">
-          <span className="bg-white px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <span className="bg-white px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Or Authenticate with Hospital Identity Provider
           </span>
         </div>
@@ -591,7 +591,7 @@ export function SupabaseLoginFormClient({
       </div>
 
       {/* Helpline & Session encryption footer */}
-      <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between text-[11px] text-slate-500 gap-2">
+      <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between text-xs text-slate-500 gap-2">
         <span className="flex items-center gap-1.5 font-medium">
           <span className="text-emerald-700 font-semibold">Clinic IT Line:</span> 02-419-7000 ext. 8412
         </span>
@@ -606,7 +606,7 @@ export function SupabaseLoginFormClient({
         <button
           type="button"
           onClick={() => setShowPolicy(!showPolicy)}
-          className="flex w-full items-center justify-between text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition"
+          className="flex min-h-10 w-full items-center justify-between text-xs font-semibold text-slate-500 hover:text-slate-800 transition"
         >
           <span className="flex items-center gap-1.5">
             <ShieldCheck size={13} className="text-emerald-700" />
@@ -620,7 +620,7 @@ export function SupabaseLoginFormClient({
 
         <div className={`mt-3 space-y-2 text-xs leading-relaxed text-slate-600 ${showPolicy ? "block" : "sr-only sm:not-sr-only"}`}>
           <div className="rounded-xl border border-amber-200/80 bg-amber-50/60 p-3 text-amber-900">
-            <p className="font-semibold text-[11px] uppercase tracking-wider text-amber-800">
+            <p className="font-semibold text-xs uppercase tracking-wider text-amber-800">
               Invitation-only access
             </p>
             <p className="mt-0.5 text-xs">
@@ -631,7 +631,7 @@ export function SupabaseLoginFormClient({
           </div>
 
           <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/60 p-3 text-emerald-950">
-            <p className="font-semibold text-[11px] uppercase tracking-wider text-emerald-800">
+            <p className="font-semibold text-xs uppercase tracking-wider text-emerald-800">
               MFA and app access
             </p>
             <p className="mt-0.5 text-xs">
@@ -640,7 +640,7 @@ export function SupabaseLoginFormClient({
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-slate-700">
-            <p className="font-semibold text-[11px] uppercase tracking-wider text-slate-800">
+            <p className="font-semibold text-xs uppercase tracking-wider text-slate-800">
               Organization session selection
             </p>
             <p className="mt-0.5 text-xs">
@@ -649,7 +649,7 @@ export function SupabaseLoginFormClient({
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-3 text-slate-600">
-            <p className="font-semibold text-[11px] uppercase tracking-wider text-slate-800">
+            <p className="font-semibold text-xs uppercase tracking-wider text-slate-800">
               Recovery and current runtime status
             </p>
             <p className="mt-0.5 text-xs">
@@ -658,7 +658,7 @@ export function SupabaseLoginFormClient({
             <p className="mt-1 text-xs">
               Browser sign-in now depends on the configured Supabase project and claim contract. Workspace access still fails closed until invitation, membership, MFA, and active organization requirements are satisfied.
             </p>
-            <p className="mt-1 text-[11px] font-mono text-slate-400">
+            <p className="mt-1 text-xs font-mono text-slate-400">
               Browser config: {configStatusLabel}
             </p>
           </div>

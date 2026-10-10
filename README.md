@@ -188,8 +188,12 @@ session identifier; identifier-less legacy entry points redirect to
 `/cases?intent=start-session`.
 
 The desktop rail and mobile bottom navigation share the same canonical Today,
-Cases, Session, Reports, and Settings route model. `/` redirects to `/today`.
-Without a safe active session identifier, the Session item opens
+Cases, Session, Reports, and Settings route model. The desktop rail additionally
+exposes Dashboard as the desktop-only clinic overview, so the mobile bottom nav
+stays at five destinations. Adding, removing, or reordering a shell destination
+must update the canonical route-set assertion in
+`src/__tests__/navigation-routes.test.tsx` at the same time. `/` redirects to
+`/today`. Without a safe active session identifier, the Session item opens
 `/cases?intent=start-session` rather than constructing an identifier-less
 workspace URL. Presentation-only `/demo/*` routes are disabled by default;
 local presentation builds must set `NEXT_PUBLIC_DEMO_MODE=true`, and enabled

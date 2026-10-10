@@ -2,20 +2,14 @@ import { PasaScopeLogo } from "@/components/pasascope-logo";
 import { RuntimeLoginPanelClient } from "@/components/runtime-login-panel-client";
 import {
   Activity,
-  Award,
-  Bot,
   CheckCircle2,
   FileAudio,
-  Globe2,
   Lock,
   Mic2,
-  Network,
   Radio,
   Shield,
   ShieldCheck,
   Sparkles,
-  Users2,
-  Waves,
 } from "lucide-react";
 
 export default function LoginPage() {
@@ -27,7 +21,7 @@ export default function LoginPage() {
           <PasaScopeLogo size="sm" showSubtitle={false} priority />
           <div className="hidden sm:block h-4 w-px bg-slate-300/80" />
           <span className="text-xs font-semibold text-emerald-900 tracking-tight">
-            Pediatric Speech Clinic
+            Pediatric Speech &amp; Language Research Platform
           </span>
           <span className="sr-only">Clinical transcript workbench</span>
         </div>
@@ -35,13 +29,12 @@ export default function LoginPage() {
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[11px] font-medium text-slate-600">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-white/80 border border-slate-200/80 px-2.5 py-1 shadow-2xs">
             <ShieldCheck size={13} className="text-emerald-700" />
-            <span className="hidden md:inline">HIPAA Compliant Environment</span>
-            <span className="md:hidden">HIPAA Secure</span>
+            <span>Research &amp; Clinical Prototype</span>
           </span>
 
           <span className="hidden lg:inline-flex items-center gap-1.5 rounded-full bg-white/80 border border-slate-200/80 px-2.5 py-1 shadow-2xs">
-            <Network size={13} className="text-emerald-700" />
-            <span>Siriraj &amp; BDMS Affiliated Network • Secure Clinician Portal v2.0</span>
+            <Lock size={13} className="text-emerald-700" />
+            <span>End-to-End De-identified Data Boundary</span>
           </span>
 
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-900/10 border border-emerald-800/20 px-2.5 py-1 text-emerald-900 font-semibold shadow-2xs">
@@ -49,7 +42,7 @@ export default function LoginPage() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
             </span>
-            <span className="hidden sm:inline">Live Speech Model:</span> Thai-PASA-v4.2 Active
+            <span>PasaScope Workbench v1.7</span>
           </span>
         </div>
       </header>
@@ -68,7 +61,7 @@ export default function LoginPage() {
             <div className="flex items-center justify-between gap-3">
               <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-950/60 backdrop-blur-sm px-3.5 py-1.5 text-xs font-semibold text-emerald-200">
                 <span className="h-2 w-2 rounded-full bg-[#F05A77] shadow-[0_0_8px_#F05A77]" />
-                <span>ภาษา • Thai Pediatric Speech AI</span>
+                <span>ภาษา-สโคป • Thai Speech &amp; Language Assessment</span>
               </div>
 
               <div className="inline-flex items-center rounded-full border border-emerald-500/25 bg-emerald-950/50 p-0.5 text-xs font-medium">
@@ -83,20 +76,19 @@ export default function LoginPage() {
                 Empowering every child&apos;s voice through intelligent analytics
               </h2>
               <p className="mt-3 text-sm sm:text-base leading-relaxed text-emerald-100/90 font-light max-w-xl">
-                ช่วยทุกเสียงเล็กๆ ให้เติบโตอย่างมั่นใจ ด้วยระบบประเมินพัฒนาการทางภาษาและเสียงตามธรรมชาติของเด็กไทย
+                ระบบสนับสนุนการประเมินพัฒนาการทางภาษาสำหรับนักอรรถบำบัด พร้อมการตรวจจับลักษณะเสียงและการสื่อสารตามธรรมชาติ
               </p>
             </div>
 
-            {/* REAL-TIME ACOUSTIC WAVEFORM & MLU WIDGET */}
+            {/* ACOUSTIC WAVEFORM & MLU WIDGET */}
             <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/50 backdrop-blur-md p-4 sm:p-5 shadow-inner">
               <div className="flex items-center justify-between text-xs font-semibold text-emerald-300 pb-2.5 border-b border-emerald-800/40">
                 <div className="flex items-center gap-2">
                   <Activity size={15} className="text-[#F05A77]" />
-                  <span>Real-time Acoustic Waveform &amp; MLU</span>
+                  <span>Acoustic Waveform &amp; Language Sample Analysis (LSA)</span>
                 </div>
                 <div className="flex items-center gap-1.5 font-mono text-[11px] text-emerald-200 bg-emerald-900/60 px-2 py-0.5 rounded-full border border-emerald-700/50">
-                  <span className="font-semibold text-white">MLU: 3.42</span>
-                  <span className="text-emerald-400 font-normal">(Target 3.50)</span>
+                  <span className="font-semibold text-white">MLU-w Tracker</span>
                 </div>
               </div>
 
@@ -137,14 +129,14 @@ export default function LoginPage() {
                 ))}
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-emerald-300/80 pt-2 border-t border-emerald-800/40">
+              <div className="flex items-center justify-between text-xs text-emerald-300/80 pt-2 border-t border-emerald-800/40">
                 <span className="inline-flex items-center gap-1 font-mono">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  Phoneme /r/ /l/ 97.2% Detect
+                  Thai Particles &amp; Turn-Taking Metrics
                 </span>
-                <span className="inline-flex items-center gap-1 font-mono text-[#F05A77] font-semibold">
+                <span className="inline-flex items-center gap-1 font-mono text-emerald-300 font-semibold">
                   <CheckCircle2 size={12} />
-                  98.4% Confidence
+                  Clinician Review Mandatory
                 </span>
               </div>
             </div>
@@ -154,58 +146,47 @@ export default function LoginPage() {
               <div className="rounded-xl border border-emerald-700/30 bg-emerald-950/40 p-3.5 backdrop-blur-xs">
                 <div className="flex items-center gap-2 text-[#F05A77] font-bold">
                   <Radio size={14} className="shrink-0" />
-                  <span>Live Audio NLU</span>
+                  <span>Audio &amp; LSA</span>
                 </div>
                 <p className="mt-1.5 text-[11px] leading-relaxed text-emerald-100/75 font-light">
-                  วิเคราะห์การสนทนาอย่างเป็นธรรมชาติ ไม่รบกวนการทำกิจกรรม
+                  ประมวลผลบทสนทนาจากการเล่นและกิจกรรม เพื่อสกัดตัวชี้วัดความคล่อง
                 </p>
               </div>
 
               <div className="rounded-xl border border-emerald-700/30 bg-emerald-950/40 p-3.5 backdrop-blur-xs">
                 <div className="flex items-center gap-2 text-emerald-300 font-bold">
                   <Mic2 size={14} className="shrink-0" />
-                  <span>Thai Phoneme Tracker</span>
+                  <span>Thai Pragmatics</span>
                 </div>
                 <p className="mt-1.5 text-[11px] leading-relaxed text-emerald-100/75 font-light">
-                  ประเมินสัทศาสตร์ภาษาไทย ตรวจจับคำลงท้ายและคำอนุภาคแม่นยำ
+                  วิเคราะห์คำอนุภาค คำลงท้าย และความหลากหลายของคำศัพท์ (TTR)
                 </p>
               </div>
 
               <div className="rounded-xl border border-emerald-700/30 bg-emerald-950/40 p-3.5 backdrop-blur-xs">
                 <div className="flex items-center gap-2 text-emerald-300 font-bold">
                   <Shield size={14} className="shrink-0" />
-                  <span>HIPAA Clinical Shield</span>
+                  <span>Consent &amp; Privacy</span>
                 </div>
                 <p className="mt-1.5 text-[11px] leading-relaxed text-emerald-100/75 font-light">
-                  เข้ารหัสความปลอดภัยระดับการแพทย์ตามมาตรฐานสากล
+                  จัดการความยินยอมผู้ปกครอง ปลอดการระบุตัวตนและเข้ารหัสข้อมูล
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Social Proof / Clinician Trust Footer */}
+          {/* Clinical Disclaimer Footer */}
           <div className="relative z-10 mt-6 pt-5 border-t border-emerald-800/40 flex items-center gap-3.5">
-            <div className="flex -space-x-2 shrink-0">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-emerald-900 bg-[#F05A77] text-[10px] font-bold text-white shadow-xs">
-                SLP
-              </div>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-emerald-900 bg-emerald-600 text-[10px] font-bold text-white shadow-xs">
-                พญ
-              </div>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-emerald-900 bg-amber-600 text-[10px] font-bold text-white shadow-xs">
-                ดร
-              </div>
-              <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-emerald-900 bg-sky-600 text-[10px] font-bold text-white shadow-xs">
-                กภ
-              </div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-emerald-700 bg-emerald-950 text-emerald-300 text-xs font-bold">
+              <ShieldCheck size={16} />
             </div>
 
             <div className="text-xs">
               <p className="font-bold text-white">
-                Used by 450+ SLP Clinicians in Thailand
+                Clinical Research &amp; Decision Support Prototype
               </p>
               <p className="text-[11px] text-emerald-200/80">
-                ได้รับความไว้วางใจจากนักแก้ไขการพูดและคลินิกชั้นนำทั่วประเทศ
+                ระบบนี้ไม่ใช่เครื่องมือวินิจฉัยโรค ผลการวิเคราะห์ต้องได้รับการรับรองจากผู้เชี่ยวชาญก่อนนำไปใช้
               </p>
             </div>
           </div>
@@ -226,10 +207,10 @@ export default function LoginPage() {
             </div>
             <div>
               <p className="text-xs font-bold text-slate-800">
-                Standardized Child Speech Corpus
+                CHAT / TalkBank Compatible
               </p>
               <p className="text-[11px] text-slate-500">
-                เกณฑ์มาตรฐานคลังเสียงเด็กไทยอายุ 2–8 ปี
+                ส่งออกและวิเคราะห์ไฟล์ตามมาตรฐานสากล TalkBank / CHILDES
               </p>
             </div>
           </div>
@@ -240,24 +221,24 @@ export default function LoginPage() {
             </div>
             <div>
               <p className="text-xs font-bold text-slate-800">
-                SLP Clinical Assistant v4.2
+                Decision Support Assistance
               </p>
               <p className="text-[11px] text-slate-500">
-                ระบบช่วยสร้างแผนการดูแล (IEP) / แผนบำบัด
+                สนับสนุนการตัดสินใจและร่างข้อความรายงานทางคลินิก
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/70 backdrop-blur-xs p-3.5 shadow-2xs">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
-              <Award size={18} />
+              <ShieldCheck size={18} />
             </div>
             <div>
               <p className="text-xs font-bold text-slate-800">
-                Ministry of Public Health Standards
+                De-identification Invariants
               </p>
               <p className="text-[11px] text-slate-500">
-                รองรับการส่งต่อข้อมูลตามเกณฑ์กระทรวงสาธารณสุข
+                ไม่เก็บชื่อ-นามสกุล หรือข้อมูลระบุตัวตนเด็กในระบบวิเคราะห์
               </p>
             </div>
           </div>
@@ -265,15 +246,15 @@ export default function LoginPage() {
 
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 pt-1">
           <p>
-            Clinic Support: <a href="mailto:help@pasascope.health" className="font-semibold text-emerald-800 hover:underline">help@pasascope.health</a>
+            PasaScope Research Platform
           </p>
           <p className="text-[11px] text-slate-400">
-            &copy; 2026 PasaScope Clinical Health. All pediatric data encrypted.
+            &copy; 2026 PasaScope. De-identified clinical research prototype.
           </p>
           <div className="flex items-center gap-3 text-[11px] font-medium text-slate-500">
-            <span className="hover:text-slate-800 cursor-pointer">Clinical Privacy</span>
+            <span>Research &amp; Education Boundary</span>
             <span>•</span>
-            <span className="hover:text-slate-800 cursor-pointer">Security Protocol</span>
+            <span>Non-Diagnostic</span>
           </div>
         </div>
       </footer>

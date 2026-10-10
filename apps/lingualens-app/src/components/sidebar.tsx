@@ -66,7 +66,7 @@ export function Sidebar({
       {/* Brand */}
       <div className="px-5 pb-2 pt-5">
         <PasaScopeLogo size="md" href="/dashboard" />
-        <p className="mt-1.5 text-[11px] font-medium text-[color:var(--color-text-subtle)]">
+        <p className="mt-1.5 text-xs font-medium text-[color:var(--color-text-subtle)]">
           ระบบประเมินพัฒนาการทางภาษาเด็ก
         </p>
       </div>
@@ -87,7 +87,7 @@ export function Sidebar({
       <nav aria-label="Primary navigation" className="flex-1 space-y-4 overflow-y-auto px-3 py-2 text-sm">
         {/* Core Workflow Section */}
         <div>
-          <p className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-[color:var(--color-text-subtle)]">
+          <p className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-subtle)]">
             ขั้นตอนหลัก (Workflow)
           </p>
           <div className="space-y-1">
@@ -115,7 +115,7 @@ export function Sidebar({
                   {sub ? (
                     <span
                       aria-hidden="true"
-                      className={`text-[11px] font-normal transition ${
+                      className={`text-xs font-normal transition ${
                         item.active
                           ? "text-[color:var(--color-pasa-teal)] opacity-80"
                           : "text-[color:var(--color-text-subtle)] opacity-60"
@@ -132,7 +132,7 @@ export function Sidebar({
 
         {/* Workspace Management Section */}
         <div>
-          <p className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-wider text-[color:var(--color-text-subtle)]">
+          <p className="px-3 pb-1.5 text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-subtle)]">
             การจัดการ (Management)
           </p>
           <div className="space-y-1">
@@ -160,7 +160,7 @@ export function Sidebar({
                   {sub ? (
                     <span
                       aria-hidden="true"
-                      className={`text-[11px] font-normal transition ${
+                      className={`text-xs font-normal transition ${
                         item.active
                           ? "text-[color:var(--color-pasa-teal)] opacity-80"
                           : "text-[color:var(--color-text-subtle)] opacity-60"
@@ -189,7 +189,7 @@ export function Sidebar({
           </button>
         ) : null}
 
-        <div className="px-3.5 py-1 text-[11px] text-[color:var(--color-text-subtle)]">
+        <div className="px-3.5 py-1 text-xs text-[color:var(--color-text-subtle)]">
           <span>PasaScope v1.7.0</span>
         </div>
       </div>

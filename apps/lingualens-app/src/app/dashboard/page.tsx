@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { PracticeDashboardView } from "@/features/dashboard/components/practice-dashboard-view";
 import { getDashboardSummary, type DashboardSummary } from "@/lib/workflow";
@@ -127,24 +128,24 @@ export default async function DashboardPage() {
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <a
+              <Link
                 href="/today"
                 className="inline-flex min-h-11 items-center rounded-xl bg-[color:var(--color-pasa-teal)] px-5 text-sm font-semibold text-white transition hover:bg-[color:var(--color-pasa-teal-hover)]"
               >
                 Back to Today
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/cases"
                 className="inline-flex min-h-11 items-center rounded-xl border border-[color:var(--color-border)] bg-white px-5 text-sm font-semibold text-[color:var(--color-text-strong)] transition hover:bg-[color:var(--color-surface-muted)]"
               >
                 ดูรายการเคสทั้งหมด (Cases)
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/sessions/session_demo_001?view=findings"
                 className="inline-flex min-h-11 items-center rounded-xl border border-[color:var(--color-pasa-teal-border)] bg-[color:var(--color-pasa-teal-soft)] px-5 text-sm font-semibold text-[color:var(--color-pasa-teal)] transition hover:bg-[color:var(--color-pasa-teal)] hover:text-white"
               >
                 เปิดสตูดิโอวิเคราะห์ (Assessment Studio)
-              </a>
+              </Link>
             </div>
           </section>
         </main>
