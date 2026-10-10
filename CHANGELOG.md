@@ -1,6 +1,13 @@
 # Changelog
 
-## [v1.7.1] - 2026-10-07
+## [v1.7.1] - 2026-10-10
+
+### Added
+- **Desktop Backend Management** (`packages/gui/`):
+  - Added `BackendServerManager` to manage local `uvicorn` backend process lifecycle (spawn, health-check, terminate) directly from the Tk desktop GUI.
+  - Wired into TUI client's live/mock adapter switch and isolated Tk tests into dedicated pytest processes.
+- **Gate 1 ML Validation Registry** (`packages/ml/gate1_validation.py`):
+  - Exported `PREREGISTERED_GATE_CHECKS` as a single authoritative registry for Gate 1 reference criteria, refusing evaluation of misaligned check sets.
 
 ### Changed
 - **Workflow & Dashboard Streamlining** (`apps/lingualens-app/`):
@@ -9,6 +16,12 @@
   - Added robust demo fallback handling for Dashboard and Assessment V2 workspaces, preventing blank error screens when backend services are offline.
   - Added Quick Demo transcript templates ("ตัวอย่างภาษาไทย" / "English Sample") in Session Intake for immediate demonstration.
   - Enabled active Print / Export PDF Clinical button in Session Report view and added direct A4 PDF preview access from the Reports workspace.
+  - Applied unified clinical design system styling and single-sourced therapist clinical copy.
+  - Switched bundle budget measurements to direct build artifact analysis (covering dynamic routes and gzip sizes).
+
+### Fixed
+- **Frontend Dependency Audit**:
+  - Remediated `sharp` (CVE-2026-96889) and `source-map-js` (GHSA-68fv-2mgg-jv7q) high severity audit vulnerabilities in production dependency tree.
 
 ## [v1.7.0] - 2026-10-04
 
