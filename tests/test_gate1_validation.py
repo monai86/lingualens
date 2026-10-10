@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from packages.ml.gate1_validation import (  # noqa: E402
+    PREREGISTERED_GATE_CHECKS,
     PromotionGate,
     evaluate_gate1,
 )
@@ -80,31 +81,24 @@ def test_every_preregistered_gate_is_enforced():
         "corpus_holdout_completed": True,
         "feature_parity_passed": True,
     }
+    # One deliberately failing value per preregistered criterion. Comparing this
+    # map against the gate's own registry means a newly preregistered criterion
+    # fails here until someone chooses how it must fail.
+    failing_values: dict[str, object] = {
+        "sensitivity_ci_lower": 0.799,
+        "specificity": 0.599,
+        "ece": 0.101,
+        "brier": 0.201,
+        "abstention_rate": 0.401,
+        "corpus_holdout_completed": False,
+        "feature_parity_passed": False,
+    }
+    assert set(failing_values) == set(PREREGISTERED_GATE_CHECKS)
+
     assert PromotionGate(**passing).passed is True
 
-    for field in (
-        "sensitivity_ci_lower",
-        "specificity",
-        "ece",
-        "brier",
-        "abstention_rate",
-        "corpus_holdout_completed",
-        "feature_parity_passed",
-    ):
-        failing = dict(passing)
-        if field == "sensitivity_ci_lower":
-            failing[field] = 0.799
-        elif field == "specificity":
-            failing[field] = 0.599
-        elif field == "ece":
-            failing[field] = 0.101
-        elif field == "brier":
-            failing[field] = 0.201
-        elif field == "abstention_rate":
-            failing[field] = 0.401
-        else:
-            failing[field] = False
-        gate = PromotionGate(**failing)
+    for field in PREREGISTERED_GATE_CHECKS:
+        gate = PromotionGate(**{**passing, field: failing_values[field]})
         assert gate.passed is False
         assert field in gate.failed_reasons
 

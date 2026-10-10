@@ -31,6 +31,21 @@ class SplitAudit:
     test_participants: tuple[str, ...]
 
 
+# The preregistered Gate 1 criteria, in evaluation order. `failed_reasons` must
+# evaluate exactly this set, and the validation test enumerates this tuple rather
+# than restating the names, so a newly added criterion cannot silently ship
+# without being exercised.
+PREREGISTERED_GATE_CHECKS: tuple[str, ...] = (
+    "sensitivity_ci_lower",
+    "specificity",
+    "ece",
+    "brier",
+    "abstention_rate",
+    "corpus_holdout_completed",
+    "feature_parity_passed",
+)
+
+
 @dataclass(frozen=True)
 class PromotionGate:
     sensitivity_ci_lower: float
@@ -53,6 +68,12 @@ class PromotionGate:
             "corpus_holdout_completed": self.corpus_holdout_completed,
             "feature_parity_passed": self.feature_parity_passed,
         }
+        unregistered = set(checks) ^ set(PREREGISTERED_GATE_CHECKS)
+        if unregistered:
+            raise RuntimeError(
+                "Gate 1 checks do not match the preregistered set: "
+                f"{sorted(unregistered)}"
+            )
         return [name for name, passed in checks.items() if not passed]
 
     @property
