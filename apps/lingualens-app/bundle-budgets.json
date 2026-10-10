@@ -1,11 +1,19 @@
 {
-  "sharedFirstLoadKb": 112,
+  "metric": {
+    "unit": "kB gzip",
+    "sharedFirstLoadKb": "polyfillFiles + rootMainFiles from .next/build-manifest.json: the chunk set every route references",
+    "routes": "every client <script src> in the HTML the built server returns for the route; [param] segments use a probe value",
+    "maxNewClientChunkKb": "largest lazily loaded <id>.<hash>.js chunk in .next/static/chunks"
+  },
+  "rebaselined": "2026-10-10",
+  "rebaselineNote": "Next.js 16 stopped printing the Size and First Load JS columns, so the previous numbers (shared 112, routes 213-242) could no longer be measured by any available source and every route was silently skipped. Budgets are re-measured against the served route HTML with the same 5% regression headroom as before.",
+  "sharedFirstLoadKb": 175,
   "routes": {
-    "/today": 213,
-    "/cases": 242,
-    "/reports": 229,
-    "/settings": 232,
-    "/sessions/[sessionId]": 230
+    "/today": 285,
+    "/cases": 315,
+    "/reports": 292,
+    "/settings": 298,
+    "/sessions/[sessionId]": 298
   },
   "maxNewClientChunkKb": 80
 }

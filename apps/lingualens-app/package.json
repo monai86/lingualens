@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
-    "verify:bundle": "mkdir -p .local && bash -o pipefail -c 'next build --webpack 2>&1 | tee .local/next-build.log' && node scripts/check-bundle-budgets.mjs .local/next-build.log",
+    "verify:bundle": "mkdir -p .local && bash -o pipefail -c 'next build --webpack 2>&1 | tee .local/next-build.log' && node scripts/check-bundle-budgets.mjs",
     "build:cf": "opennextjs-cloudflare build",
     "preview:cf": "opennextjs-cloudflare build && wrangler dev",
     "deploy:cf": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
