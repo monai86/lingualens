@@ -1,3 +1,6 @@
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { beforeEach, describe, expect, test } from "vitest";
 
 import RecordPage from "@/app/record/page";
@@ -11,7 +14,27 @@ import {
   resolveLegacySessionHref,
   resolveSessionHref,
   resolveSessionView,
+  sessionViews,
 } from "@/features/sessions/state/session-view";
+
+const APP_DIR = "src/app";
+
+/**
+ * The real registry of legacy redirect routes: a route module is a legacy entry
+ * exactly when it hands the session identifier to the canonical workspace.
+ */
+function legacyRedirectRouteNames(): string[] {
+  return readdirSync(resolve(process.cwd(), APP_DIR), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((route) => existsSync(resolve(process.cwd(), APP_DIR, route, "page.tsx")))
+    .filter((route) =>
+      readFileSync(resolve(process.cwd(), APP_DIR, route, "page.tsx"), "utf8").includes(
+        "resolveLegacySessionHref",
+      ),
+    )
+    .sort();
+}
 
 type LegacyPage = (props: {
   searchParams?: Record<string, string> | Promise<Record<string, string>>;
@@ -30,12 +53,19 @@ describe("session view routing", () => {
     redirectMock.mockClear();
   });
 
-  test.each(["intake", "transcript", "findings", "report"] as const)(
-    "accepts %s",
-    (view) => {
-      expect(resolveSessionView(view)).toBe(view);
-    },
-  );
+  test.each(sessionViews)("accepts %s", (view) => {
+    expect(resolveSessionView(view)).toBe(view);
+  });
+
+  test("keeps the declared legacy redirect set in step with the app router", () => {
+    // Enumerated from the router itself, so a legacy redirect that is added or
+    // removed has to be reflected in the table this suite drives.
+    expect(legacyRoutes.map(([route]) => route).sort()).toEqual(legacyRedirectRouteNames());
+
+    for (const [, , view] of legacyRoutes) {
+      expect(sessionViews).toContain(view);
+    }
+  });
 
   test.each([undefined, "", "results", "unknown"])(
     "defaults %s to intake",

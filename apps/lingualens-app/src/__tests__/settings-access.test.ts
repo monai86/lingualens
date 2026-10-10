@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   allowedSettingsSections,
   resolveAuthorizedSection,
+  SETTINGS_ROLE_MATRIX,
 } from "@/features/settings/services/settings-access";
 
 describe("settings access", () => {
@@ -33,6 +34,30 @@ describe("settings access", () => {
       "privacy_operations",
       "integration_status",
     ]);
+  });
+
+  it("resolves every declared role from the role matrix", () => {
+    // Enumerated from the matrix itself, so a role added there is covered here
+    // instead of silently going untested.
+    for (const [role, expected] of Object.entries(SETTINGS_ROLE_MATRIX)) {
+      expect(allowedSettingsSections(role)).toEqual([...expected]);
+    }
+
+    expect(Object.keys(SETTINGS_ROLE_MATRIX)).toEqual([
+      "therapist",
+      "clinical_supervisor",
+      "org_admin",
+      "platform_operator",
+    ]);
+  });
+
+  it("confines administrative sections to organization admins", () => {
+    const sharedCount = SETTINGS_ROLE_MATRIX.therapist.length;
+    const rolesWithAdministrativeSections = Object.keys(SETTINGS_ROLE_MATRIX).filter(
+      (role) => allowedSettingsSections(role).length > sharedCount,
+    );
+
+    expect(rolesWithAdministrativeSections).toEqual(["org_admin"]);
   });
 
   it.each(["team", "invitations", "audit", "privacy_operations", "integration_status"])(

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { render, screen, within } from "@testing-library/react";
@@ -8,6 +8,35 @@ import { SettingsNavigation } from "@/features/settings/components/settings-navi
 
 function appFile(relative: string): string {
   return readFileSync(resolve(process.cwd(), relative), "utf8");
+}
+
+// Third-party component/design frameworks that would compete with the in-repo
+// design system plus Tailwind. Headless primitive libraries are intentionally
+// absent from this list: they ship no visual language of their own.
+const COMPETING_UI_FRAMEWORKS = [
+  "@astryxdesign/",
+  "@mui/",
+  "@material-ui/",
+  "@chakra-ui/",
+  "@mantine/",
+  "antd",
+  "bootstrap",
+  "react-bootstrap",
+  "semantic-ui",
+  "primereact",
+];
+
+function isCompetingUiFramework(packageName: string): boolean {
+  return COMPETING_UI_FRAMEWORKS.some((framework) =>
+    framework.endsWith("/") ? packageName.startsWith(framework) : packageName === framework,
+  );
+}
+
+function appSourceFiles(): string[] {
+  return readdirSync(resolve(process.cwd(), "src"), { recursive: true, encoding: "utf8" })
+    .map((entry) => `src/${entry}`)
+    .filter((entry) => entry.endsWith(".ts") || entry.endsWith(".tsx"))
+    .filter((entry) => !entry.includes("__tests__"));
 }
 
 describe("final UI remediation contracts", () => {
@@ -29,12 +58,22 @@ describe("final UI remediation contracts", () => {
       ...Object.keys(packageManifest.dependencies ?? {}),
       ...Object.keys(packageManifest.devDependencies ?? {}),
     ];
-    const globalCss = appFile("src/styles/globals.css");
-    const providers = appFile("src/app/providers.tsx");
+    // Nothing in the competing set may be declared as a dependency, not just the
+    // one framework that happened to be banned first.
+    expect(dependencyNames.filter((name) => isCompetingUiFramework(name))).toEqual([]);
 
-    expect(dependencyNames.some((name) => name.startsWith("@astryxdesign/"))).toBe(false);
-    expect(globalCss).not.toContain("@astryxdesign");
-    expect(providers).not.toContain("@astryxdesign");
+    // A framework can also arrive without being declared, so scan every app
+    // source module instead of the two files that previously held an import.
+    const sourceOffenders: string[] = [];
+    for (const relative of appSourceFiles()) {
+      const text = appFile(relative);
+      for (const framework of COMPETING_UI_FRAMEWORKS) {
+        if (text.includes(framework)) {
+          sourceOffenders.push(`${relative} references ${framework}`);
+        }
+      }
+    }
+    expect(sourceOffenders).toEqual([]);
   });
 
   it("uses valid escaped utility selectors in the print stylesheet", () => {
